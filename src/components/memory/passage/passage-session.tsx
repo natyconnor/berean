@@ -8,6 +8,7 @@ import {
 } from "react";
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
@@ -123,6 +124,7 @@ import {
   TRY_ANOTHER_REFRESHER_LABEL,
 } from "@/lib/memory-copy";
 import { isDueForReview } from "@/lib/memory-scheduler";
+import { isStaleVerse } from "@/lib/memory-stale";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import type { PassageVerseKey } from "@/lib/passage-shaky";
@@ -239,6 +241,17 @@ export function PassageSession({
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
+  // Opened on a Memorized passage that is not due (Practice anytime): every
+  // try and refresher is practice only, and Continue leaves (R40).
+  const [practiceSession] = useState(
+    () =>
+      (view.status === "reviewing" || view.status === "mastered") &&
+      !isDueForReview({ status: view.status, dueAt: view.dueAt }, now),
+  );
+  const recentReviews = useQuery(
+    api.passageMemory.recentReviews,
+    isMaintenance ? { packId } : "skip",
+  );
 
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
@@ -351,6 +364,17 @@ export function PassageSession({
   );
   const reviewDue =
     isMaintenance && isDueForReview({ status, dueAt: reviewDueAt }, now);
+  const stale =
+    isMaintenance &&
+    recentReviews !== undefined &&
+    isStaleVerse({
+      status,
+      dueAt: reviewDueAt,
+      intervalDays: view.intervalDays,
+      now,
+      startedOverAt: view.startedOverAt,
+      lastReviews: recentReviews,
+    });
   const liveRecall = isMaintenance
     ? reviewRecall(packName, state.pieces, pieceTexts, composite, {
         step: refresher.step,
@@ -597,14 +621,16 @@ export function PassageSession({
       setResultView({ firstLetters: true, tryAgain: missed });
       return true;
     }
-    if (refresher.kind === "practice") {
+    if (refresher.kind === "practice" || practiceSession) {
       // Clearing shaky verses is a bonus; the practice result stands.
       const nextView = await review.notePractice(packId, save);
       if (nextView) setShakyVerses(nextView.shakyVerses ?? []);
       setResultView({
         practiceOnly: true,
         closingLine: PRACTICE_ONLY_CLOSING,
-        offer: tryAnotherRefresher(openRefresher),
+        offer: refresher.isOpen
+          ? tryAnotherRefresher(openRefresher)
+          : undefined,
       });
       return true;
     }
@@ -672,8 +698,9 @@ export function PassageSession({
       if (!retry) refresher.continueToStep2();
       return true;
     }
-    if (refresh && refresher.isOpen) {
-      // Straight back to where the Refresh started; no summary between.
+    if ((refresh && refresher.isOpen) || practiceSession) {
+      // Straight back to where the Refresh or Practice anytime started, with
+      // no summary or prompt flashing up while it goes.
       leaveSession();
       return false;
     }
@@ -1015,15 +1042,17 @@ export function PassageSession({
             ease={view.ease}
             readContinue={recall.readContinue}
             onRefresher={
-              reviewDue &&
+              (reviewDue || practiceSession) &&
               !refresher.isOpen &&
               !recall.loading &&
               !recall.error &&
               wordCountsReady &&
-              recall.versePlainText !== ""
-                ? () => openRefresher("pre-try")
+              recall.versePlainText !== "" &&
+              recentReviews !== undefined
+                ? () => openRefresher(practiceSession ? "practice" : "pre-try")
                 : undefined
             }
+            stale={stale}
             resultView={isMaintenance ? resultView : null}
             onSubmit={handleGraded}
             onContinueAfterResult={

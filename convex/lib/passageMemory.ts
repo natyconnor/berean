@@ -322,6 +322,22 @@ export async function deletePassageAndReviews(
   await ctx.db.delete(row._id);
 }
 
+/**
+ * This passage's own whole-passage review tries, in the order given. Learning
+ * tries and another passage's logs are left out; the stale check drops tries
+ * from before Start over.
+ */
+export function passageReviewTries(
+  logs: readonly Doc<"passageReviews">[],
+  passageMemoryId: Id<"passageMemory">,
+): { accuracy: number; createdAt: number }[] {
+  return logs
+    .filter(
+      (log) => log.passageMemoryId === passageMemoryId && log.kind === "review",
+    )
+    .map(({ accuracy, createdAt }) => ({ accuracy, createdAt }));
+}
+
 export async function insertPassageReview(
   ctx: MutationCtx,
   args: {

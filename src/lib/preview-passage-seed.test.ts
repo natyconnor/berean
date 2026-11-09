@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { Id } from "../../convex/_generated/dataModel";
-import { toPassageView } from "../../convex/lib/passageMemory";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
+import {
+  passageReviewTries,
+  toPassageView,
+} from "../../convex/lib/passageMemory";
 import { passageHeartSpans } from "./hearted-verse-coverage";
 import { isStaleVerse } from "./memory-stale";
 import { packAllowsPassageMode } from "./passage-eligibility";
@@ -12,12 +15,44 @@ import {
   previewPassageMemoryFields,
   testerMaintenancePacks,
   testerRefreshPacks,
+  testerStalePacks,
+  type PreviewPassageSeedPack,
 } from "./preview-passage-seed";
 import { shakyFirstLettersHint } from "./passage-shaky";
 import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
 const TZ = 300;
+const PASSAGE = "passageMemory:1" as Id<"passageMemory">;
+
+/**
+ * The seed logs each review row in order; `recentReviews` reads them back
+ * newest first and the session runs the real stale check on them.
+ */
+function staleNow(pack: PreviewPassageSeedPack): boolean {
+  const passage = pack.passage!;
+  const logged = (passage.reviews ?? []).map(
+    (review, index): Doc<"passageReviews"> => ({
+      _id: `passageReviews:${index}` as Id<"passageReviews">,
+      _creationTime: index,
+      userId: "users:1" as Id<"users">,
+      packId: "packs:1" as Id<"packs">,
+      passageMemoryId: PASSAGE,
+      kind: "review",
+      ...review,
+    }),
+  );
+  const newestFirst = [...logged].sort(
+    (a, b) => b._creationTime - a._creationTime,
+  );
+  return isStaleVerse({
+    status: passage.status === "mastered" ? "mastered" : "reviewing",
+    dueAt: passage.schedule.dueAt,
+    intervalDays: passage.schedule.intervalDays,
+    now: NOW,
+    lastReviews: passageReviewTries(newestFirst, PASSAGE),
+  });
+}
 
 describe("buildPreviewPassageSeed", () => {
   const plan = buildPreviewPassageSeed(NOW, TZ);
@@ -229,20 +264,13 @@ describe("testerRefreshPacks (S13)", () => {
       expect(view.pieces.at(-1)?.endVerse).toBe(2);
 
       // Clean recent history: every try passed, so it isn't stale.
-      expect(passage.recentReviews).toHaveLength(3);
+      expect(passage.reviews).toHaveLength(3);
       expect(
-        passage.recentReviews!.every((review) => review.accuracy >= 85),
+        passage.reviews!.every(
+          (review) => review.accuracy === 100 && review.quality === "exact",
+        ),
       ).toBe(true);
-      expect(view.lastSessionAt).toBe(passage.recentReviews![0]?.createdAt);
-      expect(
-        isStaleVerse({
-          status: view.status === "mastered" ? "mastered" : "reviewing",
-          dueAt: view.dueAt,
-          intervalDays: view.intervalDays,
-          now: NOW,
-          lastReviews: passage.recentReviews!,
-        }),
-      ).toBe(false);
+      expect(staleNow(pack)).toBe(false);
 
       // A refresher hints only the shaky verse 2, not verse 1 before it.
       const [first, second] = shakyFirstLettersHint(
@@ -257,10 +285,89 @@ describe("testerRefreshPacks (S13)", () => {
     },
   );
 
-  it("uses a psalm no other sample (or S12's 131, 133, 134) uses", () => {
+  it("uses Psalm 117, which no other sample (or S12's 131, 133, 134) uses", () => {
+    const [pack] = testerRefreshPacks(NOW, undefined);
+    expect(pack?.scope.chapterRanges).toEqual([
+      { book: "Psalms", startChapter: 117, endChapter: 117 },
+    ]);
+  });
+});
+
+describe("testerStalePacks", () => {
+  it("adds nothing on a production deployment", () => {
+    expect(testerStalePacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-367", undefined])(
+    "lands each fixture in its intended state on %s",
+    (deployment) => {
+      const packs = testerStalePacks(NOW, deployment);
+      const states = packs.map((pack) => {
+        const passage = pack.passage!;
+        return {
+          name: pack.name,
+          status: passage.status,
+          due: isPassageDueForReview(
+            { status: passage.status, dueAt: passage.schedule.dueAt },
+            NOW,
+          ),
+          stale: staleNow(pack),
+          shakyVerses: passage.shakyVerses,
+        };
+      });
+      expect(states).toEqual([
+        {
+          name: "Sample · Psalm 131 (stale, due)",
+          status: "reviewing",
+          due: true,
+          stale: true,
+          shakyVerses: [{ chapter: 131, verse: 2 }],
+        },
+        {
+          name: "Sample · Psalm 133 (stale, not due)",
+          status: "reviewing",
+          due: false,
+          stale: true,
+          shakyVerses: [{ chapter: 133, verse: 3 }],
+        },
+        {
+          name: "Sample · Psalm 134 (mastered, not due)",
+          status: "mastered",
+          due: false,
+          stale: false,
+          shakyVerses: [{ chapter: 134, verse: 2 }],
+        },
+      ]);
+    },
+  );
+
+  it("is stale by misses, not by time, and every shaky verse is in the passage", () => {
+    for (const pack of testerStalePacks(NOW, undefined)) {
+      const passage = pack.passage!;
+      // Never 7 days overdue: only the review history can make it stale.
+      expect(NOW - passage.schedule.dueAt).toBeLessThan(7 * 86_400_000);
+      expect(passage.reviews).toHaveLength(3);
+      expect(
+        passage.pieces.every((piece) => piece.attachment === "solid"),
+      ).toBe(true);
+      for (const key of passage.shakyVerses ?? []) {
+        expect(
+          passage.pieces.some(
+            (piece) =>
+              piece.chapter === key.chapter &&
+              piece.startVerse <= key.verse &&
+              key.verse <= piece.endVerse,
+          ),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("keeps every sample scope distinct from the other fixtures", () => {
     const all = [
       ...buildPreviewPassageSeed(NOW, TZ).packs,
       ...testerMaintenancePacks(NOW, undefined),
+      ...testerStalePacks(NOW, undefined),
       ...testerRefreshPacks(NOW, undefined),
     ];
     for (let i = 0; i < all.length; i++) {
@@ -268,9 +375,5 @@ describe("testerRefreshPacks (S13)", () => {
         expect(scopesEqual(all[i].scope, all[j].scope)).toBe(false);
       }
     }
-    const [pack] = testerRefreshPacks(NOW, undefined);
-    expect(pack?.scope.chapterRanges).toEqual([
-      { book: "Psalms", startChapter: 117, endChapter: 117 },
-    ]);
   });
 });

@@ -7,8 +7,8 @@ import {
   type PassagePieceBase,
   type PieceAttachment,
 } from "./passage-pieces";
-import type { PassageRowStatus } from "./passage-start";
 import type { PassageVerseKey } from "./passage-shaky";
+import type { PassageRowStatus } from "./passage-start";
 import { scopesEqual } from "./scope-equality";
 import type { VerseScope } from "./verse-scope-match";
 
@@ -17,7 +17,16 @@ export type PreviewPassageSeedRole =
   | "buildingDue"
   | "budgetExhausted"
   | "maintenanceDue"
+  | "staleDue"
+  | "staleNotDue"
   | "masteredNotDue";
+
+/** One graded whole-passage review try, stored as a `passageReviews` row. */
+export type PreviewPassageReview = {
+  accuracy: number;
+  quality: "exact" | "close" | "off";
+  createdAt: number;
+};
 
 /** Pack scope as stored on `packs.scope` (tags are unused for verse matching). */
 export type PreviewPassagePackScope = VerseScope & {
@@ -39,10 +48,10 @@ export type PreviewPassageSeedPack = {
     addsOnDay: number;
     addDayKey?: number;
     schedule: MemorySchedule;
-    /** Verses remembered as shaky (S11), hinted by a passage refresher. */
+    /** Remembered shaky verses (`passageMemory.shakyVerses`). */
     shakyVerses?: PassageVerseKey[];
-    /** Counted whole-passage reviews, newest first. */
-    recentReviews?: Array<{ accuracy: number; createdAt: number }>;
+    /** Graded review history, oldest first: the order it is logged in. */
+    reviews?: PreviewPassageReview[];
   };
 };
 
@@ -66,9 +75,6 @@ export function previewPassageMemoryFields(
     stageReps: passage.schedule.stageReps,
     earlyReviewApplied: passage.schedule.earlyReviewApplied,
     ...(passage.shakyVerses ? { shakyVerses: passage.shakyVerses } : {}),
-    ...(passage.recentReviews?.[0]
-      ? { lastSessionAt: passage.recentReviews[0].createdAt }
-      : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -374,6 +380,51 @@ const PSALM_117_VERSES: EsvVerse[] = [
   },
 ];
 
+const PSALM_131_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "O Lord, my heart is not lifted up; my eyes are not raised too high; I do not occupy myself with things too great and too marvelous for me.",
+  },
+  {
+    number: 2,
+    text: "But I have calmed and quieted my soul, like a weaned child with its mother; like a weaned child is my soul within me.",
+  },
+  {
+    number: 3,
+    text: "O Israel, hope in the Lord from this time forth and forevermore.",
+  },
+];
+
+const PSALM_133_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "Behold, how good and pleasant it is when brothers dwell in unity!",
+  },
+  {
+    number: 2,
+    text: "It is like the precious oil on the head, running down on the beard, on the beard of Aaron, running down on the collar of his robes!",
+  },
+  {
+    number: 3,
+    text: "It is like the dew of Hermon, which falls on the mountains of Zion! For there the Lord has commanded the blessing, life forevermore.",
+  },
+];
+
+const PSALM_134_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "Come, bless the Lord, all you servants of the Lord, who stand by night in the house of the Lord!",
+  },
+  {
+    number: 2,
+    text: "Lift up your hands to the holy place and bless the Lord!",
+  },
+  {
+    number: 3,
+    text: "May the Lord bless you from Zion, he who made heaven and earth!",
+  },
+];
+
 function paintPieces(
   bases: readonly PassagePieceBase[],
   paint: ReadonlyArray<{
@@ -499,6 +550,144 @@ export function testerMaintenancePacks(
   ];
 }
 
+/** A review try `daysAgo` before `now`, graded the way a real try is. */
+function reviewTry(
+  now: number,
+  daysAgo: number,
+  accuracy: number,
+): PreviewPassageReview {
+  return {
+    accuracy,
+    quality: accuracy === 100 ? "exact" : accuracy >= 60 ? "close" : "off",
+    createdAt: now - daysAgo * DAY_MS,
+  };
+}
+
+/** A whole psalm, every piece solid, with a set schedule and history. */
+function maintainedPsalm(args: {
+  chapter: number;
+  verses: EsvVerse[];
+  role: PreviewPassageSeedRole;
+  label: string;
+  description: string;
+  howToTry: string;
+  schedule: MemorySchedule;
+  shakyVerses: number[];
+  reviews: PreviewPassageReview[];
+}): PreviewPassageSeedPack {
+  const bases = buildPassagePieces([
+    { book: "Psalms", chapter: args.chapter, verses: args.verses },
+  ]);
+  return {
+    id: `passage-${args.role}-psalm-${args.chapter}`,
+    role: args.role,
+    name: `Sample · Psalm ${args.chapter} (${args.label})`,
+    description: args.description,
+    howToTry: args.howToTry,
+    scope: scopeChapter("Psalms", args.chapter),
+    passage: {
+      status: args.schedule.status === "mastered" ? "mastered" : "reviewing",
+      addsOnDay: 0,
+      schedule: args.schedule,
+      pieces: paintPieces(
+        bases,
+        bases.map(() => ({ attachment: "solid" as const, learnStage: 3 })),
+      ),
+      shakyVerses: args.shakyVerses.map((verse) => ({
+        chapter: args.chapter,
+        verse,
+      })),
+      reviews: args.reviews,
+    },
+  };
+}
+
+/**
+ * Stale-prompt passages (S12, R40/R48), each with known shaky verses and real
+ * review history for the stale check. Never seeded on a production Convex
+ * deployment.
+ */
+export function testerStalePacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (convexDeployment?.startsWith("prod:") === true) return [];
+  const memorized = (dueAt: number): MemorySchedule => ({
+    status: "reviewing",
+    learnStage: 3,
+    stageReps: 0,
+    ease: EASE_START,
+    intervalDays: 1,
+    dueAt,
+    consecutiveCorrect: 0,
+    lapses: 0,
+    earlyReviewApplied: false,
+  });
+  return [
+    maintainedPsalm({
+      chapter: 131,
+      verses: PSALM_131_VERSES,
+      role: "staleDue",
+      label: "stale, due",
+      description:
+        "Memorized, due now, 2 of its last 3 tries under 60%. Verse 2 is shaky.",
+      howToTry:
+        "Open Review or the pack. You should see Refresh it first above Need a refresher?. Either one opens the counted refresher; First letters hints only verse 2.",
+      schedule: memorized(now),
+      shakyVerses: [2],
+      reviews: [
+        reviewTry(now, 5, 45),
+        reviewTry(now, 3, 74),
+        reviewTry(now, 1, 52),
+      ],
+    }),
+    maintainedPsalm({
+      chapter: 133,
+      verses: PSALM_133_VERSES,
+      role: "staleNotDue",
+      label: "stale, not due",
+      description:
+        "Memorized, not due, 2 of its last 3 tries under 60%. Verse 3 is shaky.",
+      howToTry:
+        "Open the pack and tap Practice anytime. You should see Refresh it first above Need a refresher?. Everything is practice only; Continue returns to the pack.",
+      schedule: memorized(now + DAY_MS),
+      shakyVerses: [3],
+      reviews: [
+        reviewTry(now, 4, 55),
+        reviewTry(now, 2, 81),
+        reviewTry(now, 0.1, 48),
+      ],
+    }),
+    maintainedPsalm({
+      chapter: 134,
+      verses: PSALM_134_VERSES,
+      role: "masteredNotDue",
+      label: "mastered, not due",
+      description:
+        "Mastered, not due, clean recent history. Verse 2 is still shaky.",
+      howToTry:
+        "Open the pack and tap Practice anytime. Only Need a refresher? shows, no Refresh it first. First letters hints only verse 2; an unhinted 85%+ on verse 2 clears it.",
+      schedule: {
+        status: "mastered",
+        learnStage: 3,
+        stageReps: 0,
+        ease: EASE_START,
+        intervalDays: 30,
+        dueAt: now + 20 * DAY_MS,
+        consecutiveCorrect: 6,
+        lapses: 0,
+        earlyReviewApplied: false,
+      },
+      shakyVerses: [2],
+      reviews: [
+        reviewTry(now, 70, 100),
+        reviewTry(now, 40, 92),
+        reviewTry(now, 10, 96),
+      ],
+    }),
+  ];
+}
+
 /**
  * S13 ••• Refresh on a not-due Mastered passage: Psalm 117, verse 2 shaky,
  * three clean recent reviews. Never seeded on a production Convex deployment.
@@ -508,44 +697,34 @@ export function testerRefreshPacks(
   convexDeployment: string | undefined,
 ): PreviewPassageSeedPack[] {
   if (convexDeployment?.startsWith("prod:") === true) return [];
-  const bases = buildPassagePieces([
-    { book: "Psalms", chapter: 117, verses: PSALM_117_VERSES },
-  ]);
   return [
-    {
-      id: "passage-mastered-psalm-117",
+    maintainedPsalm({
+      chapter: 117,
+      verses: PSALM_117_VERSES,
       role: "masteredNotDue",
-      name: "Sample · Psalm 117 (Mastered, verse 2 shaky)",
+      label: "Mastered, verse 2 shaky",
       description:
         "Mastered passage, not due, with verse 2 remembered as shaky.",
       howToTry:
         "Open the pack → ••• → Refresh. First letters hints only verse 2. It's practice only: the next review date stays the same.",
-      scope: scopeChapter("Psalms", 117),
-      passage: {
+      schedule: {
         status: "mastered",
-        addsOnDay: 0,
-        schedule: {
-          status: "mastered",
-          learnStage: 3,
-          stageReps: 0,
-          ease: EASE_START,
-          intervalDays: 32,
-          dueAt: now + 20 * DAY_MS,
-          consecutiveCorrect: 8,
-          lapses: 0,
-          earlyReviewApplied: false,
-        },
-        pieces: paintPieces(
-          bases,
-          bases.map(() => ({ attachment: "solid" as const, learnStage: 3 })),
-        ),
-        shakyVerses: [{ chapter: 117, verse: 2 }],
-        recentReviews: [12, 44, 76].map((daysAgo) => ({
-          accuracy: 100,
-          createdAt: now - daysAgo * DAY_MS,
-        })),
+        learnStage: 3,
+        stageReps: 0,
+        ease: EASE_START,
+        intervalDays: 32,
+        dueAt: now + 20 * DAY_MS,
+        consecutiveCorrect: 8,
+        lapses: 0,
+        earlyReviewApplied: false,
       },
-    },
+      shakyVerses: [2],
+      reviews: [
+        reviewTry(now, 76, 100),
+        reviewTry(now, 44, 100),
+        reviewTry(now, 12, 100),
+      ],
+    }),
   ];
 }
 

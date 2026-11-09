@@ -17,6 +17,7 @@ import {
   previewPassageMemoryFields,
   testerMaintenancePacks,
   testerRefreshPacks,
+  testerStalePacks,
 } from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
@@ -226,6 +227,7 @@ export const seedPreviewMemory = mutation({
     await clearUserMemory(ctx, userId);
     passagePlan.packs.push(
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
@@ -331,13 +333,13 @@ export const seedPreviewMemory = mutation({
         packId,
         ...previewPassageMemoryFields(pack.passage, args.now),
       });
-      for (const review of pack.passage.recentReviews ?? []) {
+      for (const review of pack.passage.reviews ?? []) {
         await ctx.db.insert("passageReviews", {
           userId,
           packId,
           passageMemoryId: passageId,
           kind: "review",
-          quality: review.accuracy === 100 ? "exact" : "close",
+          quality: review.quality,
           accuracy: review.accuracy,
           createdAt: review.createdAt,
         });
