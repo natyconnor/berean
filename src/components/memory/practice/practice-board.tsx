@@ -135,6 +135,7 @@ import {
   firstLettersHintText,
   passageVersesIn,
   usePassageReview,
+  usePassageStale,
   type ReviewSave,
 } from "../passage/use-passage-review";
 import {
@@ -748,6 +749,21 @@ export function PracticeBoard({
         }
       : "skip",
   );
+  // Stale by the same rule as the passage's own Review page (R48, AC10).
+  const passageStale = usePassageStale(
+    reviewPassage &&
+      (passageView?.status === "reviewing" ||
+        passageView?.status === "mastered")
+      ? {
+          packId: reviewPassage.packId,
+          status: passageView.status,
+          dueAt: passageView.dueAt,
+          intervalDays: passageView.intervalDays,
+          startedOverAt: passageView.startedOverAt,
+        }
+      : null,
+    now,
+  );
   // Shaky verses and the held miss's weak ones; with none, every verse.
   const passageHint =
     reviewPassage && passageView
@@ -1143,6 +1159,7 @@ export function PracticeBoard({
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               passageHint={passageHint}
+              passageStale={passageStale === true}
               packMemberSchedules={composite?.memberSchedules}
               packMemberRefs={composite?.members}
               onJourneyPreview={setJourneyPreview}
@@ -1489,6 +1506,8 @@ interface PracticeCardProps {
     segments: readonly CompositePassageSegment[];
     targets: readonly PassageVerseKey[];
   };
+  /** That passage is stale, by its Review page's rule. */
+  passageStale?: boolean;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
@@ -1581,6 +1600,7 @@ function PracticeCard({
   leaveHeldRef,
   onSavingChange,
   passageHint,
+  passageStale = false,
   onRecord,
   onHold,
   onApplyHeld,
@@ -1688,8 +1708,8 @@ function PracticeCard({
       ? data.verses.map((v) => v.text).join(" ")
       : "";
 
-  // "Refresh it first" on a stale Memorized verse, decided before the first
-  // keystroke and gone for good once a try or refresher starts.
+  // "Refresh it first" on a stale Memorized verse or passage, decided before
+  // the first keystroke and gone for good once a try or refresher starts.
   const showRefresherLink =
     offerRefresher &&
     refresherCard &&
@@ -1711,15 +1731,17 @@ function PracticeCard({
   );
   const staleNow =
     showRefresherLink &&
-    staleDetail != null &&
-    isStaleVerse({
-      status: staleDetail.status,
-      dueAt: staleDetail.dueAt,
-      intervalDays: staleDetail.intervalDays,
-      now: liveNow,
-      startedOverAt: staleDetail.startedOverAt,
-      lastReviews: staleDetail.attempts,
-    });
+    (passageHint
+      ? passageStale
+      : staleDetail != null &&
+        isStaleVerse({
+          status: staleDetail.status,
+          dueAt: staleDetail.dueAt,
+          intervalDays: staleDetail.intervalDays,
+          now: liveNow,
+          startedOverAt: staleDetail.startedOverAt,
+          lastReviews: staleDetail.attempts,
+        }));
   const [staleCue, setStaleCue] = useState<"pending" | "shown" | "off">(
     "pending",
   );

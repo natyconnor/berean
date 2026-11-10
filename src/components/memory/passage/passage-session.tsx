@@ -8,7 +8,6 @@ import {
 } from "react";
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
-import { useQuery } from "convex-helpers/react/cache";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
@@ -128,7 +127,6 @@ import {
   TRY_ANOTHER_REFRESHER_LABEL,
 } from "@/lib/memory-copy";
 import { isDueForReview } from "@/lib/memory-scheduler";
-import { isStaleVerse } from "@/lib/memory-stale";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import {
@@ -140,6 +138,7 @@ import {
   firstLettersHintText,
   passageVersesIn,
   usePassageReview,
+  usePassageStale,
   type ReviewSave,
 } from "@/components/memory/passage/use-passage-review";
 import { countVerseWords, seededRandom } from "@/lib/verse-hint";
@@ -269,10 +268,6 @@ export function PassageSession({
       (view.status === "reviewing" || view.status === "mastered") &&
       !isDueForReview({ status: view.status, dueAt: view.dueAt }, now),
   );
-  const recentReviews = useQuery(
-    api.passageMemory.recentReviews,
-    isMaintenance ? { packId } : "skip",
-  );
 
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
@@ -383,17 +378,20 @@ export function PassageSession({
   );
   const reviewDue =
     isMaintenance && isDueForReview({ status, dueAt: reviewDueAt }, now);
-  const stale =
-    isMaintenance &&
-    recentReviews !== undefined &&
-    isStaleVerse({
-      status,
-      dueAt: reviewDueAt,
-      intervalDays: view.intervalDays,
-      now,
-      startedOverAt: view.startedOverAt,
-      lastReviews: recentReviews,
-    });
+  // Undefined until the recent reviews load.
+  const staleCheck = usePassageStale(
+    isMaintenance
+      ? {
+          packId,
+          status,
+          dueAt: reviewDueAt,
+          intervalDays: view.intervalDays,
+          startedOverAt: view.startedOverAt,
+        }
+      : null,
+    now,
+  );
+  const stale = staleCheck === true;
   const liveRecall =
     isMaintenance || learnedWindow
       ? reviewRecall(
@@ -1150,7 +1148,7 @@ export function PassageSession({
               // A Memorized passage waits for its recent reviews (S12's stale
               // prompt); a Learning passage has none to wait for (S15).
               (isMaintenance
-                ? (reviewDue || practiceSession) && recentReviews !== undefined
+                ? (reviewDue || practiceSession) && staleCheck !== undefined
                 : learningRefreshable) &&
               !refresher.isOpen &&
               !recall.loading &&

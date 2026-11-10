@@ -9,6 +9,7 @@ import {
   NEED_A_REFRESHER_LABEL,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
+  REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
@@ -100,6 +101,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       holdAttempt: "passageMemory.holdAttempt",
       applyHeldAttempt: "passageMemory.applyHeldAttempt",
       notePracticeRecital: "passageMemory.notePracticeRecital",
+      recentReviews: "passageMemory.recentReviews",
     },
     savedVerses: {
       listAll: "savedVerses.listAll",
@@ -1008,6 +1010,55 @@ describe("Today end summary", () => {
       state: { summaryRefresh: true },
     });
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
+  });
+});
+
+describe("Today passage card: stale (AC10)", () => {
+  function servePassage(accuracies: number[]) {
+    queryResults.set("passageMemory.getForPack", {
+      shakyVerses: [],
+      status: "reviewing",
+      dueAt: NOW - 1000,
+      intervalDays: 5,
+    });
+    queryResults.set(
+      "passageMemory.recentReviews",
+      accuracies.map((accuracy, index) => ({
+        accuracy,
+        createdAt: NOW - (index + 1) * DAY_MS,
+      })),
+    );
+  }
+
+  it("shows only Refresh it first on a stale passage, as its Review page does", async () => {
+    // Two of the last three tries under 60%: stale (R48).
+    servePassage([40, 90, 30]);
+    renderRun("alone");
+    const button = await screen.findByRole("button", {
+      name: REFRESH_IT_FIRST_LABEL,
+    });
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).toBeNull();
+    expect(queryCalls).toContainEqual([
+      "passageMemory.recentReviews",
+      { packId: PACK_ID },
+    ]);
+
+    await userEvent.click(button);
+    expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
+    expect(hintShown(hint(true, true))).toBeInTheDocument();
+  });
+
+  it("keeps the quiet link on a passage that is not stale", async () => {
+    servePassage([95]);
+    renderRun("alone");
+    expect(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    ).toBeNull();
   });
 });
 
