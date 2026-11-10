@@ -53,10 +53,11 @@ export function passageVersesIn(
 }
 
 /**
- * First letters on `targets` only, every other word blank in place, laid out
- * like the composite text: verses joined by a space, a new line where the
- * chapter changes. With `random`, each target shows a random half of first
- * letters instead of one on every word.
+ * First letters on `targets` only (every verse when none is among them),
+ * every other word blank in place, laid out like the composite text: verses
+ * joined by a space, a new line where the chapter changes. With `random`, each
+ * hinted verse shows a random half of first letters instead of one on every
+ * word.
  */
 export function firstLettersHintText(
   segments: readonly CompositePassageSegment[],

@@ -79,8 +79,12 @@ describe("shakyFirstLettersHint", () => {
     ]);
   });
 
-  it("reveals nothing when no verse is targeted", () => {
-    expect(shakyFirstLettersHint(verses, []).join(" ")).not.toMatch(/[a-z]/i);
+  it("hints every verse when none of them is targeted, never all blanks", () => {
+    const every = shakyFirstLettersHint(verses, [V3, V4, V5]);
+    expect(shakyFirstLettersHint(verses, [])).toEqual(every);
+    expect(shakyFirstLettersHint(verses, [{ chapter: 14, verse: 1 }])).toEqual(
+      every,
+    );
   });
 
   it("hints every verse when every verse is targeted", () => {

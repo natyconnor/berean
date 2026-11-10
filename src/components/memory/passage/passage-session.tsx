@@ -328,9 +328,6 @@ export function PassageSession({
           ? "pre-try"
           : "practice",
   );
-  // A ••• or summary Refresh's own round hints every verse when none is shaky
-  // (Nov 8, 9:36 AM). Any later round hints as S11 does.
-  const [hintAllIfSteady, setHintAllIfSteady] = useState(refresh !== undefined);
   const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
   const [shakyVerses, setShakyVerses] = useState<PassageVerseKey[]>(
     view.shakyVerses ?? [],
@@ -411,8 +408,6 @@ export function PassageSession({
             everyWordVerses: refresher.everyWordVerses,
             targets: review.hintTargets(shakyVerses),
             segments: composite.segments,
-            passageVerses,
-            hintAllIfSteady,
           },
         )
       : buildingRecall({
@@ -665,7 +660,6 @@ export function PassageSession({
     if (isMaintenance) {
       setHoldResult(false);
       setHeldRecall(null);
-      setHintAllIfSteady(false);
     }
     refresher.open(kind);
   }
@@ -1432,18 +1426,14 @@ type ReviewRefresher = RefresherHint & {
   targets: readonly PassageVerseKey[];
   /** The verses recited: the whole passage, or a Refresh's learned window. */
   segments: readonly CompositePassageSegment[];
-  passageVerses: readonly PassageVerseKey[];
-  /** With nothing to target, hint every verse (••• and summary Refresh). */
-  hintAllIfSteady: boolean;
 };
 
 /**
  * The refresher's hint: step 1 shows a random half of first letters on shaky
  * verses and on verses the held miss scored under 85%, every other word blank
  * in place, verse by verse even inside one piece; with none of those among the
- * verses recited and `hintAllIfSteady`, on every verse. The every-word step
- * shows first letters on every word of the verses step 1 missed. From memory
- * shows none.
+ * verses recited, on every verse. The every-word step shows first letters on
+ * every word of the verses step 1 missed. From memory shows none.
  */
 function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
   if (refresher.phase === "step2") {
@@ -1455,20 +1445,11 @@ function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
   if (refresher.phase === "every-word") {
     return everyWordHint(refresher.segments, refresher.everyWordVerses);
   }
-  const { passageVerses } = refresher;
-  const targets = refresher.targets.filter((target) =>
-    passageVerses.some(
-      (verse) =>
-        verse.chapter === target.chapter && verse.verse === target.verse,
-    ),
-  );
   return {
     type: "text",
     text: firstLettersHintText(
       refresher.segments,
-      targets.length === 0 && refresher.hintAllIfSteady
-        ? passageVerses
-        : targets,
+      refresher.targets,
       seededRandom(refresher.seed),
     ),
     label: "Hint",

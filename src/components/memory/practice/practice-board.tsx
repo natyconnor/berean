@@ -748,7 +748,7 @@ export function PracticeBoard({
         }
       : "skip",
   );
-  // No all-verse fallback on this card: with nothing shaky, nothing is hinted.
+  // Shaky verses and the held miss's weak ones; with none, every verse.
   const passageHint =
     reviewPassage && passageView
       ? {
@@ -2443,11 +2443,7 @@ function PracticeCard({
                         onRefresher={
                           showRefresherLink ? openPreTryRefresher : undefined
                         }
-                        onRefreshFirst={
-                          showRefresherLink && showStaleCue
-                            ? openPreTryRefresher
-                            : undefined
-                        }
+                        refreshFirst={showStaleCue}
                         disabled={submitPending}
                       />
                     ) : (

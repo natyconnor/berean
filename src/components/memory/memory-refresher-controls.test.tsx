@@ -10,45 +10,37 @@ import {
 import { EmptyHintPrompt } from "./memory-refresher-controls";
 
 describe("EmptyHintPrompt Refresh it first", () => {
-  it("shows the button only when asked, and both controls call their handler", async () => {
+  it("shows the quiet link, or only Refresh it first on a stale card (AC10)", async () => {
     const onRefresher = vi.fn();
-    const onRefreshFirst = vi.fn();
     const { rerender } = render(<EmptyHintPrompt onRefresher={onRefresher} />);
     expect(
       screen.queryByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
     ).not.toBeInTheDocument();
-
-    rerender(
-      <EmptyHintPrompt
-        onRefresher={onRefresher}
-        onRefreshFirst={onRefreshFirst}
-      />,
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
-    );
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    expect(onRefreshFirst).toHaveBeenCalledTimes(1);
-    expect(onRefresher).toHaveBeenCalledTimes(1);
+
+    rerender(<EmptyHintPrompt onRefresher={onRefresher} refreshFirst />);
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    );
+    expect(onRefresher).toHaveBeenCalledTimes(2);
   });
 
-  it("disables the button whenever the link is disabled (save pending)", async () => {
+  it("shows neither control without a handler", () => {
+    render(<EmptyHintPrompt refreshFirst />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("disables Refresh it first while a save is pending", async () => {
     const onRefresher = vi.fn();
-    const onRefreshFirst = vi.fn();
-    render(
-      <EmptyHintPrompt
-        onRefresher={onRefresher}
-        onRefreshFirst={onRefreshFirst}
-        disabled
-      />,
-    );
+    render(<EmptyHintPrompt onRefresher={onRefresher} refreshFirst disabled />);
     const button = screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL });
-    const link = screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL });
     expect(button).toBeDisabled();
-    expect(link).toBeDisabled();
     await userEvent.click(button);
-    expect(onRefreshFirst).not.toHaveBeenCalled();
+    expect(onRefresher).not.toHaveBeenCalled();
   });
 });

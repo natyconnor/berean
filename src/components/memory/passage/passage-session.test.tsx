@@ -1284,11 +1284,11 @@ describe("PassageSession", () => {
       expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
     });
 
-    it("hints nothing when no verse is shaky, and every verse when all are", async () => {
+    it("hints every verse when none is shaky or when all are (AC9)", async () => {
       const { unmount } = renderReview();
       await clickButton("Need a refresher?");
       await screen.findByText("Refresh · First letters · 1 of 2");
-      expect(hintText()).not.toMatch(/[a-z]/i);
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       unmount();
 
       renderReview(reviewView({ shakyVerses: [verse(1), verse(2)] }));
@@ -1312,10 +1312,10 @@ describe("PassageSession", () => {
     });
 
     it("gives every word only to the verses step 1 missed (F4, S11)", async () => {
-      // Nothing shaky and no held miss: step 1 stays blank, no fallback.
+      // Nothing shaky and no held miss: step 1 half-hints every verse (AC9).
       renderReview();
       await clickButton("Need a refresher?");
-      expect(hintText()).toBe(`${ONE_BLANK} ${TWO_BLANK}`);
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       await check(PASSAGE_ONE);
       await clickButton(/Continue/);
       await expectFreshStep("Refresh · First letters · 2 of 3");
@@ -1731,14 +1731,14 @@ describe("PassageSession", () => {
         expect(hintText()).toBe(`${ONE_HALF} ${TWO_BLANK}`);
       });
 
-      it("keeps the all-verses fallback out of a later refresher round", async () => {
+      it("hints every verse on Try another refresher too, as on the first round (AC9)", async () => {
         const { unmount } = renderRefresh("review");
         await toFromMemory();
         await check(WEAK_TWO);
         await clickButton("Try another refresher");
         await expectFreshStep("Refresh · First letters · 1 of 2");
-        // The saved view marks nothing shaky: S11's hint, nothing revealed.
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        // The saved view marks nothing shaky: every verse, never all blanks.
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
         unmount();
 
         renderRefresh("practice");
@@ -1746,7 +1746,7 @@ describe("PassageSession", () => {
         await check(FULL);
         await clickButton("Try another refresher");
         await expectFreshStep("Refresh · First letters · 1 of 2");
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       });
 
       it("retries the every-word step without limit and counts nothing for it", async () => {
@@ -2426,11 +2426,11 @@ describe("PassageSession", () => {
         await continueBack(onExit);
       });
 
-      it("R40: First letters hints nothing when no verse is shaky, every verse when all are", async () => {
+      it("R40: First letters hints every verse when none is shaky or when all are (AC9)", async () => {
         renderPractice(notDueView());
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
         cleanup();
 
         renderPractice(notDueView({ shakyVerses: [verse(1), verse(2)] }));
@@ -2505,16 +2505,14 @@ describe("PassageSession", () => {
         const refreshFirst = screen.getByRole("button", {
           name: REFRESH_FIRST,
         });
-        const link = screen.getByRole("button", { name: "Need a refresher?" });
-        // Sentence, then Refresh it first, then the quiet link.
+        // Sentence, then only Refresh it first: no quiet link (AC10).
         expect(
           sentence.compareDocumentPosition(refreshFirst) &
             Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
         expect(
-          refreshFirst.compareDocumentPosition(link) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
         // No tooltip.
         expect(refreshFirst).not.toHaveAttribute("aria-describedby");
         return refreshFirst;
@@ -2575,19 +2573,6 @@ describe("PassageSession", () => {
         await screen.findByRole("heading", { name: "Review complete" });
         expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
         expect(notePractice()).not.toHaveBeenCalled();
-      });
-
-      it("R48: the quiet link on a stale due passage opens the same counted refresher", async () => {
-        renderReview(staleDue());
-        await expectCueStack();
-        await clickButton("Need a refresher?");
-        await expectFreshStep("Refresh · First letters · 1 of 2");
-        await check(FULL);
-        await clickButton(/Continue/);
-        await check(FULL);
-        expect(record()).toHaveBeenCalledWith(
-          expect.objectContaining({ refresherUsed: true }),
-        );
       });
 
       it("R48: two of the last three tries under 60% make a not-due passage stale; its cue opens practice", async () => {

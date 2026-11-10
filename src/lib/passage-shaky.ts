@@ -56,17 +56,21 @@ export function shakyAfterUnhintedTry(
 /**
  * First letters on `targets` only, every other word blank in place. One
  * masked text per verse, so a hint never spills onto a neighbouring verse in
- * the same piece. No target means nothing is revealed. With `random`, each
- * target gets its own random half of first letters ({@link halfFirstLetters})
- * instead of one on every word.
+ * the same piece. A First letters step is never all blanks: with no target
+ * among `verses`, every verse is hinted. With `random`, each hinted verse gets
+ * its own random half of first letters ({@link halfFirstLetters}) instead of
+ * one on every word.
  */
 export function shakyFirstLettersHint(
   verses: ReadonlyArray<PassageVerseKey & { text: string }>,
   targets: readonly PassageVerseKey[],
   random?: () => number,
 ): string[] {
+  const targeted = (verse: PassageVerseKey) =>
+    targets.some((key) => sameVerse(key, verse));
+  const hintAll = !verses.some(targeted);
   return verses.map((verse) => {
-    const tokens = !targets.some((key) => sameVerse(key, verse))
+    const tokens = !(hintAll || targeted(verse))
       ? maskVerseText(verse.text, "hidden")
       : random
         ? halfFirstLetters(verse.text, random)

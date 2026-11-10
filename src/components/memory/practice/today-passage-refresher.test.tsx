@@ -651,7 +651,7 @@ describe("Today passage card: leaving", () => {
 });
 
 describe("Today passage card: refresher", () => {
-  it("hints only the held miss's weak verse, with no all-verse fallback", async () => {
+  it("hints only the held miss's weak verse when there is one", async () => {
     renderRun("alone");
     // 70% overall: verse one 40%, verse two clean.
     await checkPassage(answer(60, 0));
@@ -681,18 +681,17 @@ describe("Today passage card: refresher", () => {
     expect(await findHint(hint(true, true))).toBeInTheDocument();
   });
 
-  it("hints nothing before a try when no verse is shaky", async () => {
+  it("hints every verse before a try when no verse is shaky (AC9)", async () => {
     renderRun("alone");
     await userEvent.click(
       await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
     expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
-    expect(hintShown(hint(false, false))).toBeInTheDocument();
+    expect(hintShown(hint(true, true))).toBeInTheDocument();
   });
 
   it("gives every word only to the verses step 1 missed, in place (F4)", async () => {
     renderRun("alone");
-    // Nothing shaky, no held miss: step 1 is blank, with no fallback.
     await userEvent.click(
       await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );

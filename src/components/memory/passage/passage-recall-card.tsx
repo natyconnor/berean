@@ -113,7 +113,7 @@ interface PassageRecallCardProps {
   readContinue?: boolean;
   /** Quiet "Need a refresher?" link in the hint panel, beneath any hint. */
   onRefresher?: () => void;
-  /** Stale: "Refresh it first" above the link, settled at the first keystroke. */
+  /** Stale: "Refresh it first" in place of the link, settled at the first keystroke. */
   stale?: boolean;
   resultView?: PassageRecallResultView | null;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
@@ -360,9 +360,7 @@ export function PassageRecallCard({
                     message={hint.message}
                     messageId={hintMessageId}
                     onRefresher={onRefresher}
-                    onRefreshFirst={
-                      onRefresher && showStaleCue ? onRefresher : undefined
-                    }
+                    refreshFirst={showStaleCue}
                     disabled={submitPending}
                   />
                 ) : (

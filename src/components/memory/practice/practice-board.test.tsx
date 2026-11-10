@@ -3930,6 +3930,20 @@ describe("PracticeBoard stale Refresh it first", () => {
   const cue = () =>
     screen.queryByRole("button", { name: REFRESH_IT_FIRST_LABEL });
 
+  /** A stale card shows only Refresh it first, no quiet link (AC10). */
+  async function findVisibleCue(): Promise<HTMLElement> {
+    const button = await screen.findByRole("button", {
+      name: REFRESH_IT_FIRST_LABEL,
+    });
+    await waitFor(() => {
+      expect(button).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    return button;
+  }
+
   async function recite(text: string) {
     const answer = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(answer);
@@ -3952,11 +3966,10 @@ describe("PracticeBoard stale Refresh it first", () => {
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
   }
 
-  it("puts an outlined Refresh it first between the sentence and the link on a stale due verse", async () => {
+  it("puts only an outlined Refresh it first under the sentence on a stale due verse", async () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
     renderBoard();
-    const link = await findVisibleLink();
-    const button = screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL });
+    const button = await findVisibleCue();
     const sentence = screen.getByText(
       "No hint text. Type the verse from memory, then check your answer.",
     );
@@ -3974,9 +3987,6 @@ describe("PracticeBoard stale Refresh it first", () => {
     expect(
       sentence.compareDocumentPosition(button) &
         Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      button.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     // No reason line: nothing new besides the button.
     expect(screen.queryByText(/stale|been a while/i)).not.toBeInTheDocument();
@@ -4009,8 +4019,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     renderBoard({
       verses: [{ ...reviewingVerse, status: detail.status }],
     });
-    await findVisibleLink();
-    expect(cue()).toBeVisible();
+    await findVisibleCue();
   });
 
   it.each([
@@ -4147,6 +4156,10 @@ describe("PracticeBoard stale Refresh it first", () => {
       </TooltipProvider>,
     );
     expect(cue()).toBeVisible();
+    // The quiet link gives way to Refresh it first.
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
 
     await userEvent.type(screen.getByLabelText("Your recalled verse"), "The");
@@ -4156,21 +4169,16 @@ describe("PracticeBoard stale Refresh it first", () => {
     expect(cue()).toBeVisible();
   });
 
-  it("is reached by Tab before the link, and Enter opens the refresher with the answer focused", async () => {
+  it("is reached by Tab before the answer box, and Enter opens the refresher with the answer focused", async () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
     renderBoard();
-    const link = await findVisibleLink();
+    const button = await findVisibleCue();
     const answer = screen.getByLabelText("Your recalled verse");
     expect(answer).toHaveFocus();
 
-    // Natural order: button, then link, then the answer box.
+    // Natural order: the button, then the answer box.
     await userEvent.tab({ shift: true });
-    expect(link).toHaveFocus();
-    await userEvent.tab({ shift: true });
-    const button = screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL });
     expect(button).toHaveFocus();
-    await userEvent.tab();
-    expect(link).toHaveFocus();
     await userEvent.tab();
     expect(answer).toHaveFocus();
 
@@ -4188,17 +4196,11 @@ describe("PracticeBoard stale Refresh it first", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the same refresher with Space, and the link still opens it too", async () => {
+  it("opens the same refresher with Space", async () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
-    const first = renderBoard();
-    await findVisibleLink();
-    screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }).focus();
-    await userEvent.keyboard(" ");
-    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
-    first.unmount();
-
     renderBoard();
-    await userEvent.click(await findVisibleLink());
+    (await findVisibleCue()).focus();
+    await userEvent.keyboard(" ");
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
     await waitFor(() => {
       expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
@@ -4218,10 +4220,7 @@ describe("PracticeBoard stale Refresh it first", () => {
       verses: [reviewingVerse, secondReviewingVerse],
       onRunStateChange,
     });
-    await findVisibleLink();
-    await userEvent.click(
-      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
-    );
+    await userEvent.click(await findVisibleCue());
     await passStep1();
     expect(cue()).not.toBeInTheDocument();
     await recite(PASSAGE_ONE);
@@ -4262,10 +4261,7 @@ describe("PracticeBoard stale Refresh it first", () => {
   it("due: a From memory miss follows the counted miss path", async () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
     renderBoard();
-    await findVisibleLink();
-    await userEvent.click(
-      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
-    );
+    await userEvent.click(await findVisibleCue());
     await passStep1();
     await recite(BAD_MISS);
     expect(
@@ -4284,10 +4280,7 @@ describe("PracticeBoard stale Refresh it first", () => {
       .mockResolvedValueOnce(stillDueSchedule)
       .mockResolvedValueOnce(heldSchedule);
     renderBoard({ kind: "practice" });
-    await findVisibleLink();
-    await userEvent.click(
-      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
-    );
+    await userEvent.click(await findVisibleCue());
     await passStep1();
     await recite(PASSAGE_ONE);
     expect(await screen.findByText("Word for word.")).toBeVisible();
@@ -4320,10 +4313,7 @@ describe("PracticeBoard stale Refresh it first", () => {
         verses: [notDueVerse],
         onRunStateChange,
       });
-      await findVisibleLink();
-      await userEvent.click(
-        screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
-      );
+      await userEvent.click(await findVisibleCue());
       await passStep1();
       await recite(answer);
       expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
@@ -4359,8 +4349,7 @@ describe("PracticeBoard stale Refresh it first", () => {
   it("is gone after a cold try and does not return on Try again", async () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
     renderBoard({ kind: "practice", verses: [notDueVerse] });
-    await findVisibleLink();
-    expect(cue()).toBeVisible();
+    await findVisibleCue();
     await recite(BAD_MISS);
     expect(cue()).not.toBeInTheDocument();
     await userEvent.click(
