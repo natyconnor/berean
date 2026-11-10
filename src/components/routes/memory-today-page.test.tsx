@@ -220,6 +220,10 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
             ? progress({ done: 1, total: verses.length }).label
             : progress?.label}
         </p>
+        {/* The board's card header: its place in `orderedIds`. */}
+        {currentId ? (
+          <p>{`Verse ${ids.indexOf(currentId) + 1} of ${ids.length}`}</p>
+        ) : null}
         {typeof rail === "function"
           ? rail({
               changeOrder: (next) => onSessionOrderChange?.(next),
@@ -266,9 +270,14 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
             if (!currentId) return;
             const verse = byId.get(currentId);
             if (!verse) return;
+            // The board reports the whole run, so earlier cards stay spent.
+            const earlier =
+              (runState as { progress?: Record<string, unknown> } | undefined)
+                ?.progress ?? {};
             onRunStateChange?.(
               {
                 progress: {
+                  ...earlier,
                   [currentId]: {
                     learnStage: 3,
                     stageReps: 0,
@@ -1038,6 +1047,52 @@ describe("MemoryTodayPage", () => {
     expect(
       screen.getByText("1 review done today.", { exact: false }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps a spent review's place in Review all until the session moves on (#375)", async () => {
+    search.current = { only: "review", return: "/memory" };
+    setToday({
+      passages: [],
+      learning: [],
+      due: [1, 2, 3, 4, 5, 6, 7, 8].map((verse) =>
+        dueVerse(`lk9_${verse}`, verse),
+      ),
+    });
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show Luke 9:1" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown review card" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show Luke 9:2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown review card" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show Luke 9:7" }),
+    );
+    expect(screen.getByText("Verse 7 of 8")).toBeInTheDocument();
+
+    // A miss that uses up the card: it is rescheduled, so it is spent.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown review card" }),
+    );
+    expect(screen.getByText("Verse 7 of 8")).toBeInTheDocument();
+
+    const rail = screen.getByRole("region", { name: "Today's queue" });
+    const railOrder = [...rail.querySelectorAll("li")]
+      .map((row) => /Luke 9:\d/.exec(row.textContent ?? "")?.[0])
+      .filter((label) => label !== undefined);
+    expect(railOrder.slice(0, 3)).toEqual(["Luke 9:1", "Luke 9:2", "Luke 9:7"]);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the next card" }),
+    );
+    expect(screen.getByText("Verse 8 of 8")).toBeInTheDocument();
   });
 
   it("skips a passage set aside earlier today", () => {

@@ -425,18 +425,14 @@ function itemsInOrder<T extends { id: string }>(
     .filter((item): item is T => item !== undefined);
 }
 
-function finishedFirst(ids: string[], spent: ReadonlySet<string>): string[] {
-  const next = [
+function finishedFirst(
+  ids: readonly string[],
+  spent: ReadonlySet<string>,
+): string[] {
+  return [
     ...ids.filter((id) => spent.has(id)),
     ...ids.filter((id) => !spent.has(id)),
   ];
-  if (
-    next.length === ids.length &&
-    next.every((id, index) => id === ids[index])
-  ) {
-    return ids;
-  }
-  return next;
 }
 
 function openQueueItemId(
@@ -502,8 +498,6 @@ function TodaySession({
   const [reviewIds, setReviewIds] = useState(() =>
     queue.reviews.map((entry) => entry.id),
   );
-  const learning = itemsInOrder(queue.learning, learningIds);
-  const reviews = itemsInOrder(queue.reviews, reviewIds);
   const [step, setStep] = useState<TodayStep>(() => {
     const fromItem =
       search.item === undefined
@@ -546,6 +540,13 @@ function TodaySession({
   const reopenable = new Set(livePassages?.map((item) => item.packId));
 
   const spent = spentCards(segments, runStates, now);
+  // The queue lists finished cards first; the board keeps run order, so a
+  // card's "Verse X of Y" holds while it stays on screen.
+  const learning = itemsInOrder(
+    queue.learning,
+    finishedFirst(learningIds, spent),
+  );
+  const reviews = itemsInOrder(queue.reviews, finishedFirst(reviewIds, spent));
   const progressInput: TodayProgressInput = {
     segments,
     learning,
@@ -607,17 +608,6 @@ function TodaySession({
       ...current,
       runs: { ...current.runs, [index]: result },
     }));
-    const nextSpent = new Set(spent);
-    const segment = segments[index];
-    if (segment && segment.kind !== "passage") {
-      for (const [id, progress] of Object.entries(state.progress)) {
-        if (!hasSessionWorkLeft(segment.kind, progress, now)) {
-          nextSpent.add(id);
-        }
-      }
-    }
-    setLearningIds((ids) => finishedFirst(ids, nextSpent));
-    setReviewIds((ids) => finishedFirst(ids, nextSpent));
   };
   const recordRun = (index: number, result: PracticeSessionResult) => {
     setTally((current) => ({
