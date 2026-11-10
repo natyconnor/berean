@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { mockStepLabelLayout } from "@/test/step-label-layout";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { formatDueDay } from "@/lib/memorize-plan";
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
@@ -1326,6 +1327,39 @@ describe("PassageSession", () => {
       await expectFreshStep("Refresh · From memory · 3 of 3");
       expect(record()).not.toHaveBeenCalled();
     });
+
+    // Top bar ends at 105; the new step's answer box starts below the fold.
+    it.each([
+      ["fully in view stays put", 159, 159],
+      ["partly under the top bar scrolls to the top", 99, 105],
+      ["above the scroll area scrolls to the top", -40, 105],
+    ])(
+      "on Continue, a next step's label %s; Try again does not reveal it (#379)",
+      async (_, labelTop, settledTop) => {
+        const layout = mockStepLabelLayout(labelTop);
+        try {
+          renderReview();
+          await clickButton("Need a refresher?");
+          await check("The Lord");
+          layout.scrollToTop();
+          await clickButton(/Continue/);
+          await expectFreshStep("Refresh · First letters · 2 of 3");
+          // Measured only once the new card has eased in.
+          await waitFor(() => expect(layout.labelMeasures).not.toEqual([]));
+          expect(layout.labelMeasures.every((m) => m.settled)).toBe(true);
+          expect(layout.labelTop()).toBe(settledTop);
+          const scrolls = layout.labelScrolls.length;
+          expect(scrolls).toBe(labelTop === settledTop ? 0 : 1);
+
+          await check("The Lord");
+          await clickButton(/Try again/);
+          await expectFreshStep("Refresh · First letters · 2 of 3");
+          expect(layout.labelScrolls).toHaveLength(scrolls);
+        } finally {
+          layout.restore();
+        }
+      },
+    );
 
     it("holds a cold miss on the server and counts it on Continue", async () => {
       renderReview();

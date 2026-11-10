@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import { reviewOutcomeMessage } from "@/components/study/verse-attempt-feedback";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { mockStepLabelLayout } from "@/test/step-label-layout";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
@@ -1962,6 +1963,54 @@ describe("PracticeBoard pre-try refresher", () => {
       }),
     );
   });
+
+  // Top bar ends at 105; the new step's answer box starts below the fold.
+  it.each([
+    ["fully in view stays put", 159, 159],
+    ["partly under the top bar scrolls to the top", 99, 105],
+    ["above the scroll area scrolls to the top", -40, 105],
+  ])(
+    "on Continue, a next step's label %s; Try again does not reveal it (#379)",
+    async (_, labelTop, settledTop) => {
+      const layout = mockStepLabelLayout(labelTop);
+      try {
+        renderReview();
+        await openRefresher();
+        const step1Box = await screen.findByLabelText("Your recalled verse");
+        await waitFor(() => expect(step1Box).toHaveFocus());
+        await userEvent.paste("nope");
+        await userEvent.click(
+          screen.getByRole("button", { name: /Check answer/ }),
+        );
+        const continueButton = await screen.findByRole("button", {
+          name: /Continue/,
+        });
+        layout.scrollToTop();
+        await userEvent.click(continueButton);
+        expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
+        await waitFor(() => expect(layout.labelMeasures).not.toEqual([]));
+        expect(layout.labelTop()).toBe(settledTop);
+        const scrolls = layout.labelScrolls.length;
+        expect(scrolls).toBe(labelTop === settledTop ? 0 : 1);
+        const everyWordBox = screen.getByLabelText("Your recalled verse");
+        await waitFor(() => expect(everyWordBox).toHaveFocus());
+
+        await userEvent.paste("nope");
+        await userEvent.click(
+          screen.getByRole("button", { name: /Check answer/ }),
+        );
+        await userEvent.click(
+          await screen.findByRole("button", { name: /Try again/ }),
+        );
+        await waitFor(() =>
+          expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
+        );
+        expect(layout.labelScrolls).toHaveLength(scrolls);
+      } finally {
+        layout.restore();
+      }
+    },
+  );
 
   it("keeps S1 pass copy on a pre-try From memory pass", async () => {
     renderReview();

@@ -129,6 +129,7 @@ import {
   RefresherOfferButton,
 } from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
+import { revealStepHeader } from "./reveal-step-header";
 import type { PassageView } from "../passage/passage-session-types";
 import { verseScores } from "../passage/passage-session-model";
 import {
@@ -1637,6 +1638,8 @@ function PracticeCard({
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
+  /** Continue reached a new step whose label is not yet revealed. */
+  const revealPendingRef = useRef(false);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const refresherOfferRef = useRef<HTMLButtonElement>(null);
   const heldIdRef = useRef<HeldAttemptId | null>(null);
@@ -2107,7 +2110,10 @@ function PracticeCard({
     });
   }
 
-  function resetTyping(options?: { keepJourneyPreview?: boolean }) {
+  function resetTyping(options?: {
+    keepJourneyPreview?: boolean;
+    revealHeader?: boolean;
+  }) {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
@@ -2117,7 +2123,15 @@ function PracticeCard({
     if (!options?.keepJourneyPreview) onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     setStaleCue("off");
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    revealPendingRef.current = Boolean(options?.revealHeader);
+    window.requestAnimationFrame(() => {
+      if (!options?.revealHeader) {
+        answerInputRef.current?.focus();
+        return;
+      }
+      revealPendingRef.current = false;
+      revealStepHeader(headerId);
+    });
   }
 
   function openRefresher(
@@ -2147,7 +2161,7 @@ function PracticeCard({
         return;
       }
       refresher.continueToNext();
-      resetTyping({ keepJourneyPreview });
+      resetTyping({ keepJourneyPreview, revealHeader: true });
       return;
     }
     if (onRefreshDone && refresher.phase === "step2") {
@@ -2251,9 +2265,12 @@ function PracticeCard({
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
   // document is left unfocused until the learner clicks.
+  // After Continue to a refresher's next step, focus must not scroll until
+  // the label is revealed: bringing the answer box in first would push a
+  // visible label off the top and force the reveal to scroll.
   useEffect(() => {
     if (showDone || checked || isReadPrime) return;
-    answerInputRef.current?.focus();
+    answerInputRef.current?.focus({ preventScroll: revealPendingRef.current });
   }, [checked, isReadPrime, showDone]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
