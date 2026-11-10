@@ -703,9 +703,10 @@ export function PassageSession({
       setResultView({
         practiceOnly: true,
         closingLine: PRACTICE_ONLY_CLOSING,
-        offer: refresher.isOpen
-          ? tryAnotherRefresher(openRefresher)
-          : undefined,
+        offer:
+          refresher.isOpen && save.accuracy < 100
+            ? tryAnotherRefresher(openRefresher)
+            : undefined,
       });
       return true;
     }

@@ -1600,9 +1600,10 @@ describe("PassageSession", () => {
         expect.objectContaining({ verseScores: scores(100, 100) }),
       );
       expect(record()).toHaveBeenCalledTimes(1);
+      // A 100% practice pass leaves only Continue.
       expect(
-        screen.getByRole("button", { name: "Try another refresher" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "Try another refresher" }),
+      ).toBeNull();
       await clickButton(/Continue/);
       await screen.findByRole("heading", { name: "Review complete" });
       expect(screen.getByText("65%")).toBeInTheDocument();
@@ -1743,7 +1744,7 @@ describe("PassageSession", () => {
 
         renderRefresh("practice");
         await toFromMemory();
-        await check(FULL);
+        await check(WEAK_TWO);
         await clickButton("Try another refresher");
         await expectFreshStep("Refresh · First letters · 1 of 2");
         expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
@@ -1909,6 +1910,10 @@ describe("PassageSession", () => {
           expect(practice()).toHaveBeenLastCalledWith(
             expect.objectContaining({ verseScores: scores(100, 100) }),
           );
+          // A 100% practice pass leaves only Continue.
+          expect(
+            screen.queryByRole("button", { name: "Try another refresher" }),
+          ).toBeNull();
 
           await clickButton(/Continue/);
           expect(onExit).toHaveBeenCalledTimes(1);
@@ -2368,11 +2373,11 @@ describe("PassageSession", () => {
       );
 
       it.each([
-        ["a pass", FULL, /100% recalled/, [100, 100]],
-        ["a miss", WEAK_TWO, /65% recalled/, [100, 25]],
+        ["a pass", FULL, /100% recalled/, [100, 100], false],
+        ["a miss", WEAK_TWO, /65% recalled/, [100, 25], true],
       ] as const)(
         "R40: its refresher is practice only at both steps, ending on %s, then Continue returns",
-        async (_label, answer, recalled, [first, second]) => {
+        async (_label, answer, recalled, [first, second], offersTryAnother) => {
           const onExit = renderPractice(
             notDueView({ shakyVerses: [verse(2)] }),
           );
@@ -2403,6 +2408,11 @@ describe("PassageSession", () => {
           expect(notePractice()).toHaveBeenCalledWith(
             expect.objectContaining({ verseScores: scores(first, second) }),
           );
+          // Try another shows under 100% only.
+          expect(
+            screen.queryByRole("button", { name: "Try another refresher" }) !==
+              null,
+          ).toBe(offersTryAnother);
           expectNothingCounted();
           await continueBack(onExit);
         },
@@ -2422,6 +2432,9 @@ describe("PassageSession", () => {
         await check(FULL);
         await screen.findByText("Practice only, your progress didn't change.");
         expect(notePractice()).toHaveBeenCalledTimes(2);
+        expect(
+          screen.queryByRole("button", { name: "Try another refresher" }),
+        ).toBeNull();
         expectNothingCounted();
         await continueBack(onExit);
       });
