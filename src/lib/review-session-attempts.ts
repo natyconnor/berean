@@ -26,28 +26,42 @@ export interface ReviewSessionAttempt {
   savedStatus?: MemoryStatus;
   /** A Memorized passage reviewed on its Today card, for its summary Refresh. */
   passage?: { packId: string; references: CardReference[] };
+  /**
+   * Try another refresher's From memory: the row shows it as its latest
+   * score, but it is practice, so the average and Refresh skip it.
+   */
+  displayOnly?: boolean;
 }
 
-/** Mean accuracy across every recitation, including retries. */
+function counted(
+  attempts: readonly ReviewSessionAttempt[],
+): ReviewSessionAttempt[] {
+  return attempts.filter((attempt) => !attempt.displayOnly);
+}
+
+/** Mean accuracy across every counted recitation, including retries. */
 export function averageReviewAccuracy(
   attempts: readonly ReviewSessionAttempt[],
 ): number | null {
-  if (attempts.length === 0) return null;
+  const scored = counted(attempts);
+  if (scored.length === 0) return null;
   return Math.round(
-    attempts.reduce((sum, attempt) => sum + attempt.accuracy, 0) /
-      attempts.length,
+    scored.reduce((sum, attempt) => sum + attempt.accuracy, 0) / scored.length,
   );
 }
 
 export interface GroupedReviewAttempt extends ReviewSessionAttempt {
   /** Every recitation for this verse, in session order. */
   accuracies: number[];
+  /** The last counted recitation's score, which Refresh goes by. */
+  countedAccuracy: number;
 }
 
 /**
  * Collapse retries onto one row per verse while keeping each recitation's
  * score. First occurrence wins for order, label, and the Practice shortcut.
  * A later recitation can mark the row as a refresher and land its schedule.
+ * A display-only try only adds a score to a row a counted try started.
  */
 export function groupReviewSessionAttempts(
   attempts: readonly ReviewSessionAttempt[],
@@ -58,11 +72,18 @@ export function groupReviewSessionAttempts(
     const key = attempt.label ?? formatVerseRef(attempt.reference);
     const existing = indexByKey.get(key);
     if (existing === undefined) {
+      if (attempt.displayOnly) continue;
       indexByKey.set(key, groups.length);
-      groups.push({ ...attempt, accuracies: [attempt.accuracy] });
+      groups.push({
+        ...attempt,
+        accuracies: [attempt.accuracy],
+        countedAccuracy: attempt.accuracy,
+      });
       continue;
     }
     groups[existing].accuracies.push(attempt.accuracy);
+    if (attempt.displayOnly) continue;
+    groups[existing].countedAccuracy = attempt.accuracy;
     if (attempt.refresherUsed) groups[existing].refresherUsed = true;
     if (attempt.schedule) groups[existing].schedule = attempt.schedule;
     if (attempt.savedStatus) {
@@ -78,11 +99,9 @@ export function groupReviewSessionAttempts(
  */
 export function offersSummaryRefresh(row: GroupedReviewAttempt): boolean {
   if (row.label !== undefined || row.offerPractice === false) return false;
-  const last = row.accuracies[row.accuracies.length - 1];
   const status = row.schedule?.status ?? row.savedStatus;
   return (
-    last !== undefined &&
-    last < LEARN_PROGRESS_ACCURACY &&
+    row.countedAccuracy < LEARN_PROGRESS_ACCURACY &&
     status !== undefined &&
     isReviewPhase(status)
   );
@@ -97,7 +116,7 @@ export function offersPassageSummaryRefresh(
   attempts: readonly ReviewSessionAttempt[],
   status: PassageStatus | MemoryStatus | undefined,
 ): boolean {
-  const last = attempts.at(-1);
+  const last = counted(attempts).at(-1);
   return (
     last !== undefined &&
     last.accuracy < LEARN_PROGRESS_ACCURACY &&

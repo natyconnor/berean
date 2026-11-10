@@ -2089,7 +2089,7 @@ describe("PassageSession", () => {
           ).toBeNull();
         });
 
-        it("ignores a practice-only round after a counted miss", async () => {
+        it("ends the row on a practice round without counting it", async () => {
           await finishedSummary(async () => {
             await clickButton("Need a refresher?");
             await check(FULL);
@@ -2102,7 +2102,8 @@ describe("PassageSession", () => {
             await screen.findByText("Refresh · From memory · 2 of 2");
             await check(FULL);
           });
-          expectSummary("65%", "65% · Refresher used");
+          // The 100% shows on the row but not the headline or Refresh.
+          expectSummary("65%", "65% → 100% · Refresher used");
           expect(await refreshButton()).toBeInTheDocument();
         });
 

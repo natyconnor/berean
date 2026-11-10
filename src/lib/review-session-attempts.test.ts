@@ -23,6 +23,49 @@ describe("averageReviewAccuracy", () => {
   it("averages every recitation, including retries", () => {
     expect(averageReviewAccuracy([john, { ...john, accuracy: 100 }])).toBe(93);
   });
+
+  it("ignores a display-only try", () => {
+    expect(
+      averageReviewAccuracy([
+        { ...john, accuracy: 79 },
+        { ...john, accuracy: 79, refresherUsed: true },
+        { ...john, accuracy: 100, displayOnly: true },
+      ]),
+    ).toBe(79);
+  });
+});
+
+describe("display-only tries (#377)", () => {
+  const tries: ReviewSessionAttempt[] = [
+    { ...john, accuracy: 79 },
+    {
+      ...john,
+      accuracy: 79,
+      refresherUsed: true,
+      savedStatus: "reviewing",
+    },
+    { ...john, accuracy: 100, displayOnly: true },
+  ];
+
+  it("ends the row on the display-only try", () => {
+    const [row] = groupReviewSessionAttempts(tries);
+    expect(refresherResultCopy(row?.accuracies ?? [])).toBe(
+      "79% → 100% · Refresher used",
+    );
+  });
+
+  it("keeps Refresh on the last counted try", () => {
+    const [row] = groupReviewSessionAttempts(tries);
+    expect(row?.countedAccuracy).toBe(79);
+    expect(row && offersSummaryRefresh(row)).toBe(true);
+    expect(offersPassageSummaryRefresh(tries, "reviewing")).toBe(true);
+  });
+
+  it("starts no row on its own", () => {
+    expect(
+      groupReviewSessionAttempts([{ ...john, displayOnly: true }]),
+    ).toEqual([]);
+  });
 });
 
 describe("groupReviewSessionAttempts", () => {

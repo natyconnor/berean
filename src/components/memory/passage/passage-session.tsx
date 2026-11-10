@@ -707,6 +707,27 @@ export function PassageSession({
       // Clearing shaky verses is a bonus; the practice result stands.
       const nextView = await review.notePractice(packId, save);
       if (nextView) setShakyVerses(nextView.shakyVerses ?? []);
+      // Try another's From memory after a counted try: the summary row shows
+      // it last, but it stays practice (no schedule, average, or Refresh).
+      const reference = pieceRefs[0];
+      if (reference) {
+        setSavedReview(
+          (current) =>
+            current && {
+              ...current,
+              attempts: [
+                ...current.attempts,
+                {
+                  reference,
+                  label: packName,
+                  accuracy: save.accuracy,
+                  offerPractice: false,
+                  displayOnly: true,
+                },
+              ],
+            },
+        );
+      }
       setResultView({
         practiceOnly: true,
         closingLine: PRACTICE_ONLY_CLOSING,
