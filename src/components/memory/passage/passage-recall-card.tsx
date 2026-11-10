@@ -267,18 +267,28 @@ export function PassageRecallCard({
     defaultActionRef.current?.focus();
   }, [checked, isReadPrime, defaultActionRef, submitPending]);
 
+  // A step reached by Continue brings its label into view once the card has
+  // settled: it eases in from below (onAnimationComplete), or mounts in place
+  // under reduced motion. Until then, focusing the answer box must not scroll:
+  // bringing a box below the fold in first would push a visible label off the
+  // top and force the reveal to scroll.
+  const revealPendingRef = useRef(revealHeader);
+  function revealOnce() {
+    if (!revealPendingRef.current) return;
+    revealPendingRef.current = false;
+    revealStepHeader(headerId);
+  }
+
   // After Read advances into a typing band, focus the answer box. Continue is
   // unmounted on that transition, so without this focus is left on body.
   useEffect(() => {
     if (checked || isReadPrime) return;
-    answerInputRef.current?.focus();
+    answerInputRef.current?.focus({ preventScroll: revealPendingRef.current });
   }, [checked, isReadPrime]);
 
-  // The card eases in from below, so its label is only revealed once it has
-  // settled (onAnimationComplete); with reduced motion it mounts in place.
   useEffect(() => {
-    if (revealHeader && reduceMotion) revealStepHeader(headerId);
-  }, [revealHeader, reduceMotion, headerId]);
+    if (reduceMotion) revealOnce();
+  });
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -293,9 +303,7 @@ export function PassageRecallCard({
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      onAnimationComplete={() => {
-        if (revealHeader) revealStepHeader(headerId);
-      }}
+      onAnimationComplete={revealOnce}
       transition={{ duration: reduceMotion ? 0 : 0.2 }}
     >
       <Card className={cn("mx-auto w-full overflow-hidden", stageColor.panel)}>

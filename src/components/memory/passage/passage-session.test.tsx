@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { mockStepLabelLayout } from "@/test/step-label-layout";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { formatDueDay } from "@/lib/memorize-plan";
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
@@ -1327,63 +1328,38 @@ describe("PassageSession", () => {
       expect(record()).not.toHaveBeenCalled();
     });
 
-    it("scrolls each next step's label into view on Continue, not on Try again (#379)", async () => {
-      // Whether the new card had finished easing in (translateY) when the
-      // scroll ran; mid-entrance it measures 6px low and ends under the bar.
-      const settled: boolean[] = [];
-      const scrollIntoView = vi.fn<
-        (this: HTMLElement, options?: ScrollIntoViewOptions) => void
-      >(function (this: HTMLElement) {
-        settled.push(this.closest('[style*="translateY"]') === null);
-      });
-      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-        configurable: true,
-        value: scrollIntoView,
-      });
-      // jsdom has no layout: put each step label above the scroll area.
-      const rect = vi
-        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-        .mockImplementation(function (this: HTMLElement) {
-          return this.id.endsWith("-header")
-            ? DOMRect.fromRect({ y: -40, height: 16 })
-            : new DOMRect();
-        });
-      const headerScrolls = () =>
-        scrollIntoView.mock.contexts.filter(
-          (_, i) => scrollIntoView.mock.calls[i]?.[0]?.block === "start",
-        );
-      try {
-        renderReview();
-        await clickButton("Need a refresher?");
-        await check("The Lord");
-        await clickButton(/Continue/);
-        await expectFreshStep("Refresh · First letters · 2 of 3");
-        await waitFor(() =>
-          expect(headerScrolls()).toEqual([
-            screen.getByText("Refresh · First letters · 2 of 3"),
-          ]),
-        );
+    // Top bar ends at 105; the new step's answer box starts below the fold.
+    it.each([
+      ["fully in view stays put", 159, 159],
+      ["partly under the top bar scrolls to the top", 99, 105],
+      ["above the scroll area scrolls to the top", -40, 105],
+    ])(
+      "on Continue, a next step's label %s; Try again does not reveal it (#379)",
+      async (_, labelTop, settledTop) => {
+        const layout = mockStepLabelLayout(labelTop);
+        try {
+          renderReview();
+          await clickButton("Need a refresher?");
+          await check("The Lord");
+          layout.scrollToTop();
+          await clickButton(/Continue/);
+          await expectFreshStep("Refresh · First letters · 2 of 3");
+          // Measured only once the new card has eased in.
+          await waitFor(() => expect(layout.labelMeasures).not.toEqual([]));
+          expect(layout.labelMeasures.every((m) => m.settled)).toBe(true);
+          expect(layout.labelTop()).toBe(settledTop);
+          const scrolls = layout.labelScrolls.length;
+          expect(scrolls).toBe(labelTop === settledTop ? 0 : 1);
 
-        await check("The Lord");
-        await clickButton(/Try again/);
-        await expectFreshStep("Refresh · First letters · 2 of 3");
-        expect(headerScrolls()).toHaveLength(1);
-
-        await check(FULL);
-        await clickButton(/Continue/);
-        await expectFreshStep("Refresh · From memory · 3 of 3");
-        await waitFor(() =>
-          expect(headerScrolls().at(-1)).toBe(
-            screen.getByText("Refresh · From memory · 3 of 3"),
-          ),
-        );
-        expect(headerScrolls()).toHaveLength(2);
-        expect(settled).toEqual([true, true]);
-      } finally {
-        rect.mockRestore();
-        delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
-      }
-    });
+          await check("The Lord");
+          await clickButton(/Try again/);
+          await expectFreshStep("Refresh · First letters · 2 of 3");
+          expect(layout.labelScrolls).toHaveLength(scrolls);
+        } finally {
+          layout.restore();
+        }
+      },
+    );
 
     it("holds a cold miss on the server and counts it on Continue", async () => {
       renderReview();

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import { reviewOutcomeMessage } from "@/components/study/verse-attempt-feedback";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { mockStepLabelLayout } from "@/test/step-label-layout";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
@@ -1963,73 +1964,53 @@ describe("PracticeBoard pre-try refresher", () => {
     );
   });
 
-  it("scrolls each next step's label into view on Continue, not on Try again (#379)", async () => {
-    const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    });
-    // jsdom has no layout: put each step label above the scroll area.
-    const rect = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function (this: HTMLElement) {
-        return this.id.endsWith("-header")
-          ? DOMRect.fromRect({ y: -40, height: 16 })
-          : new DOMRect();
-      });
-    const headerScrolls = () =>
-      scrollIntoView.mock.contexts.filter(
-        (_, i) => scrollIntoView.mock.calls[i]?.[0]?.block === "start",
-      );
-    try {
-      renderReview();
-      await openRefresher();
-      const step1Box = await screen.findByLabelText("Your recalled verse");
-      await waitFor(() => expect(step1Box).toHaveFocus());
-      await userEvent.paste("nope");
-      await userEvent.click(
-        screen.getByRole("button", { name: /Check answer/ }),
-      );
-      await userEvent.click(
-        await screen.findByRole("button", { name: /Continue/ }),
-      );
-      await waitFor(() =>
-        expect(headerScrolls()).toEqual([
-          screen.getByText(refresherHeader(2, 3)),
-        ]),
-      );
-      const everyWordBox = screen.getByLabelText("Your recalled verse");
-      await waitFor(() => expect(everyWordBox).toHaveFocus());
+  // Top bar ends at 105; the new step's answer box starts below the fold.
+  it.each([
+    ["fully in view stays put", 159, 159],
+    ["partly under the top bar scrolls to the top", 99, 105],
+    ["above the scroll area scrolls to the top", -40, 105],
+  ])(
+    "on Continue, a next step's label %s; Try again does not reveal it (#379)",
+    async (_, labelTop, settledTop) => {
+      const layout = mockStepLabelLayout(labelTop);
+      try {
+        renderReview();
+        await openRefresher();
+        const step1Box = await screen.findByLabelText("Your recalled verse");
+        await waitFor(() => expect(step1Box).toHaveFocus());
+        await userEvent.paste("nope");
+        await userEvent.click(
+          screen.getByRole("button", { name: /Check answer/ }),
+        );
+        const continueButton = await screen.findByRole("button", {
+          name: /Continue/,
+        });
+        layout.scrollToTop();
+        await userEvent.click(continueButton);
+        expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
+        await waitFor(() => expect(layout.labelMeasures).not.toEqual([]));
+        expect(layout.labelTop()).toBe(settledTop);
+        const scrolls = layout.labelScrolls.length;
+        expect(scrolls).toBe(labelTop === settledTop ? 0 : 1);
+        const everyWordBox = screen.getByLabelText("Your recalled verse");
+        await waitFor(() => expect(everyWordBox).toHaveFocus());
 
-      await userEvent.paste("nope");
-      await userEvent.click(
-        screen.getByRole("button", { name: /Check answer/ }),
-      );
-      await userEvent.click(
-        await screen.findByRole("button", { name: /Try again/ }),
-      );
-      await waitFor(() =>
-        expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
-      );
-      expect(headerScrolls()).toHaveLength(1);
-
-      await userEvent.paste(PASSAGE_ONE);
-      await userEvent.click(
-        screen.getByRole("button", { name: /Check answer/ }),
-      );
-      await userEvent.click(
-        await screen.findByRole("button", { name: /Continue/ }),
-      );
-      await waitFor(() => expect(headerScrolls()).toHaveLength(2));
-      expect(headerScrolls().at(-1)).toBe(
-        screen.getByText(refresherHeader(3, 3)),
-      );
-      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
-    } finally {
-      rect.mockRestore();
-      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
-    }
-  });
+        await userEvent.paste("nope");
+        await userEvent.click(
+          screen.getByRole("button", { name: /Check answer/ }),
+        );
+        await userEvent.click(
+          await screen.findByRole("button", { name: /Try again/ }),
+        );
+        await waitFor(() =>
+          expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
+        );
+        expect(layout.labelScrolls).toHaveLength(scrolls);
+      } finally {
+        layout.restore();
+      }
+    },
+  );
 
   it("keeps S1 pass copy on a pre-try From memory pass", async () => {
     renderReview();
