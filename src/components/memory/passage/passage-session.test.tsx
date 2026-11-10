@@ -3017,7 +3017,9 @@ describe("PassageSession", () => {
           [PASSAGE_ONE],
           [PASSAGE_TWO],
           [VERSE_THREE],
-        ]),
+        ])
+          .map((verse) => verse.tokens.map((token) => token.text).join(""))
+          .join("\n"),
       );
       const link = await screen.findByRole("button", { name: LINK });
       expect(

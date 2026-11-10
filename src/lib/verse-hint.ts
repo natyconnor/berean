@@ -304,33 +304,18 @@ export function hintForProgress(
   }
 }
 
-/** One verse's masked hint, and the `book|chapter` it sits in. */
+/**
+ * One verse of a hint, masked on its own, and the `book|chapter` it sits in.
+ * A hint is a list of these: each verse is its own block, never text joined
+ * with blank lines.
+ */
 export type VerseHint = { chapter: string; tokens: readonly HintToken[] };
 
-/**
- * Masked verses stacked for a hint: each verse on its own line, with a blank
- * line where the chapter changes. Mask each verse first, then stack.
- */
-export function stackVerseHints(verses: readonly VerseHint[]): HintToken[] {
-  return verses.flatMap((verse, index) => {
-    const previous = verses[index - 1];
-    if (!previous) return [...verse.tokens];
-    const text = previous.chapter === verse.chapter ? "\n" : "\n\n";
-    return [{ text, word: false, masked: false }, ...verse.tokens];
-  });
-}
-
-/**
- * Hint tokens split into lines at each newline, for one paragraph per verse.
- * An empty line is the blank line at a chapter change.
- */
-export function hintLines(tokens: readonly HintToken[]): HintToken[][] {
-  const lines: HintToken[][] = [[]];
-  for (const token of tokens) {
-    token.text.split("\n").forEach((part, index) => {
-      if (index > 0) lines.push([]);
-      if (part !== "") lines[lines.length - 1]?.push({ ...token, text: part });
-    });
-  }
-  return lines;
+/** A verse's mask as one plain run of text (a text hint, not styled tokens). */
+export function plainVerseHint(
+  chapter: string,
+  tokens: readonly HintToken[],
+): VerseHint {
+  const text = tokens.map((token) => token.text).join("");
+  return { chapter, tokens: [{ text, word: false, masked: false }] };
 }

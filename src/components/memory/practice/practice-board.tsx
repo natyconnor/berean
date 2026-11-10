@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { HintVerses } from "@/components/memory/hint-verses";
 import { SessionBackButton } from "@/components/memory/session-back-button";
 import {
   useEsvCompositePassage,
@@ -97,10 +98,9 @@ import {
   countVerseWords,
   halfFirstLetters,
   hintForProgress,
-  hintLines,
   maskVerseText,
   seededRandom,
-  stackVerseHints,
+  type VerseHint,
 } from "@/lib/verse-hint";
 import { missedVerses, type PassageVerseKey } from "@/lib/passage-shaky";
 import {
@@ -134,7 +134,7 @@ import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import type { PassageView } from "../passage/passage-session-types";
 import { verseScores } from "../passage/passage-session-model";
 import {
-  firstLettersHintText,
+  firstLettersHintVerses,
   passageVersesIn,
   usePassageReview,
   usePassageStale,
@@ -1555,18 +1555,16 @@ function refresherFirstLetters(args: {
   /** The card's text, verse by verse. */
   verses: readonly CardVerse[];
   passageHint: PracticeCardProps["passageHint"];
-}): HintToken[] {
+}): VerseHint[] {
   const { phase, random, passageHint } = args;
   if (passageHint) {
-    const text =
-      phase === "step1"
-        ? firstLettersHintText(
-            passageHint.segments,
-            passageHint.targets,
-            random,
-          )
-        : firstLettersHintText(passageHint.segments, args.everyWordVerses);
-    return [{ text, word: false, masked: false }];
+    return phase === "step1"
+      ? firstLettersHintVerses(
+          passageHint.segments,
+          passageHint.targets,
+          random,
+        )
+      : firstLettersHintVerses(passageHint.segments, args.everyWordVerses);
   }
   return maskCardVerses(args.verses, (text) =>
     phase === "step1"
@@ -1594,17 +1592,15 @@ function cardVerses(
   return (verses ?? []).map((verse) => ({ chapter: "", text: verse.text }));
 }
 
-/** Mask each verse, then stack them one per line (a blank line per chapter). */
+/** Mask each verse on its own, one hint block per verse. */
 function maskCardVerses(
   verses: readonly CardVerse[],
   mask: (text: string) => HintToken[],
-): HintToken[] {
-  return stackVerseHints(
-    verses.map((verse) => ({
-      chapter: verse.chapter,
-      tokens: mask(verse.text),
-    })),
-  );
+): VerseHint[] {
+  return verses.map((verse) => ({
+    chapter: verse.chapter,
+    tokens: mask(verse.text),
+  }));
 }
 
 function PracticeCard({
@@ -1783,13 +1779,13 @@ function PracticeCard({
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
   const compositeSegments = composite?.segments;
-  const { hintStage, tokens, wordCount } = useMemo(() => {
+  const { hintStage, hintVerses, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
     const verses = cardVerses(compositeSegments, data?.verses);
     if (refresher.firstLetters) {
       return {
         hintStage: "first-letters" as const,
-        tokens: refresherFirstLetters({
+        hintVerses: refresherFirstLetters({
           phase: refresher.phase,
           random: seededRandom(refresher.seed),
           everyWordVerses: refresher.everyWordVerses,
@@ -1802,14 +1798,14 @@ function PracticeCard({
     if (refresher.phase === "step2") {
       return {
         hintStage: "hidden" as const,
-        tokens: maskVerseText(versePlainText, "hidden"),
+        hintVerses: [],
         wordCount: wc,
       };
     }
     const hint = hintForProgress(learnStage, stageReps, wc);
     return {
       hintStage: hint.stage,
-      tokens: maskCardVerses(verses, (text) =>
+      hintVerses: maskCardVerses(verses, (text) =>
         maskVerseText(text, hint.stage, {
           density: hint.density,
           seed: hint.seed,
@@ -2504,7 +2500,7 @@ function PracticeCard({
                         disabled={submitPending}
                       />
                     ) : (
-                      <HintTokenText tokens={tokens} />
+                      <HintVerses verses={hintVerses} />
                     )}
                   </div>
 
@@ -2859,35 +2855,6 @@ function PracticeShuffleCardFace({
       <div className="min-h-[200px] w-full max-w-xl rounded-md border border-input bg-background/80 px-3 py-2 text-left text-sm text-muted-foreground/50">
         Type what you remember
       </div>
-    </div>
-  );
-}
-
-/** The hint, one paragraph per verse, and a blank line at a chapter change. */
-function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
-  const lines = hintLines(tokens);
-  return (
-    <div className="whitespace-pre-wrap">
-      {lines.map((line, lineIndex) =>
-        line.length === 0 ? null : (
-          <p
-            key={lineIndex}
-            className={cn(lines[lineIndex - 1]?.length === 0 && "mt-[1lh]")}
-          >
-            {line.map((token, index) => (
-              <span
-                key={index}
-                className={cn(
-                  token.masked &&
-                    "font-mono tracking-wide text-muted-foreground",
-                )}
-              >
-                {token.text}
-              </span>
-            ))}
-          </p>
-        ),
-      )}
     </div>
   );
 }

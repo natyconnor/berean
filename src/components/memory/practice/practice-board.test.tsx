@@ -36,6 +36,7 @@ import {
   maskVerseText,
 } from "@/lib/verse-hint";
 import { hintParagraphs } from "@/test/hint-paragraphs";
+import { VERSE_GAP_CLASS } from "@/components/memory/hint-verses";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -4452,10 +4453,16 @@ describe("PracticeBoard multi-verse card hint (#378)", () => {
             seed: hint.seed,
           }),
         );
-      // Exactly the two masked verses: no verse numbers, no run-together.
-      expect(
-        await findHintLines([mask(PASSAGE_ONE), mask(PASSAGE_TWO)]),
-      ).toBeInTheDocument();
+      // Exactly the two masked verses: no verse numbers, no run-together,
+      // and the small verse gap above the second.
+      const hintBox = await findHintLines([
+        mask(PASSAGE_ONE),
+        mask(PASSAGE_TWO),
+      ]);
+      expect(Array.from(hintBox.children, (child) => child.className)).toEqual([
+        "",
+        VERSE_GAP_CLASS,
+      ]);
     },
   );
 

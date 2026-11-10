@@ -25,11 +25,11 @@ import {
 describe("frontierHint (#378)", () => {
   const ONE = "Blessed is the man who walks not in the counsel of the wicked,";
   const TWO = "but his delight is in the law of the Lord.";
-  const text = (tokens: ReturnType<typeof maskVerseText>) =>
+  const text = (tokens: readonly { text: string }[]) =>
     tokens.map((token) => token.text).join("");
 
   it.each([0, 1, 2])(
-    "masks each verse of a multi-verse piece, then stacks them, at stage %i",
+    "masks each verse of a multi-verse piece into its own block, at stage %i",
     (learnStage) => {
       const hint = hintForProgress(
         learnStage,
@@ -45,18 +45,24 @@ describe("frontierHint (#378)", () => {
         );
       const masked = frontierHint([ONE, TWO], learnStage, 1);
       expect(masked.stage).toBe(hint.stage);
-      expect(text(masked.tokens)).toBe(`${mask(ONE)}\n${mask(TWO)}`);
+      expect(masked.verses.map((verse) => text(verse.tokens))).toEqual([
+        mask(ONE),
+        mask(TWO),
+      ]);
     },
   );
 
   it("leaves a one-verse piece as it was", () => {
     const hint = hintForProgress(1, 2, countVerseWords(ONE));
-    expect(frontierHint([ONE], 1, 2).tokens).toEqual(
-      maskVerseText(ONE, hint.stage, {
-        density: hint.density,
-        seed: hint.seed,
-      }),
-    );
+    expect(frontierHint([ONE], 1, 2).verses).toEqual([
+      {
+        chapter: "",
+        tokens: maskVerseText(ONE, hint.stage, {
+          density: hint.density,
+          seed: hint.seed,
+        }),
+      },
+    ]);
   });
 });
 

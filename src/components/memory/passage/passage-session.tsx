@@ -135,7 +135,7 @@ import {
   type PassageVerseScore,
 } from "@/lib/passage-shaky";
 import {
-  firstLettersHintText,
+  firstLettersHintVerses,
   passageVersesIn,
   usePassageReview,
   usePassageStale,
@@ -1454,8 +1454,8 @@ function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
     return everyWordHint(refresher.segments, refresher.everyWordVerses);
   }
   return {
-    type: "text",
-    text: firstLettersHintText(
+    type: "verses",
+    verses: firstLettersHintVerses(
       refresher.segments,
       refresher.targets,
       seededRandom(refresher.seed),
@@ -1469,8 +1469,8 @@ function everyWordHint(
   verses: readonly PassageVerseKey[],
 ): PassageRecallHint {
   return {
-    type: "text",
-    text: firstLettersHintText(segments, verses),
+    type: "verses",
+    verses: firstLettersHintVerses(segments, verses),
     label: "Hint",
   };
 }
@@ -1492,8 +1492,8 @@ function learningRefresherRecall(
     hint:
       phase === "step1"
         ? {
-            type: "text",
-            text: firstLettersHintText(
+            type: "verses",
+            verses: firstLettersHintVerses(
               segments,
               passageVersesIn(segments),
               seededRandom(refresher.seed),
@@ -1558,7 +1558,12 @@ function ropeRecall(
 ): BuiltRecall {
   const start = indexes[0] ?? 0;
   const end = (indexes[indexes.length - 1] ?? 0) + 1;
-  const hintText = compositeHintForWindow(pieces, start, end, pieceVerseTexts);
+  const hintVerses = compositeHintForWindow(
+    pieces,
+    start,
+    end,
+    pieceVerseTexts,
+  );
   const allHidden = pieces
     .filter((_, index) => indexes.includes(index))
     .every((piece) => piece.attachment === "solid");
@@ -1575,7 +1580,7 @@ function ropeRecall(
     retry,
     hint: allHidden
       ? { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT }
-      : { type: "text", text: hintText, label: "Hint" },
+      : { type: "verses", verses: hintVerses, label: "Hint" },
     pickUpCue: pickUpCue(pieces, pieceTexts, start),
     stopBeforeCue: allHidden ? stopBeforeCue(pieceTexts, end - 1) : null,
     learnStage: chromeStage(pieces, indexes),
@@ -1673,8 +1678,13 @@ function buildingRecall(args: {
       error: compositeError,
       retry,
       hint: {
-        type: "text",
-        text: compositeHintForWindow(state.pieces, start, end, pieceVerseTexts),
+        type: "verses",
+        verses: compositeHintForWindow(
+          state.pieces,
+          start,
+          end,
+          pieceVerseTexts,
+        ),
         label: "Hint",
       },
       pickUpCue: null,
@@ -1719,7 +1729,7 @@ function buildingRecall(args: {
               message:
                 "No hint text. Type the verse from memory, then check your answer.",
             }
-          : { type: "tokens", tokens: masked.tokens },
+          : { type: "verses", verses: masked.verses },
       pickUpCue:
         masked.stage === "hidden"
           ? pickUpCue(state.pieces, pieceTexts, due, { includeLearning: true })

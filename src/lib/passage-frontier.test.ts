@@ -399,6 +399,13 @@ describe("auto-heart helpers", () => {
 });
 
 describe("compositeHintForWindow", () => {
+  /** Each verse block's chapter and plain text. */
+  const blocks = (verses: ReturnType<typeof compositeHintForWindow>) =>
+    verses.map((verse) => [
+      verse.chapter,
+      verse.tokens.map((token) => token.text).join(""),
+    ]);
+
   it("uses per-piece stages: solid is blank, attached uses learnStage", () => {
     const solidText = "Blessed is the man";
     const attachedText = "who walks not in the counsel of the wicked";
@@ -425,9 +432,10 @@ describe("compositeHintForWindow", () => {
       .map((token) => token.text)
       .join("");
 
-    expect(hint).toBe(`${solidHint}\n${attachedHint}`);
-    expect(hint).not.toContain("Blessed");
-    expect(hint.includes("unused")).toBe(false);
+    expect(blocks(hint)).toEqual([
+      ["Psalms|1", solidHint],
+      ["Psalms|1", attachedHint],
+    ]);
   });
 
   const masked = (text: string, stage: "hidden" | "first-letters") =>
@@ -435,7 +443,7 @@ describe("compositeHintForWindow", () => {
       .map((token) => token.text)
       .join("");
 
-  it("puts each verse of a multi-verse piece on its own line, masked on its own", () => {
+  it("gives each verse of a multi-verse piece its own block, masked on its own", () => {
     const pieces = [
       piece(0, "solid", { learnStage: 3 }),
       piece(1, "solid", { learnStage: 3 }),
@@ -444,17 +452,17 @@ describe("compositeHintForWindow", () => {
       ["Blessed is the man", "who walks not"],
       ["but his delight", "", "and on his law"],
     ]);
-    expect(hint).toBe(
+    expect(blocks(hint)).toEqual(
       [
-        masked("Blessed is the man", "hidden"),
-        masked("who walks not", "hidden"),
-        masked("but his delight", "hidden"),
-        masked("and on his law", "hidden"),
-      ].join("\n"),
+        "Blessed is the man",
+        "who walks not",
+        "but his delight",
+        "and on his law",
+      ].map((text) => ["Psalms|1", masked(text, "hidden")]),
     );
   });
 
-  it("leaves a blank line where the chapter changes, with no heading", () => {
+  it("marks a chapter change by the block's chapter, with no heading or blank line", () => {
     const pieces = [
       piece(0, "solid", { learnStage: 3 }),
       piece(1, "solid", { learnStage: 3, chapter: 2 }),
@@ -463,19 +471,23 @@ describe("compositeHintForWindow", () => {
       ["Blessed is the man", "who walks not"],
       ["Why do the nations rage"],
     ]);
-    expect(hint).toBe(
-      `${masked("Blessed is the man", "hidden")}\n${masked("who walks not", "hidden")}\n\n${masked("Why do the nations rage", "hidden")}`,
-    );
+    expect(blocks(hint)).toEqual([
+      ["Psalms|1", masked("Blessed is the man", "hidden")],
+      ["Psalms|1", masked("who walks not", "hidden")],
+      ["Psalms|2", masked("Why do the nations rage", "hidden")],
+    ]);
   });
 
-  it("gives a one-verse window no line break", () => {
+  it("gives a one-verse window one block", () => {
     const hint = compositeHintForWindow(
       [piece(0, "solid", { learnStage: 3 })],
       0,
       1,
       [["Blessed is the man"]],
     );
-    expect(hint).toBe(masked("Blessed is the man", "hidden"));
+    expect(blocks(hint)).toEqual([
+      ["Psalms|1", masked("Blessed is the man", "hidden")],
+    ]);
   });
 });
 

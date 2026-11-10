@@ -7,8 +7,7 @@ import {
   countVerseWords,
   hintForProgress,
   maskVerseText,
-  stackVerseHints,
-  type HintToken,
+  type VerseHint,
 } from "@/lib/verse-hint";
 import {
   rehearsalStartIndex,
@@ -138,27 +137,28 @@ export function pieceCardTitle(piece: PassagePiece): string {
 }
 
 /**
- * The learning piece's hint at its stage, masked verse by verse (`verseTexts`)
- * with each verse on its own line. A one-verse piece masks as one text.
+ * The learning piece's hint at its stage, masked verse by verse (`verseTexts`),
+ * one block per verse. A one-verse piece masks as one text.
  */
 export function frontierHint(
   verseTexts: readonly string[],
   learnStage: number,
   stageReps: number,
-): { tokens: HintToken[]; stage: ReturnType<typeof hintForProgress>["stage"] } {
+): {
+  verses: VerseHint[];
+  stage: ReturnType<typeof hintForProgress>["stage"];
+} {
   const wordCount = countVerseWords(verseTexts.join(" "));
   const hint = hintForProgress(learnStage, stageReps, wordCount);
   return {
     stage: hint.stage,
-    tokens: stackVerseHints(
-      verseTexts.map((text) => ({
-        chapter: "",
-        tokens: maskVerseText(text, hint.stage, {
-          density: hint.density,
-          seed: hint.seed,
-        }),
-      })),
-    ),
+    verses: verseTexts.map((text) => ({
+      chapter: "",
+      tokens: maskVerseText(text, hint.stage, {
+        density: hint.density,
+        seed: hint.seed,
+      }),
+    })),
   };
 }
 

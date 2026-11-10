@@ -26,7 +26,7 @@ import {
   countVerseWords,
   hintForProgress,
   maskVerseText,
-  stackVerseHints,
+  plainVerseHint,
   type VerseHint,
 } from "./verse-hint";
 import type { VerseScope } from "./verse-scope-match";
@@ -225,15 +225,14 @@ export function rehearsalStartIndex(
  * Per-piece masks for a rehearsal window `[start, end)`, verse by verse
  * (`verseTexts[i]` is piece `i`'s verses). Solid → blank (density 0). Attached
  * uses `learnStage`. Learning / unreached are skipped (they should not appear
- * in the window). Each verse starts on its own line, with a blank line where
- * the chapter changes.
+ * in the window). One plain text block per verse.
  */
 export function compositeHintForWindow(
   pieces: readonly PassagePiece[],
   start: number,
   end: number,
   verseTexts: readonly (readonly string[])[],
-): string {
+): VerseHint[] {
   const verses: VerseHint[] = [];
   const windowAligned =
     verseTexts.length !== pieces.length &&
@@ -261,13 +260,13 @@ export function compositeHintForWindow(
           );
     const chapter = `${piece.book}|${piece.chapter}`;
     for (const text of texts) {
-      verses.push({ chapter, tokens: maskVerseText(text, hint.stage, hint) });
+      verses.push(
+        plainVerseHint(chapter, maskVerseText(text, hint.stage, hint)),
+      );
     }
   }
 
-  return stackVerseHints(verses)
-    .map((token) => token.text)
-    .join("");
+  return verses;
 }
 
 /**

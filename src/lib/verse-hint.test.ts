@@ -5,48 +5,19 @@ import {
   countVerseWords,
   halfFirstLetters,
   hintForProgress,
-  hintLines,
   maskVerseText,
+  plainVerseHint,
   seededRandom,
-  stackVerseHints,
 } from "./verse-hint";
 
-describe("stackVerseHints", () => {
-  const verse = (chapter: string, text: string) => ({
-    chapter,
-    tokens: [{ text, word: false, masked: false }],
-  });
-  const joined = (tokens: ReturnType<typeof stackVerseHints>) =>
-    tokens.map((token) => token.text).join("");
-
-  it("puts each verse on its own line, and a blank line at a chapter change", () => {
+describe("plainVerseHint", () => {
+  it("keeps a verse's mask as one plain run, with no added line breaks", () => {
     expect(
-      joined(
-        stackVerseHints([
-          verse("Psalms|130", "a"),
-          verse("Psalms|131", "b"),
-          verse("Psalms|131", "c"),
-        ]),
-      ),
-    ).toBe("a\n\nb\nc");
-  });
-
-  it("adds no break to one verse", () => {
-    expect(joined(stackVerseHints([verse("Psalms|131", "a b")]))).toBe("a b");
-  });
-});
-
-describe("hintLines", () => {
-  it("splits tokens into lines, an empty line at each blank line", () => {
-    const lines = hintLines([
-      { text: "a", word: true, masked: true },
-      { text: "\n", word: false, masked: false },
-      { text: "b\n\nc", word: false, masked: false },
-    ]);
-    expect(
-      lines.map((line) => line.map((token) => token.text).join("")),
-    ).toEqual(["a", "b", "", "c"]);
-    expect(lines[0]?.[0]?.masked).toBe(true);
+      plainVerseHint("Psalms|131", maskVerseText("O Lord, my", "hidden")),
+    ).toEqual({
+      chapter: "Psalms|131",
+      tokens: [{ text: "_ ____, __", word: false, masked: false }],
+    });
   });
 });
 

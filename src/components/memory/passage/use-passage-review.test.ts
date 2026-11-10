@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { CompositePassageSegment } from "@/hooks/use-esv-composite-passage";
-import { maskVerseText } from "@/lib/verse-hint";
+import { maskVerseText, type VerseHint } from "@/lib/verse-hint";
 
-import { firstLettersHintText } from "./use-passage-review";
+import { firstLettersHintVerses } from "./use-passage-review";
 
 const PS131_1 =
-  "O Lord, my heart is not lifted up; my eyes are not raised too high; I do not occupy myself with things too great and too marvelous for me.";
+  "O Lord, my heart is not lifted up;\n    my eyes are not raised too high;";
 const PS131_2 =
-  "But I have calmed and quieted my soul, like a weaned child with its mother; like a weaned child is my soul within me.";
+  "But I have calmed and quieted my soul,\n    like a weaned child with its mother;";
 const PS131_3 =
-  "O Israel, hope in the Lord from this time forth and forevermore.";
+  "O Israel, hope in the Lord\n    from this time forth and forevermore.";
 
 function segment(
   chapter: number,
@@ -37,9 +37,16 @@ const blank = (text: string) =>
     .map((token) => token.text)
     .join("");
 
-describe("firstLettersHintText (#378)", () => {
-  it("puts each verse of Psalm 131 on its own line, even inside one piece", () => {
-    const hint = firstLettersHintText(
+/** Each block's chapter and text. */
+const blocks = (verses: readonly VerseHint[]) =>
+  verses.map((verse) => [
+    verse.chapter,
+    verse.tokens.map((token) => token.text).join(""),
+  ]);
+
+describe("firstLettersHintVerses (#378)", () => {
+  it("gives each verse of Psalm 131 its own block, even inside one piece", () => {
+    const hint = firstLettersHintVerses(
       [
         segment(131, [
           [1, PS131_1],
@@ -49,14 +56,19 @@ describe("firstLettersHintText (#378)", () => {
       ],
       [],
     );
-    expect(hint).toBe(
-      [letters(PS131_1), letters(PS131_2), letters(PS131_3)].join("\n"),
-    );
-    expect(hint).not.toMatch(/\d/);
+    expect(blocks(hint)).toEqual([
+      ["Psalms|131", letters(PS131_1)],
+      ["Psalms|131", letters(PS131_2)],
+      ["Psalms|131", letters(PS131_3)],
+    ]);
+    // Poetry lines stay single line breaks; no blank lines, no verse numbers.
+    for (const [, text] of blocks(hint)) {
+      expect(text).not.toMatch(/\n\s*\n|\d/);
+    }
   });
 
-  it("keeps a blank, unhinted verse on its own line", () => {
-    const hint = firstLettersHintText(
+  it("keeps a blank, unhinted verse in its own block", () => {
+    const hint = firstLettersHintVerses(
       [
         segment(131, [
           [1, PS131_1],
@@ -66,15 +78,15 @@ describe("firstLettersHintText (#378)", () => {
       ],
       [{ chapter: 131, verse: 2 }],
     );
-    expect(hint.split("\n")).toEqual([
+    expect(blocks(hint).map(([, text]) => text)).toEqual([
       blank(PS131_1),
       letters(PS131_2),
       blank(PS131_3),
     ]);
   });
 
-  it("leaves a blank line, and no heading, where the chapter changes", () => {
-    const hint = firstLettersHintText(
+  it("marks a chapter change by the block's chapter, with no heading text", () => {
+    const hint = firstLettersHintVerses(
       [
         segment(130, [[8, PS131_3]]),
         segment(131, [
@@ -84,14 +96,16 @@ describe("firstLettersHintText (#378)", () => {
       ],
       [],
     );
-    expect(hint).toBe(
-      `${letters(PS131_3)}\n\n${letters(PS131_1)}\n${letters(PS131_2)}`,
-    );
+    expect(blocks(hint)).toEqual([
+      ["Psalms|130", letters(PS131_3)],
+      ["Psalms|131", letters(PS131_1)],
+      ["Psalms|131", letters(PS131_2)],
+    ]);
   });
 
-  it("gives a one-verse passage no extra line", () => {
-    expect(firstLettersHintText([segment(131, [[3, PS131_3]])], [])).toBe(
-      letters(PS131_3),
-    );
+  it("gives a one-verse passage one block", () => {
+    expect(
+      blocks(firstLettersHintVerses([segment(131, [[3, PS131_3]])], [])),
+    ).toEqual([["Psalms|131", letters(PS131_3)]]);
   });
 });

@@ -2,7 +2,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  CHAPTER_GAP_CLASS,
+  VERSE_GAP_CLASS,
+} from "@/components/memory/hint-verses";
+import type { VerseHint } from "@/lib/verse-hint";
+
 import { PassageRecallCard } from "./passage-recall-card";
+
+/** A plain text hint block for one verse. */
+function plain(text: string, chapter = "Psalms|131"): VerseHint {
+  return { chapter, tokens: [{ text, word: false, masked: false }] };
+}
 
 vi.mock("framer-motion", async () => {
   const actual =
@@ -25,7 +36,11 @@ describe("PassageRecallCard footer", () => {
         loading={false}
         error={null}
         retry={() => undefined}
-        hint={{ type: "text", text: "Preserve me, O God", label: "Hint" }}
+        hint={{
+          type: "verses",
+          verses: [plain("Preserve me, O God")],
+          label: "Hint",
+        }}
         learnStage={0}
         stageReps={0}
         status="learning"
@@ -62,8 +77,10 @@ describe("PassageRecallCard result banner", () => {
         error={null}
         retry={() => undefined}
         hint={{
-          type: "tokens",
-          tokens: [{ text: "P", word: true, masked: false }],
+          type: "verses",
+          verses: [
+            { chapter: "", tokens: [{ text: "P", word: true, masked: false }] },
+          ],
         }}
         learnStage={1}
         stageReps={0}
@@ -110,7 +127,7 @@ describe("PassageRecallCard hint lines (#378)", () => {
   const TWO = "But I have calmed and quieted my soul,";
   const THREE = "O Israel, hope in the Lord";
 
-  function renderHint(hint: string) {
+  function renderHint(verses: readonly VerseHint[]) {
     return render(
       <PassageRecallCard
         mode="review"
@@ -121,7 +138,7 @@ describe("PassageRecallCard hint lines (#378)", () => {
         loading={false}
         error={null}
         retry={() => undefined}
-        hint={{ type: "text", text: hint, label: "Hint" }}
+        hint={{ type: "verses", verses, label: "Hint" }}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -130,29 +147,29 @@ describe("PassageRecallCard hint lines (#378)", () => {
     );
   }
 
-  it("shows one paragraph per verse under the Hint label, a gap at a chapter change", () => {
-    renderHint(`${ONE}\n${TWO}\n\n${THREE}`);
+  it("shows one paragraph per verse under the Hint label, with block gaps", () => {
+    renderHint([plain(ONE, "Psalms|130"), plain(TWO), plain(THREE)]);
     const paragraphs = Array.from(
       screen.getByLabelText("Hint").querySelectorAll("p"),
     );
     expect(paragraphs.map((p) => p.textContent)).toEqual([ONE, TWO, THREE]);
-    expect(paragraphs.map((p) => p.className.includes("mt-[1lh]"))).toEqual([
-      false,
-      false,
-      true,
+    expect(paragraphs.map((p) => p.className)).toEqual([
+      "",
+      CHAPTER_GAP_CLASS,
+      VERSE_GAP_CLASS,
     ]);
   });
 
-  it("keeps a one-verse hint to a single paragraph", () => {
-    renderHint(ONE);
+  it("keeps a one-verse hint to a single paragraph with no gap", () => {
+    renderHint([plain(ONE)]);
     const paragraphs = screen.getByLabelText("Hint").querySelectorAll("p");
     expect(paragraphs).toHaveLength(1);
-    expect(paragraphs[0]?.className).not.toContain("mt-[1lh]");
+    expect(paragraphs[0]?.className).toBe("");
   });
 
   it("scores a try typed on one line, with one answer box, as before", async () => {
     const user = userEvent.setup();
-    renderHint(`${ONE}\n${TWO}\n${THREE}`);
+    renderHint([plain(ONE), plain(TWO), plain(THREE)]);
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
     await user.click(screen.getByLabelText("Your recited passage"));
     await user.paste(`${ONE} ${TWO} ${THREE}`);
@@ -174,8 +191,10 @@ describe("PassageRecallCard step label and focus", () => {
         error={null}
         retry={() => undefined}
         hint={{
-          type: "tokens",
-          tokens: [{ text: "P", word: true, masked: false }],
+          type: "verses",
+          verses: [
+            { chapter: "", tokens: [{ text: "P", word: true, masked: false }] },
+          ],
         }}
         learnStage={1}
         stageReps={0}
@@ -206,8 +225,8 @@ describe("PassageRecallCard step label and focus", () => {
         error={null}
         retry={() => undefined}
         hint={{
-          type: "text",
-          text: "Preserve me, O God, for in you I take refuge.",
+          type: "verses",
+          verses: [plain("Preserve me, O God, for in you I take refuge.")],
           label: "Hint",
         }}
         learnStage={0}
@@ -236,8 +255,10 @@ describe("PassageRecallCard step label and focus", () => {
         error={null}
         retry={() => undefined}
         hint={{
-          type: "tokens",
-          tokens: [{ text: "P", word: true, masked: false }],
+          type: "verses",
+          verses: [
+            { chapter: "", tokens: [{ text: "P", word: true, masked: false }] },
+          ],
         }}
         learnStage={1}
         stageReps={0}
@@ -271,8 +292,10 @@ describe("PassageRecallCard step label and focus", () => {
         error={null}
         retry={() => undefined}
         hint={{
-          type: "tokens",
-          tokens: [{ text: "P", word: true, masked: false }],
+          type: "verses",
+          verses: [
+            { chapter: "", tokens: [{ text: "P", word: true, masked: false }] },
+          ],
         }}
         learnStage={1}
         stageReps={0}

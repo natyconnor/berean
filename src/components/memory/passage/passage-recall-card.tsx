@@ -48,7 +48,8 @@ import {
   SESSION_VERSE_TEXT_CLASS,
 } from "@/lib/reader-typography";
 import { cn } from "@/lib/utils";
-import { countVerseWords, hintLines, type HintToken } from "@/lib/verse-hint";
+import { countVerseWords, type VerseHint } from "@/lib/verse-hint";
+import { HintVerses } from "@/components/memory/hint-verses";
 
 import { STOP_BEFORE_LABEL } from "./passage-session-model";
 
@@ -63,8 +64,7 @@ export type PassageRecallResult = {
 };
 
 export type PassageRecallHint =
-  | { type: "tokens"; tokens: readonly HintToken[] }
-  | { type: "text"; text: string; label: string }
+  | { type: "verses"; verses: readonly VerseHint[]; label?: string }
   | { type: "hidden"; message: string };
 
 /** What the result shows beyond the score and diff. Review refreshers only. */
@@ -365,16 +365,7 @@ export function PassageRecallCard({
                   />
                 ) : (
                   <>
-                    {hint.type === "tokens" ? (
-                      <HintTokenText tokens={hint.tokens} />
-                    ) : (
-                      <HintTokenText
-                        tokens={[
-                          { text: hint.text, word: false, masked: false },
-                        ]}
-                        label={hint.label}
-                      />
-                    )}
+                    <HintVerses verses={hint.verses} label={hint.label} />
                     {onRefresher ? (
                       <div className="mt-4 flex justify-center font-sans">
                         <NeedARefresherLink
@@ -555,41 +546,6 @@ function StallCue({
       >
         {text}
       </p>
-    </div>
-  );
-}
-
-/** The hint, one paragraph per verse, and a blank line at a chapter change. */
-function HintTokenText({
-  tokens,
-  label,
-}: {
-  tokens: ReadonlyArray<HintToken>;
-  label?: string;
-}) {
-  const lines = hintLines(tokens);
-  return (
-    <div className="whitespace-pre-wrap" aria-label={label}>
-      {lines.map((line, lineIndex) =>
-        line.length === 0 ? null : (
-          <p
-            key={lineIndex}
-            className={cn(lines[lineIndex - 1]?.length === 0 && "mt-[1lh]")}
-          >
-            {line.map((token, index) => (
-              <span
-                key={index}
-                className={cn(
-                  token.masked &&
-                    "font-mono tracking-wide text-muted-foreground",
-                )}
-              >
-                {token.text}
-              </span>
-            ))}
-          </p>
-        ),
-      )}
     </div>
   );
 }
