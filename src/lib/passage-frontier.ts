@@ -22,7 +22,13 @@ import type {
   PieceAttachment,
 } from "./passage-pieces";
 import { scopeCoverageComplete } from "./scope-verse-coverage";
-import { countVerseWords, hintForProgress, maskVerseText } from "./verse-hint";
+import {
+  countVerseWords,
+  hintForProgress,
+  maskVerseText,
+  stackVerseHints,
+  type VerseHint,
+} from "./verse-hint";
 import type { VerseScope } from "./verse-scope-match";
 
 export const PASSAGE_MAX_ADDS_PER_DAY = 5;
@@ -216,19 +222,22 @@ export function rehearsalStartIndex(
 }
 
 /**
- * Concatenate per-piece masks for a rehearsal window `[start, end)`.
- * Solid → blank (density 0). Attached uses `learnStage`. Learning / unreached
- * are skipped (they should not appear in the window).
+ * Per-piece masks for a rehearsal window `[start, end)`, verse by verse
+ * (`verseTexts[i]` is piece `i`'s verses). Solid → blank (density 0). Attached
+ * uses `learnStage`. Learning / unreached are skipped (they should not appear
+ * in the window). Each verse starts on its own line, with a blank line where
+ * the chapter changes.
  */
 export function compositeHintForWindow(
   pieces: readonly PassagePiece[],
   start: number,
   end: number,
-  texts: readonly string[],
+  verseTexts: readonly (readonly string[])[],
 ): string {
-  const parts: string[] = [];
+  const verses: VerseHint[] = [];
   const windowAligned =
-    texts.length !== pieces.length && texts.length === Math.max(0, end - start);
+    verseTexts.length !== pieces.length &&
+    verseTexts.length === Math.max(0, end - start);
 
   for (let index = start; index < end && index < pieces.length; index += 1) {
     const piece = pieces[index];
@@ -237,33 +246,28 @@ export function compositeHintForWindow(
       continue;
     }
 
-    const text = windowAligned
-      ? (texts[index - start] ?? "")
-      : (texts[index] ?? "");
-    if (text.length === 0) continue;
+    const texts = (
+      windowAligned ? verseTexts[index - start] : verseTexts[index]
+    )?.filter((text) => text.length > 0);
+    if (!texts || texts.length === 0) continue;
 
-    if (piece.attachment === "solid") {
-      parts.push(
-        maskVerseText(text, "hidden")
-          .map((token) => token.text)
-          .join(""),
-      );
-      continue;
+    const hint =
+      piece.attachment === "solid"
+        ? { stage: "hidden" as const, density: 0, seed: 0 }
+        : hintForProgress(
+            piece.learnStage,
+            piece.stageReps,
+            countVerseWords(texts.join(" ")),
+          );
+    const chapter = `${piece.book}|${piece.chapter}`;
+    for (const text of texts) {
+      verses.push({ chapter, tokens: maskVerseText(text, hint.stage, hint) });
     }
-
-    const wordCount = countVerseWords(text);
-    const hint = hintForProgress(piece.learnStage, piece.stageReps, wordCount);
-    parts.push(
-      maskVerseText(text, hint.stage, {
-        density: hint.density,
-        seed: hint.seed,
-      })
-        .map((token) => token.text)
-        .join(""),
-    );
   }
 
-  return parts.join(" ");
+  return stackVerseHints(verses)
+    .map((token) => token.text)
+    .join("");
 }
 
 /**

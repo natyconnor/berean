@@ -29,6 +29,13 @@ import {
   REVIEW_LAPSE_LEARN_STAGE,
 } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
+import {
+  countVerseWords,
+  halfFirstLetters,
+  hintForProgress,
+  maskVerseText,
+} from "@/lib/verse-hint";
+import { hintParagraphs } from "@/test/hint-paragraphs";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -4377,5 +4384,98 @@ describe("PracticeBoard stale Refresh it first", () => {
         ([name, args]) => name === "verseMemory.verseDetail" && args !== "skip",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("PracticeBoard multi-verse card hint (#378)", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  const text = (tokens: ReturnType<typeof maskVerseText>) =>
+    tokens.map((token) => token.text).join("");
+
+  /** The hint panel showing exactly `lines`, one paragraph per verse. */
+  function findHintLines(lines: readonly string[]) {
+    return waitFor(() =>
+      screen.getByText(
+        (_, element) =>
+          element instanceof HTMLDivElement &&
+          element.children.length === lines.length &&
+          Array.from(element.children).every(
+            (child) => child.tagName === "P",
+          ) &&
+          hintParagraphs(element) === lines.join("\n"),
+      ),
+    );
+  }
+
+  function renderCard(verse: PracticeVerse, kind: "learning" | "review") {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind={kind}
+          verses={[verse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it.each([0, 1, 2])(
+    "masks each verse, then puts it on its own line, at learn stage %i",
+    async (learnStage) => {
+      renderCard(
+        { ...learningVerse, reference: span(1, 2), learnStage },
+        "learning",
+      );
+      const hint = hintForProgress(
+        learnStage,
+        0,
+        countVerseWords(`${PASSAGE_ONE} ${PASSAGE_TWO}`),
+      );
+      const mask = (verse: string) =>
+        text(
+          maskVerseText(verse, hint.stage, {
+            density: hint.density,
+            seed: hint.seed,
+          }),
+        );
+      // Exactly the two masked verses: no verse numbers, no run-together.
+      expect(
+        await findHintLines([mask(PASSAGE_ONE), mask(PASSAGE_TWO)]),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("stacks Refresh First letters by verse, and scores a one-line try as before", async () => {
+    renderCard({ ...reviewingVerse, reference: span(1, 2) }, "review");
+    await userEvent.click(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    await screen.findByText(refresherHeader(1));
+    expect(
+      await findHintLines([
+        text(halfFirstLetters(PASSAGE_ONE, () => 0)),
+        text(halfFirstLetters(PASSAGE_TWO, () => 0)),
+      ]),
+    ).toBeInTheDocument();
+    // The answer box is still one field; a try with no line breaks is exact.
+    const box = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(box);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
   });
 });

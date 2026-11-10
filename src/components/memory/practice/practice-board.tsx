@@ -97,8 +97,10 @@ import {
   countVerseWords,
   halfFirstLetters,
   hintForProgress,
+  hintLines,
   maskVerseText,
   seededRandom,
+  stackVerseHints,
 } from "@/lib/verse-hint";
 import { missedVerses, type PassageVerseKey } from "@/lib/passage-shaky";
 import {
@@ -1550,8 +1552,8 @@ function refresherFirstLetters(args: {
   phase: VerseRefresherPhase;
   random: () => number;
   everyWordVerses: readonly PassageVerseKey[];
-  /** A verse card's text, verse by verse. */
-  verseTexts: readonly string[];
+  /** The card's text, verse by verse. */
+  verses: readonly CardVerse[];
   passageHint: PracticeCardProps["passageHint"];
 }): HintToken[] {
   const { phase, random, passageHint } = args;
@@ -1566,13 +1568,43 @@ function refresherFirstLetters(args: {
         : firstLettersHintText(passageHint.segments, args.everyWordVerses);
     return [{ text, word: false, masked: false }];
   }
-  if (phase !== "step1") {
-    return maskVerseText(args.verseTexts.join(" "), "first-letters");
+  return maskCardVerses(args.verses, (text) =>
+    phase === "step1"
+      ? halfFirstLetters(text, random)
+      : maskVerseText(text, "first-letters"),
+  );
+}
+
+/** One verse of a card's text, and the `book|chapter` it sits in. */
+type CardVerse = { chapter: string; text: string };
+
+/** A card's text verse by verse: a composite's spans, or a verse card's verses. */
+function cardVerses(
+  segments: readonly CompositePassageSegment[] | undefined,
+  verses: readonly { text: string }[] | undefined,
+): CardVerse[] {
+  if (segments) {
+    return segments.flatMap((segment) =>
+      segment.verses.map((verse) => ({
+        chapter: `${segment.reference.book}|${segment.reference.chapter}`,
+        text: verse.text,
+      })),
+    );
   }
-  return args.verseTexts.flatMap((text, index) => [
-    ...(index > 0 ? [{ text: " ", word: false, masked: false }] : []),
-    ...halfFirstLetters(text, random),
-  ]);
+  return (verses ?? []).map((verse) => ({ chapter: "", text: verse.text }));
+}
+
+/** Mask each verse, then stack them one per line (a blank line per chapter). */
+function maskCardVerses(
+  verses: readonly CardVerse[],
+  mask: (text: string) => HintToken[],
+): HintToken[] {
+  return stackVerseHints(
+    verses.map((verse) => ({
+      chapter: verse.chapter,
+      tokens: mask(verse.text),
+    })),
+  );
 }
 
 function PracticeCard({
@@ -1750,8 +1782,10 @@ function PracticeCard({
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
+  const compositeSegments = composite?.segments;
   const { hintStage, tokens, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
+    const verses = cardVerses(compositeSegments, data?.verses);
     if (refresher.firstLetters) {
       return {
         hintStage: "first-letters" as const,
@@ -1759,9 +1793,7 @@ function PracticeCard({
           phase: refresher.phase,
           random: seededRandom(refresher.seed),
           everyWordVerses: refresher.everyWordVerses,
-          verseTexts: data?.verses.map((verse) => verse.text) ?? [
-            versePlainText,
-          ],
+          verses,
           passageHint,
         }),
         wordCount: wc,
@@ -1777,14 +1809,17 @@ function PracticeCard({
     const hint = hintForProgress(learnStage, stageReps, wc);
     return {
       hintStage: hint.stage,
-      tokens: maskVerseText(versePlainText, hint.stage, {
-        density: hint.density,
-        seed: hint.seed,
-      }),
+      tokens: maskCardVerses(verses, (text) =>
+        maskVerseText(text, hint.stage, {
+          density: hint.density,
+          seed: hint.seed,
+        }),
+      ),
       wordCount: wc,
     };
   }, [
     versePlainText,
+    compositeSegments,
     data,
     learnStage,
     stageReps,
@@ -2828,20 +2863,32 @@ function PracticeShuffleCardFace({
   );
 }
 
+/** The hint, one paragraph per verse, and a blank line at a chapter change. */
 function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
+  const lines = hintLines(tokens);
   return (
-    <p className="whitespace-pre-wrap">
-      {tokens.map((token, index) => (
-        <span
-          key={index}
-          className={cn(
-            token.masked && "font-mono tracking-wide text-muted-foreground",
-          )}
-        >
-          {token.text}
-        </span>
-      ))}
-    </p>
+    <div className="whitespace-pre-wrap">
+      {lines.map((line, lineIndex) =>
+        line.length === 0 ? null : (
+          <p
+            key={lineIndex}
+            className={cn(lines[lineIndex - 1]?.length === 0 && "mt-[1lh]")}
+          >
+            {line.map((token, index) => (
+              <span
+                key={index}
+                className={cn(
+                  token.masked &&
+                    "font-mono tracking-wide text-muted-foreground",
+                )}
+              >
+                {token.text}
+              </span>
+            ))}
+          </p>
+        ),
+      )}
+    </div>
   );
 }
 

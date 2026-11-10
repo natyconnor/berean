@@ -7,6 +7,7 @@ import {
   computeStallCue,
   CONNECT_TITLE,
   connectPairTitle,
+  frontierHint,
   PASSAGE_SESSION_PHASE_LABELS,
   pickUpCue,
   repairWindowShowsStageHints,
@@ -15,6 +16,49 @@ import {
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
 import { diffWords } from "@/lib/diff-words";
+import {
+  countVerseWords,
+  hintForProgress,
+  maskVerseText,
+} from "@/lib/verse-hint";
+
+describe("frontierHint (#378)", () => {
+  const ONE = "Blessed is the man who walks not in the counsel of the wicked,";
+  const TWO = "but his delight is in the law of the Lord.";
+  const text = (tokens: ReturnType<typeof maskVerseText>) =>
+    tokens.map((token) => token.text).join("");
+
+  it.each([0, 1, 2])(
+    "masks each verse of a multi-verse piece, then stacks them, at stage %i",
+    (learnStage) => {
+      const hint = hintForProgress(
+        learnStage,
+        1,
+        countVerseWords(`${ONE} ${TWO}`),
+      );
+      const mask = (verse: string) =>
+        text(
+          maskVerseText(verse, hint.stage, {
+            density: hint.density,
+            seed: hint.seed,
+          }),
+        );
+      const masked = frontierHint([ONE, TWO], learnStage, 1);
+      expect(masked.stage).toBe(hint.stage);
+      expect(text(masked.tokens)).toBe(`${mask(ONE)}\n${mask(TWO)}`);
+    },
+  );
+
+  it("leaves a one-verse piece as it was", () => {
+    const hint = hintForProgress(1, 2, countVerseWords(ONE));
+    expect(frontierHint([ONE], 1, 2).tokens).toEqual(
+      maskVerseText(ONE, hint.stage, {
+        density: hint.density,
+        seed: hint.seed,
+      }),
+    );
+  });
+});
 
 describe("PASSAGE_SESSION_PHASE_LABELS", () => {
   it("names passage phases without reusing Practice", () => {

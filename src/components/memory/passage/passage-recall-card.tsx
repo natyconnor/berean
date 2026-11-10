@@ -48,7 +48,7 @@ import {
   SESSION_VERSE_TEXT_CLASS,
 } from "@/lib/reader-typography";
 import { cn } from "@/lib/utils";
-import { countVerseWords, type HintToken } from "@/lib/verse-hint";
+import { countVerseWords, hintLines, type HintToken } from "@/lib/verse-hint";
 
 import { STOP_BEFORE_LABEL } from "./passage-session-model";
 
@@ -368,12 +368,12 @@ export function PassageRecallCard({
                     {hint.type === "tokens" ? (
                       <HintTokenText tokens={hint.tokens} />
                     ) : (
-                      <p
-                        className="whitespace-pre-wrap"
-                        aria-label={hint.label}
-                      >
-                        {hint.text}
-                      </p>
+                      <HintTokenText
+                        tokens={[
+                          { text: hint.text, word: false, masked: false },
+                        ]}
+                        label={hint.label}
+                      />
                     )}
                     {onRefresher ? (
                       <div className="mt-4 flex justify-center font-sans">
@@ -559,19 +559,37 @@ function StallCue({
   );
 }
 
-function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
+/** The hint, one paragraph per verse, and a blank line at a chapter change. */
+function HintTokenText({
+  tokens,
+  label,
+}: {
+  tokens: ReadonlyArray<HintToken>;
+  label?: string;
+}) {
+  const lines = hintLines(tokens);
   return (
-    <p className="whitespace-pre-wrap">
-      {tokens.map((token, index) => (
-        <span
-          key={index}
-          className={cn(
-            token.masked && "font-mono tracking-wide text-muted-foreground",
-          )}
-        >
-          {token.text}
-        </span>
-      ))}
-    </p>
+    <div className="whitespace-pre-wrap" aria-label={label}>
+      {lines.map((line, lineIndex) =>
+        line.length === 0 ? null : (
+          <p
+            key={lineIndex}
+            className={cn(lines[lineIndex - 1]?.length === 0 && "mt-[1lh]")}
+          >
+            {line.map((token, index) => (
+              <span
+                key={index}
+                className={cn(
+                  token.masked &&
+                    "font-mono tracking-wide text-muted-foreground",
+                )}
+              >
+                {token.text}
+              </span>
+            ))}
+          </p>
+        ),
+      )}
+    </div>
   );
 }

@@ -105,6 +105,62 @@ describe("PassageRecallCard result banner", () => {
   });
 });
 
+describe("PassageRecallCard hint lines (#378)", () => {
+  const ONE = "O Lord, my heart is not lifted up;";
+  const TWO = "But I have calmed and quieted my soul,";
+  const THREE = "O Israel, hope in the Lord";
+
+  function renderHint(hint: string) {
+    return render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="Refresh"
+        title="Psalm 131"
+        promptLine="Recite the whole passage from memory"
+        versePlainText={`${ONE} ${TWO} ${THREE}`}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "text", text: hint, label: "Hint" }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+  }
+
+  it("shows one paragraph per verse under the Hint label, a gap at a chapter change", () => {
+    renderHint(`${ONE}\n${TWO}\n\n${THREE}`);
+    const paragraphs = Array.from(
+      screen.getByLabelText("Hint").querySelectorAll("p"),
+    );
+    expect(paragraphs.map((p) => p.textContent)).toEqual([ONE, TWO, THREE]);
+    expect(paragraphs.map((p) => p.className.includes("mt-[1lh]"))).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  it("keeps a one-verse hint to a single paragraph", () => {
+    renderHint(ONE);
+    const paragraphs = screen.getByLabelText("Hint").querySelectorAll("p");
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]?.className).not.toContain("mt-[1lh]");
+  });
+
+  it("scores a try typed on one line, with one answer box, as before", async () => {
+    const user = userEvent.setup();
+    renderHint(`${ONE}\n${TWO}\n${THREE}`);
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste(`${ONE} ${TWO} ${THREE}`);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("100% recalled")).toBeVisible();
+  });
+});
+
 describe("PassageRecallCard step label and focus", () => {
   it("shows the current First letters step, not completed count", () => {
     render(

@@ -24,6 +24,7 @@ import {
 } from "@/lib/verse-hint";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
+import { hintParagraphs } from "@/test/hint-paragraphs";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
 
 import {
@@ -228,10 +229,14 @@ function masked(text: string, stage: HintStage | "half"): string {
     .join("");
 }
 
-/** The hint panel showing exactly `text`. */
+/** The hint panel showing exactly `text`, one paragraph per line. */
 function hintShown(text: string) {
   return screen.getByText(
-    (_, element) => element?.tagName === "P" && element.textContent === text,
+    (_, element) =>
+      element instanceof HTMLDivElement &&
+      element.children.length > 0 &&
+      Array.from(element.children).every((child) => child.tagName === "P") &&
+      hintParagraphs(element) === text,
   );
 }
 
@@ -241,7 +246,7 @@ function findHint(text: string) {
 
 /** Step 1's First letters hint with verse one and/or two targeted. */
 function hint(one: boolean, two: boolean): string {
-  return `${masked(VERSE_ONE, one ? "half" : "hidden")} ${masked(
+  return `${masked(VERSE_ONE, one ? "half" : "hidden")}\n${masked(
     VERSE_TWO,
     two ? "half" : "hidden",
   )}`;
@@ -249,7 +254,7 @@ function hint(one: boolean, two: boolean): string {
 
 /** The every-word First letters hint on verse one and/or two. */
 function everyWordHint(one: boolean, two: boolean): string {
-  return `${masked(VERSE_ONE, one ? "first-letters" : "hidden")} ${masked(
+  return `${masked(VERSE_ONE, one ? "first-letters" : "hidden")}\n${masked(
     VERSE_TWO,
     two ? "first-letters" : "hidden",
   )}`;

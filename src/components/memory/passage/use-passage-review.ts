@@ -12,6 +12,7 @@ import {
   type PassageVerseScore,
 } from "@/lib/passage-shaky";
 import { isStaleVerse } from "@/lib/memory-stale";
+import { stackVerseHints } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 import { api } from "../../../../convex/_generated/api";
@@ -56,10 +57,9 @@ export function passageVersesIn(
 
 /**
  * First letters on `targets` only (every verse when none is among them),
- * every other word blank in place, laid out like the composite text: verses
- * joined by a space, a new line where the chapter changes. With `random`, each
- * hinted verse shows a random half of first letters instead of one on every
- * word.
+ * every other word blank in place. Each verse starts on its own line, with a
+ * blank line where the chapter changes. With `random`, each hinted verse shows
+ * a random half of first letters instead of one on every word.
  */
 export function firstLettersHintText(
   segments: readonly CompositePassageSegment[],
@@ -68,20 +68,14 @@ export function firstLettersHintText(
 ): string {
   const verses = passageVersesIn(segments);
   const masked = shakyFirstLettersHint(verses, targets, random);
-  return segments
-    .map((segment, pieceIndex) => ({
-      chapter: `${segment.reference.book}|${segment.reference.chapter}`,
-      text: masked
-        .filter((_, index) => verses[index]?.pieceIndex === pieceIndex)
-        .join(" "),
-    }))
-    .reduce(
-      (result, segment, index, all) =>
-        index === 0
-          ? segment.text
-          : `${result}${all[index - 1]?.chapter === segment.chapter ? " " : "\n"}${segment.text}`,
-      "",
-    );
+  return stackVerseHints(
+    verses.map((verse, index) => ({
+      chapter: `${segments[verse.pieceIndex]?.reference.book}|${verse.chapter}`,
+      tokens: [{ text: masked[index] ?? "", word: false, masked: false }],
+    })),
+  )
+    .map((token) => token.text)
+    .join("");
 }
 
 /**

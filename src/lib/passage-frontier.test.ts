@@ -407,7 +407,7 @@ describe("compositeHintForWindow", () => {
       piece(1, "attached", { learnStage: 2, stageReps: 0 }),
       piece(2, "learning", { learnStage: 0 }),
     ];
-    const texts = [solidText, attachedText, "unused learning"];
+    const texts = [[solidText], [attachedText], ["unused learning"]];
     const hint = compositeHintForWindow(pieces, 0, 3, texts);
 
     const solidHint = maskVerseText(solidText, "hidden")
@@ -425,9 +425,57 @@ describe("compositeHintForWindow", () => {
       .map((token) => token.text)
       .join("");
 
-    expect(hint).toBe(`${solidHint} ${attachedHint}`);
+    expect(hint).toBe(`${solidHint}\n${attachedHint}`);
     expect(hint).not.toContain("Blessed");
     expect(hint.includes("unused")).toBe(false);
+  });
+
+  const masked = (text: string, stage: "hidden" | "first-letters") =>
+    maskVerseText(text, stage)
+      .map((token) => token.text)
+      .join("");
+
+  it("puts each verse of a multi-verse piece on its own line, masked on its own", () => {
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "solid", { learnStage: 3 }),
+    ];
+    const hint = compositeHintForWindow(pieces, 0, 2, [
+      ["Blessed is the man", "who walks not"],
+      ["but his delight", "", "and on his law"],
+    ]);
+    expect(hint).toBe(
+      [
+        masked("Blessed is the man", "hidden"),
+        masked("who walks not", "hidden"),
+        masked("but his delight", "hidden"),
+        masked("and on his law", "hidden"),
+      ].join("\n"),
+    );
+  });
+
+  it("leaves a blank line where the chapter changes, with no heading", () => {
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "solid", { learnStage: 3, chapter: 2 }),
+    ];
+    const hint = compositeHintForWindow(pieces, 0, 2, [
+      ["Blessed is the man", "who walks not"],
+      ["Why do the nations rage"],
+    ]);
+    expect(hint).toBe(
+      `${masked("Blessed is the man", "hidden")}\n${masked("who walks not", "hidden")}\n\n${masked("Why do the nations rage", "hidden")}`,
+    );
+  });
+
+  it("gives a one-verse window no line break", () => {
+    const hint = compositeHintForWindow(
+      [piece(0, "solid", { learnStage: 3 })],
+      0,
+      1,
+      [["Blessed is the man"]],
+    );
+    expect(hint).toBe(masked("Blessed is the man", "hidden"));
   });
 });
 

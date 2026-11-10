@@ -356,6 +356,15 @@ export function PassageSession({
     () => view.pieces.map((_, index) => composite.segments[index]?.text ?? ""),
     [view.pieces, composite.segments],
   );
+  // Each piece's verses, so a hint puts each verse on its own line.
+  const pieceVerseTexts = useMemo(
+    () =>
+      view.pieces.map(
+        (_, index) =>
+          composite.segments[index]?.verses.map((verse) => verse.text) ?? [],
+      ),
+    [view.pieces, composite.segments],
+  );
   // The same text verse by verse, so each verse is scored and hinted on its
   // own even inside a multi-verse piece.
   const passageVerses = useMemo(
@@ -414,6 +423,7 @@ export function PassageSession({
           recitingSection,
           recitingConnect,
           pieceTexts,
+          pieceVerseTexts,
           compositeLoading: composite.loading,
           compositeError: composite.error,
           retry: composite.retry,
@@ -1539,6 +1549,7 @@ function ropeRecall(
   pieces: readonly PassagePiece[],
   indexes: readonly number[],
   pieceTexts: readonly string[],
+  pieceVerseTexts: readonly (readonly string[])[],
   compositeLoading: boolean,
   compositeError: string | null,
   retry: () => void,
@@ -1547,7 +1558,7 @@ function ropeRecall(
 ): BuiltRecall {
   const start = indexes[0] ?? 0;
   const end = (indexes[indexes.length - 1] ?? 0) + 1;
-  const hintText = compositeHintForWindow(pieces, start, end, pieceTexts);
+  const hintText = compositeHintForWindow(pieces, start, end, pieceVerseTexts);
   const allHidden = pieces
     .filter((_, index) => indexes.includes(index))
     .every((piece) => piece.attachment === "solid");
@@ -1581,6 +1592,7 @@ function buildingRecall(args: {
   recitingSection: boolean;
   recitingConnect: boolean;
   pieceTexts: readonly string[];
+  pieceVerseTexts: readonly (readonly string[])[];
   compositeLoading: boolean;
   compositeError: string | null;
   retry: () => void;
@@ -1592,6 +1604,7 @@ function buildingRecall(args: {
     recitingSection,
     recitingConnect,
     pieceTexts,
+    pieceVerseTexts,
     compositeLoading,
     compositeError,
     retry,
@@ -1616,6 +1629,7 @@ function buildingRecall(args: {
       state.pieces,
       indexes,
       pieceTexts,
+      pieceVerseTexts,
       compositeLoading,
       compositeError,
       retry,
@@ -1636,6 +1650,7 @@ function buildingRecall(args: {
       state.pieces,
       indexes,
       pieceTexts,
+      pieceVerseTexts,
       compositeLoading,
       compositeError,
       retry,
@@ -1659,7 +1674,7 @@ function buildingRecall(args: {
       retry,
       hint: {
         type: "text",
-        text: compositeHintForWindow(state.pieces, start, end, pieceTexts),
+        text: compositeHintForWindow(state.pieces, start, end, pieceVerseTexts),
         label: "Hint",
       },
       pickUpCue: null,
@@ -1678,7 +1693,11 @@ function buildingRecall(args: {
     const piece = state.pieces[due];
     if (!piece) return null;
     const text = pieceTexts[due] ?? "";
-    const masked = frontierHint(text, piece.learnStage, piece.stageReps);
+    const masked = frontierHint(
+      pieceVerseTexts[due] ?? [],
+      piece.learnStage,
+      piece.stageReps,
+    );
     return {
       mode: "frontier",
       title: pieceCardTitle(piece),
@@ -1724,6 +1743,7 @@ function buildingRecall(args: {
     state.pieces,
     ropeIndexes,
     pieceTexts,
+    pieceVerseTexts,
     compositeLoading,
     compositeError,
     retry,

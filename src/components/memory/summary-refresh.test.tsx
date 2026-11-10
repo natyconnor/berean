@@ -34,6 +34,7 @@ import {
   averageReviewAccuracy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
+import { hintParagraphs } from "@/test/hint-paragraphs";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../shared/esv-api";
 
@@ -689,8 +690,9 @@ describe("Today passage summary Refresh (S16, R51)", () => {
     });
     expect(router.state.location.state.summaryRefresh).toBe(true);
     // None shaky: every verse gets half first letters (S13 fallback).
-    expect(screen.getByLabelText("Hint").textContent).toBe(
-      "T__ L___ i_ m_ s_______; _ _____ ___ ____. H_ m____ m_ l__ ____ __ _____ ________.",
+    // Each verse on its own line.
+    expect(hintParagraphs(screen.getByLabelText("Hint"))).toBe(
+      "T__ L___ i_ m_ s_______; _ _____ ___ ____.\nH_ m____ m_ l__ ____ __ _____ ________.",
     );
 
     await userEvent.click(
