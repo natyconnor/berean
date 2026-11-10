@@ -2107,7 +2107,10 @@ function PracticeCard({
     });
   }
 
-  function resetTyping(options?: { keepJourneyPreview?: boolean }) {
+  function resetTyping(options?: {
+    keepJourneyPreview?: boolean;
+    revealHeader?: boolean;
+  }) {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
@@ -2117,7 +2120,15 @@ function PracticeCard({
     if (!options?.keepJourneyPreview) onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     setStaleCue("off");
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      if (!options?.revealHeader) {
+        answerInputRef.current?.focus();
+        return;
+      }
+      // A long result can leave the new step's label above the fold.
+      answerInputRef.current?.focus({ preventScroll: true });
+      document.getElementById(headerId)?.scrollIntoView?.({ block: "start" });
+    });
   }
 
   function openRefresher(
@@ -2147,7 +2158,7 @@ function PracticeCard({
         return;
       }
       refresher.continueToNext();
-      resetTyping({ keepJourneyPreview });
+      resetTyping({ keepJourneyPreview, revealHeader: true });
       return;
     }
     if (onRefreshDone && refresher.phase === "step2") {

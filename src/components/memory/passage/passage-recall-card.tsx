@@ -119,6 +119,8 @@ interface PassageRecallCardProps {
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   /** Resolve `false` to stay on the result, e.g. a save to retry. */
   onContinueAfterResult?: () => void | Promise<boolean>;
+  /** Scroll the step label into view on mount: a step reached by Continue. */
+  revealHeader?: boolean;
 }
 
 export function PassageRecallCard({
@@ -147,6 +149,7 @@ export function PassageRecallCard({
   resultView = null,
   onSubmit,
   onContinueAfterResult,
+  revealHeader = false,
 }: PassageRecallCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -269,6 +272,16 @@ export function PassageRecallCard({
     if (checked || isReadPrime) return;
     answerInputRef.current?.focus();
   }, [checked, isReadPrime]);
+
+  // A long result can leave the new step's label above the fold.
+  useEffect(() => {
+    if (!revealHeader) return;
+    const frame = window.requestAnimationFrame(() => {
+      answerInputRef.current?.focus({ preventScroll: true });
+      document.getElementById(headerId)?.scrollIntoView?.({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [revealHeader, headerId]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;

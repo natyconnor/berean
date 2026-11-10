@@ -1327,6 +1327,47 @@ describe("PassageSession", () => {
       expect(record()).not.toHaveBeenCalled();
     });
 
+    it("scrolls each next step's label into view on Continue, not on Try again (#379)", async () => {
+      const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: scrollIntoView,
+      });
+      const headerScrolls = () =>
+        scrollIntoView.mock.contexts.filter(
+          (_, i) => scrollIntoView.mock.calls[i]?.[0]?.block === "start",
+        );
+      try {
+        renderReview();
+        await clickButton("Need a refresher?");
+        await check("The Lord");
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · First letters · 2 of 3");
+        await waitFor(() =>
+          expect(headerScrolls()).toEqual([
+            screen.getByText("Refresh · First letters · 2 of 3"),
+          ]),
+        );
+
+        await check("The Lord");
+        await clickButton(/Try again/);
+        await expectFreshStep("Refresh · First letters · 2 of 3");
+        expect(headerScrolls()).toHaveLength(1);
+
+        await check(FULL);
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · From memory · 3 of 3");
+        await waitFor(() =>
+          expect(headerScrolls().at(-1)).toBe(
+            screen.getByText("Refresh · From memory · 3 of 3"),
+          ),
+        );
+        expect(headerScrolls()).toHaveLength(2);
+      } finally {
+        delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+      }
+    });
+
     it("holds a cold miss on the server and counts it on Continue", async () => {
       renderReview();
       await check(WEAK_TWO);
