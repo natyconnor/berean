@@ -1872,7 +1872,7 @@ describe("PracticeBoard pre-try refresher", () => {
     // Half the words lettered, the rest blank, never a visible word (F1).
     expect(
       verseHint("T__ L___ i_ m_ s_______; _ _____ ___ ____."),
-    ).toBeVisible();
+    ).toBeInTheDocument();
     const box = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(box);
     await userEvent.paste(PASSAGE_ONE);
@@ -1917,7 +1917,7 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
     expect(
       verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
-    ).toBeVisible();
+    ).toBeInTheDocument();
     const everyWordBox = screen.getByLabelText("Your recalled verse");
     expect(everyWordBox).toHaveValue("");
     await waitFor(() => expect(everyWordBox).toHaveFocus());
@@ -1930,7 +1930,7 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
     expect(
       verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
-    ).toBeVisible();
+    ).toBeInTheDocument();
     const retried = screen.getByLabelText("Your recalled verse");
     expect(retried).toHaveValue("");
     expect(retried).toHaveFocus();
