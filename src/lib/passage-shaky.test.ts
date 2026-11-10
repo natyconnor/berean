@@ -90,6 +90,15 @@ describe("shakyFirstLettersHint", () => {
       "B__ I h___ t______",
     ]);
   });
+
+  it("with a random, gives each target its own half and blanks the rest", () => {
+    // random() = 0 picks the first half of each target verse's own words.
+    expect(shakyFirstLettersHint(verses, [V3, V5], () => 0)).toEqual([
+      "C_______ a__ ______ __,",
+      "____ __ _____ ___,",
+      "B__ I ____ _______",
+    ]);
+  });
 });
 
 describe("practice-only recital (S13, AC29)", () => {

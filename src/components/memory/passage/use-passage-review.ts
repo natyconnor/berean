@@ -55,14 +55,16 @@ export function passageVersesIn(
 /**
  * First letters on `targets` only, every other word blank in place, laid out
  * like the composite text: verses joined by a space, a new line where the
- * chapter changes.
+ * chapter changes. With `random`, each target shows a random half of first
+ * letters instead of one on every word.
  */
 export function firstLettersHintText(
   segments: readonly CompositePassageSegment[],
   targets: readonly PassageVerseKey[],
+  random?: () => number,
 ): string {
   const verses = passageVersesIn(segments);
-  const masked = shakyFirstLettersHint(verses, targets);
+  const masked = shakyFirstLettersHint(verses, targets, random);
   return segments
     .map((segment, pieceIndex) => ({
       chapter: `${segment.reference.book}|${segment.reference.chapter}`,

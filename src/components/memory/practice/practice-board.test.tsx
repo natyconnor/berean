@@ -84,6 +84,13 @@ vi.mock("@tanstack/react-router", () => ({
     select({ href: "/memory/review", state: {} }),
 }));
 
+// Refresh's first First letters step letters the first half of each hinted
+// verse, so its hint is predictable here (the random pick is unit-tested).
+vi.mock("@/lib/verse-hint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/verse-hint")>()),
+  seededRandom: () => () => 0,
+}));
+
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     esv: {
@@ -1852,7 +1859,35 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(screen.queryByText(/No hint text/)).not.toBeInTheDocument();
   });
 
-  it("opens First letters, then From memory, with Try again under 85% and Continue at 85%+", async () => {
+  function verseHint(text: string) {
+    return screen.getByText(
+      (_, element) => element?.tagName === "P" && element.textContent === text,
+    );
+  }
+
+  it("skips the every-word step after an 85%+ first try (F1)", async () => {
+    renderReview();
+    await openRefresher();
+    await screen.findByText(refresherHeader(1));
+    // Half the words lettered, the rest blank, never a visible word (F1).
+    expect(
+      verseHint("T__ L___ i_ m_ s_______; _ _____ ___ ____."),
+    ).toBeVisible();
+    const box = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(box);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText(refresherHeader(1))).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(screen.getByText(refresherHeader(2))).toBeVisible();
+    expect(screen.getByText(NOW_TRY_WITHOUT_HINTS)).toBeVisible();
+  });
+
+  it("opens First letters, Continue under 85% to every word, Try again there, then From memory (F2, F9, F10)", async () => {
     const onRunStateChange =
       vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
     renderReview({ onRunStateChange });
@@ -1874,8 +1909,28 @@ describe("PracticeBoard pre-try refresher", () => {
       await screen.findByText("Another look will help it stick."),
     ).toBeVisible();
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
-    expect(screen.getByText(refresherHeader(1))).toBeVisible();
+    expect(screen.getByText(refresherHeader(1, 3))).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
+    expect(
+      verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
+    ).toBeVisible();
+    const everyWordBox = screen.getByLabelText("Your recalled verse");
+    expect(everyWordBox).toHaveValue("");
+    await waitFor(() => expect(everyWordBox).toHaveFocus());
+
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    expect(screen.getByText(refresherHeader(2, 3))).toBeVisible();
+    expect(
+      verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
+    ).toBeVisible();
     const retried = screen.getByLabelText("Your recalled verse");
     expect(retried).toHaveValue("");
     expect(retried).toHaveFocus();
@@ -1886,7 +1941,7 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
-    expect(screen.getByText(refresherHeader(2))).toBeVisible();
+    expect(screen.getByText(refresherHeader(3, 3))).toBeVisible();
     expect(screen.getByText(NOW_TRY_WITHOUT_HINTS)).toBeVisible();
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),

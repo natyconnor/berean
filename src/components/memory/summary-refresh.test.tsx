@@ -64,6 +64,13 @@ vi.mock("convex-helpers/react/cache", () => ({
     args === "skip" ? undefined : queryResults.get(name),
 }));
 
+// Refresh's first First letters step letters the first half of each hinted
+// verse, so its hint is predictable here (the random pick is unit-tested).
+vi.mock("@/lib/verse-hint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/verse-hint")>()),
+  seededRandom: () => () => 0,
+}));
+
 vi.mock("@/components/memory/packs/add-to-pack", () => ({
   AddToPack: () => null,
 }));
@@ -681,9 +688,9 @@ describe("Today passage summary Refresh (S16, R51)", () => {
       return: "/memory",
     });
     expect(router.state.location.state.summaryRefresh).toBe(true);
-    // None shaky: every verse gets first letters (S13 fallback).
-    expect(screen.getByLabelText("Hint").textContent).toMatch(
-      /^T__ L___ i_ .* H_ m____ m_ l__ d___/,
+    // None shaky: every verse gets half first letters (S13 fallback).
+    expect(screen.getByLabelText("Hint").textContent).toBe(
+      "T__ L___ i_ m_ s_______; _ _____ ___ ____. H_ m____ m_ l__ ____ __ _____ ________.",
     );
 
     await userEvent.click(

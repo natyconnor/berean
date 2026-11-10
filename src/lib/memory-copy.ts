@@ -220,9 +220,12 @@ export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
 export const SUMMARY_REFRESH_BACK_LABEL = "Back to summary";
 export const COUNTED_TODAY_CLOSING = "Counted as today's review";
 
-/** "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2". */
-export function refresherHeader(step: 1 | 2): string {
-  return step === 1
-    ? `Refresh · ${stepShortLabel(1)} · 1 of 2`
-    : `Refresh · ${stepShortLabel(3)} · 2 of 2`;
+/**
+ * "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2", or
+ * 1 of 3 / 2 of 3 / 3 of 3 once an every-word First letters step is added.
+ * The last step is always From memory.
+ */
+export function refresherHeader(step: 1 | 2 | 3, total: 2 | 3 = 2): string {
+  const label = stepShortLabel(step === total ? 3 : 1);
+  return `Refresh · ${label} · ${step} of ${total}`;
 }

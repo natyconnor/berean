@@ -16,7 +16,11 @@ import {
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
-import { maskVerseText, type HintStage } from "@/lib/verse-hint";
+import {
+  halfFirstLetters,
+  maskVerseText,
+  type HintStage,
+} from "@/lib/verse-hint";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -74,6 +78,13 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/components/memory/packs/add-to-pack", () => ({
   AddToPack: () => null,
+}));
+
+// Refresh's first First letters step letters the first half of each hinted
+// verse, so its hint is predictable here (the random pick is unit-tested).
+vi.mock("@/lib/verse-hint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/verse-hint")>()),
+  seededRandom: () => () => 0,
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -204,8 +215,13 @@ function answer(dropOne: number, dropTwo: number): string {
   ].join(" ");
 }
 
-function masked(text: string, stage: HintStage): string {
-  return maskVerseText(text, stage)
+/** `half` is step 1's hint: the first half lettered, per the mock above. */
+function masked(text: string, stage: HintStage | "half"): string {
+  return (
+    stage === "half"
+      ? halfFirstLetters(text, () => 0)
+      : maskVerseText(text, stage)
+  )
     .map((token) => token.text)
     .join("");
 }
@@ -221,8 +237,16 @@ function findHint(text: string) {
   return waitFor(() => hintShown(text));
 }
 
-/** The First letters hint with verse one and/or two targeted. */
+/** Step 1's First letters hint with verse one and/or two targeted. */
 function hint(one: boolean, two: boolean): string {
+  return `${masked(VERSE_ONE, one ? "half" : "hidden")} ${masked(
+    VERSE_TWO,
+    two ? "half" : "hidden",
+  )}`;
+}
+
+/** The every-word First letters hint on verse one and/or two. */
+function everyWordHint(one: boolean, two: boolean): string {
   return `${masked(VERSE_ONE, one ? "first-letters" : "hidden")} ${masked(
     VERSE_TWO,
     two ? "first-letters" : "hidden",
@@ -666,21 +690,56 @@ describe("Today passage card: refresher", () => {
     expect(hintShown(hint(false, false))).toBeInTheDocument();
   });
 
-  it("retries First letters without limit and saves nothing for it", async () => {
+  it("gives every word only to the verses step 1 missed, in place (F4)", async () => {
+    renderRun("alone");
+    // Nothing shaky, no held miss: step 1 is blank, with no fallback.
+    await userEvent.click(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    await screen.findByText(refresherHeader(1));
+    // Verse one 100%, verse two 83%: Continue only, and the count grows.
+    await checkPassage(answer(0, 17));
+    expect(await screen.findByText(refresherHeader(1, 3))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(2, 3))).toBeInTheDocument();
+    expect(hintShown(everyWordHint(false, true))).toBeInTheDocument();
+    await checkPassage(answer(0, 0));
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(3, 3))).toBeInTheDocument();
+  });
+
+  it("skips the every-word step when each verse reaches 85% (F3)", async () => {
     renderRun("alone");
     await checkPassage(answer(50, 30));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));
+    await checkPassage(answer(15, 15));
+    expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(2))).toBeInTheDocument();
+  });
+
+  it("retries the every-word step without limit and saves nothing for it", async () => {
+    renderRun("alone");
+    await checkPassage(answer(50, 30));
+    await userEvent.click(await offer());
+    await screen.findByText(refresherHeader(1));
+    await checkPassage(answer(40, 40));
+    await clickContinue();
     for (let round = 0; round < 3; round += 1) {
+      expect(
+        await screen.findByText(refresherHeader(2, 3)),
+      ).toBeInTheDocument();
+      expect(hintShown(everyWordHint(true, true))).toBeInTheDocument();
       await checkPassage(answer(40, 40));
       await userEvent.click(
         await screen.findByRole("button", { name: /Try again/ }),
       );
-      expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
     }
     await checkPassage(answer(15, 15));
     await clickContinue();
-    expect(await screen.findByText(refresherHeader(2))).toBeInTheDocument();
+    expect(await screen.findByText(refresherHeader(3, 3))).toBeInTheDocument();
     expect(mutationMock("passageMemory.holdAttempt")).toHaveBeenCalledTimes(1);
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(
@@ -1020,7 +1079,7 @@ describe("Regressions", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));
-    expect(hintShown(masked(BEFORE_TEXT, "first-letters"))).toBeInTheDocument();
+    expect(hintShown(masked(BEFORE_TEXT, "half"))).toBeInTheDocument();
     expect(mutationMock("verseMemory.holdAttempt")).toHaveBeenCalledTimes(1);
     expect(mutationMock("passageMemory.holdAttempt")).not.toHaveBeenCalled();
   });

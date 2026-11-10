@@ -95,9 +95,12 @@ import { cn } from "@/lib/utils";
 import {
   type HintToken,
   countVerseWords,
+  halfFirstLetters,
   hintForProgress,
   maskVerseText,
+  seededRandom,
 } from "@/lib/verse-hint";
+import { missedVerses, type PassageVerseKey } from "@/lib/passage-shaky";
 import {
   normalizeReps,
   normalizeStageIndex,
@@ -134,7 +137,10 @@ import {
   usePassageReview,
   type ReviewSave,
 } from "../passage/use-passage-review";
-import { useVerseRefresher } from "./use-verse-refresher";
+import {
+  useVerseRefresher,
+  type VerseRefresherPhase,
+} from "./use-verse-refresher";
 import {
   LearningJourneyBar,
   type JourneyBarFill,
@@ -743,12 +749,12 @@ export function PracticeBoard({
       : "skip",
   );
   // No all-verse fallback on this card: with nothing shaky, nothing is hinted.
-  const passageFirstLetters =
+  const passageHint =
     reviewPassage && passageView
-      ? firstLettersHintText(
-          compositePassage.segments,
-          passageReview.hintTargets(passageView.shakyVerses ?? []),
-        )
+      ? {
+          segments: compositePassage.segments,
+          targets: passageReview.hintTargets(passageView.shakyVerses ?? []),
+        }
       : undefined;
 
   function passageSave(
@@ -1136,7 +1142,7 @@ export function PracticeBoard({
               practiceReview={practiceMemorized && !practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
-              passageFirstLetters={passageFirstLetters}
+              passageHint={passageHint}
               packMemberSchedules={composite?.memberSchedules}
               packMemberRefs={composite?.members}
               onJourneyPreview={setJourneyPreview}
@@ -1474,11 +1480,15 @@ interface PracticeCardProps {
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
   /**
-   * A due Memorized passage's First letters hint: only its shaky verses and
-   * the held miss's weak ones. Set, the passage card runs the refresher and
-   * held miss a verse card does.
+   * A due Memorized passage's text verse by verse, and the verses its first
+   * First letters step hints: only its shaky verses and the held miss's weak
+   * ones. Set, the passage card runs the refresher and held miss a verse card
+   * does.
    */
-  passageFirstLetters?: string;
+  passageHint?: {
+    segments: readonly CompositePassageSegment[];
+    targets: readonly PassageVerseKey[];
+  };
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
@@ -1511,6 +1521,41 @@ interface PracticeCardProps {
   ) => void;
 }
 
+/**
+ * A Refresh First letters hint. Step 1: a random half of first letters on
+ * each hinted verse, every other word blank. The every-word step: first
+ * letters on every word, which on a passage is only the verses step 1 missed,
+ * the rest blank in place.
+ */
+function refresherFirstLetters(args: {
+  phase: VerseRefresherPhase;
+  random: () => number;
+  everyWordVerses: readonly PassageVerseKey[];
+  /** A verse card's text, verse by verse. */
+  verseTexts: readonly string[];
+  passageHint: PracticeCardProps["passageHint"];
+}): HintToken[] {
+  const { phase, random, passageHint } = args;
+  if (passageHint) {
+    const text =
+      phase === "step1"
+        ? firstLettersHintText(
+            passageHint.segments,
+            passageHint.targets,
+            random,
+          )
+        : firstLettersHintText(passageHint.segments, args.everyWordVerses);
+    return [{ text, word: false, masked: false }];
+  }
+  if (phase !== "step1") {
+    return maskVerseText(args.verseTexts.join(" "), "first-letters");
+  }
+  return args.verseTexts.flatMap((text, index) => [
+    ...(index > 0 ? [{ text: " ", word: false, masked: false }] : []),
+    ...halfFirstLetters(text, random),
+  ]);
+}
+
 function PracticeCard({
   sessionLabel,
   reference,
@@ -1535,7 +1580,7 @@ function PracticeCard({
   practiceReview = false,
   leaveHeldRef,
   onSavingChange,
-  passageFirstLetters,
+  passageHint,
   onRecord,
   onHold,
   onApplyHeld,
@@ -1612,17 +1657,17 @@ function PracticeCard({
   const practiceFromMemory = practiceRound && refresher.phase === "step2";
   // A verse, or a due Memorized passage with its hint ready: the cards that
   // hold a cold miss and offer the refresher.
-  const refresherCard = !composite || passageFirstLetters !== undefined;
+  const refresherCard = !composite || passageHint !== undefined;
   const countedFromMemory =
     showScheduleOutcome &&
     isReviewPhase(status) &&
     refresherCard &&
-    refresher.phase !== "step1" &&
+    !refresher.firstLetters &&
     !practiceRound;
   // A try saved as the verse's review: a failed save shows the save error, and
   // its retry resends the first try's time.
   const savesReview =
-    countedFromMemory || (practiceReview && refresher.phase !== "step1");
+    countedFromMemory || (practiceReview && !refresher.firstLetters);
 
   useEffect(() => {
     onSavingChange?.(submitPending);
@@ -1685,13 +1730,18 @@ function PracticeCard({
   const stageColor = practiceChromeFor(learnStage, status);
   const { hintStage, tokens, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
-    if (refresher.phase === "step1") {
+    if (refresher.firstLetters) {
       return {
         hintStage: "first-letters" as const,
-        tokens:
-          passageFirstLetters === undefined
-            ? maskVerseText(versePlainText, "first-letters")
-            : [{ text: passageFirstLetters, word: false, masked: false }],
+        tokens: refresherFirstLetters({
+          phase: refresher.phase,
+          random: seededRandom(refresher.seed),
+          everyWordVerses: refresher.everyWordVerses,
+          verseTexts: data?.verses.map((verse) => verse.text) ?? [
+            versePlainText,
+          ],
+          passageHint,
+        }),
         wordCount: wc,
       };
     }
@@ -1713,10 +1763,14 @@ function PracticeCard({
     };
   }, [
     versePlainText,
+    data,
     learnStage,
     stageReps,
     refresher.phase,
-    passageFirstLetters,
+    refresher.firstLetters,
+    refresher.seed,
+    refresher.everyWordVerses,
+    passageHint,
   ]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
@@ -1790,7 +1844,7 @@ function PracticeCard({
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
 
   function recordFlags(): RecordOptions {
-    const hold = refresher.phase === "step1";
+    const hold = refresher.firstLetters;
     const afterMissStep2 =
       refresher.phase === "step2" && refresher.kind === "after-miss";
     return {
@@ -1825,6 +1879,18 @@ function PracticeCard({
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
       checkedAccuracyRef.current = accuracy;
+      if (refresher.phase === "step1") {
+        // Under 85% on a verse (each verse of a passage on its own) adds an
+        // every-word First letters step on just those verses.
+        const weak = passageHint
+          ? missedVerses(
+              verseScores(tokens, passageVersesIn(passageHint.segments)),
+            )
+          : null;
+        if (weak ? weak.length > 0 : accuracy < LEARN_PROGRESS_ACCURACY) {
+          refresher.needEveryWord(weak ?? []);
+        }
+      }
       const holdingColdMiss = isHoldableColdMiss({
         reviewPhase: isReviewPhase(status) && refresherCard,
         due: showScheduleOutcome && scheduleSnapshot.dueAt <= now,
@@ -1834,7 +1900,7 @@ function PracticeCard({
         countedToday: countedTodayRef.current,
       });
       const waitForSave =
-        holdingColdMiss || countedFromMemory || refresher.phase === "step1";
+        holdingColdMiss || countedFromMemory || refresher.firstLetters;
       const afterMissStep2 =
         refresher.phase === "step2" && refresher.kind === "after-miss";
       const preview =
@@ -1927,7 +1993,7 @@ function PracticeCard({
         now,
         ...recordFlags(),
       });
-      if (refresher.phase === "step1") {
+      if (refresher.firstLetters) {
         setSaveError(null);
         return;
       }
@@ -2052,13 +2118,13 @@ function PracticeCard({
       retryCountedSave();
       return;
     }
-    if (refresher.phase === "step1") {
+    if (refresher.firstLetters) {
       const keepJourneyPreview = heldIdRef.current !== null;
-      if (checkedAccuracy < LEARN_PROGRESS_ACCURACY) {
+      if (everyWordRetry) {
         resetTyping({ keepJourneyPreview });
         return;
       }
-      refresher.continueToStep2();
+      refresher.continueToNext();
       resetTyping({ keepJourneyPreview });
       return;
     }
@@ -2177,16 +2243,17 @@ function PracticeCard({
   const openPreTryRefresher = () =>
     openRefresher(practiceOnly ? "practice" : "pre-try");
 
-  const step1Retry =
-    refresher.phase === "step1" && checkedAccuracy < LEARN_PROGRESS_ACCURACY;
+  const everyWordRetry =
+    refresher.phase === "every-word" &&
+    checkedAccuracy < LEARN_PROGRESS_ACCURACY;
   const showTryAgain =
     Boolean(saveError) ||
-    step1Retry ||
+    everyWordRetry ||
     (offerPracticeAgain &&
       !countedFromMemory &&
       !practiceRound &&
       !showHeldOffer &&
-      refresher.phase !== "step1");
+      !refresher.firstLetters);
   const showTryAnother =
     checked &&
     !saveError &&
@@ -2230,7 +2297,7 @@ function PracticeCard({
                 aria-hidden
               />
               {refresher.step
-                ? refresherHeader(refresher.step)
+                ? refresherHeader(refresher.step, refresher.total)
                 : `${sessionLabel} · ${stageInfo.label}`}
             </p>
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
@@ -2449,9 +2516,9 @@ function PracticeCard({
                     )}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
-                    scheduleHeld={refresher.phase === "step1" || practiceRound}
+                    scheduleHeld={refresher.firstLetters || practiceRound}
                     unscheduled={checkedPracticeOnly}
-                    skipCelebrate={refresher.phase === "step1"}
+                    skipCelebrate={refresher.firstLetters}
                     saveError={saveError}
                     bannerId={bannerId}
                     errorId={errorId}
