@@ -1286,7 +1286,23 @@ export function PracticeBoard({
                           adoptVerseSchedule(verseId, schedule);
                         },
                       );
-                if (hold || opts?.skipSessionRow || !counted.ok) return counted;
+                if (hold || !counted.ok) return counted;
+                if (opts?.skipSessionRow) {
+                  // Try another's From memory: the row shows it last, but it
+                  // stays practice (no schedule, average, or Refresh).
+                  if (isReview) {
+                    setSessionAttempts((prev) => [
+                      ...prev,
+                      {
+                        reference: currentVerse.reference,
+                        accuracy: verseAttemptAccuracy(tokens),
+                        label: rowLabel,
+                        displayOnly: true,
+                      },
+                    ]);
+                  }
+                  return counted;
+                }
                 if (composite && counted.schedule) {
                   adoptVerseSchedule(verseId, counted.schedule);
                 }

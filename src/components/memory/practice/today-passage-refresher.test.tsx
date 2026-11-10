@@ -841,7 +841,13 @@ describe("Today passage card: refresher", () => {
     await clickContinue();
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     const rows = onComplete.mock.calls[0][0].attempts;
-    expect(rows.map((row) => row.accuracy)).toEqual([68, 70]);
+    expect(rows.map((row) => row.accuracy)).toEqual([68, 70, 93]);
+    // Shown on the row only: no counted save for the practice try.
+    expect(rows.map((row) => row.displayOnly === true)).toEqual([
+      false,
+      false,
+      true,
+    ]);
   });
 
   it("counts a pre-try refresher's From memory try with the gap kept", async () => {
@@ -864,6 +870,84 @@ describe("Today passage card: refresher", () => {
     renderSummary(onComplete.mock.calls[0][0].attempts);
     expect(passageRows()).toHaveLength(1);
     expect(passageRows()[0]).toHaveTextContent("98% · Refresher used");
+  });
+});
+
+describe("Today end summary: Try another's From memory (#377)", () => {
+  /** A held 79% miss, then the refresher's From memory at 79%. */
+  async function missTwice() {
+    await checkPassage(answer(21, 21));
+    await toFromMemory();
+    await checkPassage(answer(21, 21));
+    await userEvent.click(
+      await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    await screen.findByText(refresherHeader(1));
+    await checkPassage(answer(0, 0));
+    await clickContinue();
+  }
+
+  async function summaryOf({
+    onComplete,
+    unmount,
+  }: ReturnType<typeof renderRun>) {
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    const { attempts } = onComplete.mock.calls[0][0];
+    unmount();
+    renderSummary(attempts);
+  }
+
+  it("ends the row on Try another's 100% without counting it", async () => {
+    const run = renderRun("alone");
+    await missTwice();
+    await screen.findByText(refresherHeader(2));
+    await checkPassage(answer(0, 0));
+    await clickContinue();
+    await summaryOf(run);
+
+    expect(passageRows()[0]).toHaveTextContent("79% → 100% · Refresher used");
+    // Only the held try and the refresher's From memory count.
+    expect(headline()).toBe("79%");
+    // The last counted try missed: Refresh stays.
+    expect(
+      within(passageRows()[0]).getByRole("button", {
+        name: `Refresh ${PACK_NAME}`,
+      }),
+    ).toBeInTheDocument();
+    // The 100% saved as practice only: no schedule or mastery write.
+    expect(recordArgs().map((args) => args.accuracy)).toEqual([79]);
+    expect(
+      mutationMock("passageMemory.notePracticeRecital"),
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ verseScores: scores(100, 100) }),
+    );
+  });
+
+  it("keeps 79% → 79% with no Try another", async () => {
+    const run = renderRun("alone");
+    await checkPassage(answer(21, 21));
+    await toFromMemory();
+    await checkPassage(answer(21, 21));
+    await clickContinue();
+    await summaryOf(run);
+
+    expect(passageRows()[0]).toHaveTextContent("79% → 79% · Refresher used");
+    expect(headline()).toBe("79%");
+  });
+
+  it("keeps the last completed From memory when leaving mid-Try another", async () => {
+    const run = renderRun("between");
+    await reciteVerse(BEFORE_TEXT);
+    await missTwice();
+    // Jump to the next queue item before Try another's From memory.
+    await screen.findByText(refresherHeader(2));
+    await userEvent.click(screen.getByRole("button", { name: /25:1 \(/ }));
+    await reciteVerse(AFTER_TEXT);
+    await summaryOf(run);
+
+    expect(passageRows()[0]).toHaveTextContent("79% → 79% · Refresher used");
+    // (100 + 79 + 79 + 100) / 4
+    expect(headline()).toBe("90%");
   });
 });
 
@@ -953,14 +1037,17 @@ describe("Today end summary", () => {
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     const { attempts } = onComplete.mock.calls[0][0];
-    expect(attempts.map((row) => row.accuracy)).toEqual([100, 68, 70, 50, 100]);
+    expect(attempts.map((row) => row.accuracy)).toEqual([
+      100, 68, 70, 100, 50, 100,
+    ]);
     unmount();
 
     renderSummary(attempts);
     // (100 + 68 + 70 + 50 + 100) / 5; no First letters or practice try.
     expect(headline()).toBe("78%");
     expect(passageRows()).toHaveLength(1);
-    expect(passageRows()[0]).toHaveTextContent("68% → 70% · Refresher used");
+    // The row ends on the practice round's From memory.
+    expect(passageRows()[0]).toHaveTextContent("68% → 100% · Refresher used");
     // Still Memorized after a counted miss: its summary Refresh (R51).
     expect(
       within(passageRows()[0]).getByRole("button", {

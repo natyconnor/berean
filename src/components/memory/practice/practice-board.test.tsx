@@ -29,6 +29,11 @@ import {
   REVIEW_LAPSE_LEARN_STAGE,
 } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
+import {
+  averageReviewAccuracy,
+  groupReviewSessionAttempts,
+  refresherResultCopy,
+} from "@/lib/review-session-attempts";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -2869,9 +2874,26 @@ describe("PracticeBoard held first try", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus();
     const [state] = onRunStateChange.mock.lastCall ?? [];
-    expect(state?.attempts).toHaveLength(2);
+    const missAccuracy = verseAttemptAccuracy(
+      diffWords(CLOSE_MISS, PASSAGE_ONE),
+    );
+    const badAccuracy = verseAttemptAccuracy(diffWords(BAD_MISS, PASSAGE_ONE));
+    expect(state?.attempts).toHaveLength(3);
     expect(state?.attempts?.[0]?.refresherUsed).toBeUndefined();
     expect(state?.attempts?.[1]?.refresherUsed).toBe(true);
+    // Try another's From memory ends the row, but only as practice.
+    expect(state?.attempts?.[2]).toMatchObject({
+      accuracy: 100,
+      displayOnly: true,
+    });
+    const [row] = groupReviewSessionAttempts(state?.attempts ?? []);
+    expect(refresherResultCopy(row?.accuracies ?? [])).toBe(
+      `${missAccuracy}% → 100% · Refresher used`,
+    );
+    expect(averageReviewAccuracy(state?.attempts ?? [])).toBe(
+      Math.round((missAccuracy + badAccuracy) / 2),
+    );
+    expect(row?.countedAccuracy).toBe(badAccuracy);
   });
 
   async function reachPracticeFromMemory() {
