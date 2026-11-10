@@ -21,6 +21,7 @@ import {
   PRACTICE_STAGES,
   practiceChromeFor,
 } from "@/components/memory/practice/practice-stages";
+import { revealStepHeader } from "@/components/memory/practice/reveal-step-header";
 import { PreviewFillExactAnswerButton } from "@/components/memory/preview-fill-exact-answer-button";
 import {
   classifyVerseAttempt,
@@ -273,15 +274,11 @@ export function PassageRecallCard({
     answerInputRef.current?.focus();
   }, [checked, isReadPrime]);
 
-  // A long result can leave the new step's label above the fold.
+  // The card eases in from below, so its label is only revealed once it has
+  // settled (onAnimationComplete); with reduced motion it mounts in place.
   useEffect(() => {
-    if (!revealHeader) return;
-    const frame = window.requestAnimationFrame(() => {
-      answerInputRef.current?.focus({ preventScroll: true });
-      document.getElementById(headerId)?.scrollIntoView?.({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [revealHeader, headerId]);
+    if (revealHeader && reduceMotion) revealStepHeader(headerId);
+  }, [revealHeader, reduceMotion, headerId]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -296,6 +293,9 @@ export function PassageRecallCard({
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
+      onAnimationComplete={() => {
+        if (revealHeader) revealStepHeader(headerId);
+      }}
       transition={{ duration: reduceMotion ? 0 : 0.2 }}
     >
       <Card className={cn("mx-auto w-full overflow-hidden", stageColor.panel)}>

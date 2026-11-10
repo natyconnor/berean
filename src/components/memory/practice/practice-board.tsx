@@ -129,6 +129,7 @@ import {
   RefresherOfferButton,
 } from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
+import { revealStepHeader } from "./reveal-step-header";
 import type { PassageView } from "../passage/passage-session-types";
 import { verseScores } from "../passage/passage-session-model";
 import {
@@ -2125,9 +2126,8 @@ function PracticeCard({
         answerInputRef.current?.focus();
         return;
       }
-      // A long result can leave the new step's label above the fold.
       answerInputRef.current?.focus({ preventScroll: true });
-      document.getElementById(headerId)?.scrollIntoView?.({ block: "start" });
+      revealStepHeader(headerId);
     });
   }
 

@@ -1969,6 +1969,14 @@ describe("PracticeBoard pre-try refresher", () => {
       configurable: true,
       value: scrollIntoView,
     });
+    // jsdom has no layout: put each step label above the scroll area.
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.id.endsWith("-header")
+          ? DOMRect.fromRect({ y: -40, height: 16 })
+          : new DOMRect();
+      });
     const headerScrolls = () =>
       scrollIntoView.mock.contexts.filter(
         (_, i) => scrollIntoView.mock.calls[i]?.[0]?.block === "start",
@@ -1976,7 +1984,8 @@ describe("PracticeBoard pre-try refresher", () => {
     try {
       renderReview();
       await openRefresher();
-      await screen.findByLabelText("Your recalled verse");
+      const step1Box = await screen.findByLabelText("Your recalled verse");
+      await waitFor(() => expect(step1Box).toHaveFocus());
       await userEvent.paste("nope");
       await userEvent.click(
         screen.getByRole("button", { name: /Check answer/ }),
@@ -2017,6 +2026,7 @@ describe("PracticeBoard pre-try refresher", () => {
       );
       expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
     } finally {
+      rect.mockRestore();
       delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
     }
   });

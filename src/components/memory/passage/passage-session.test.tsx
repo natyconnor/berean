@@ -1328,11 +1328,26 @@ describe("PassageSession", () => {
     });
 
     it("scrolls each next step's label into view on Continue, not on Try again (#379)", async () => {
-      const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+      // Whether the new card had finished easing in (translateY) when the
+      // scroll ran; mid-entrance it measures 6px low and ends under the bar.
+      const settled: boolean[] = [];
+      const scrollIntoView = vi.fn<
+        (this: HTMLElement, options?: ScrollIntoViewOptions) => void
+      >(function (this: HTMLElement) {
+        settled.push(this.closest('[style*="translateY"]') === null);
+      });
       Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
         configurable: true,
         value: scrollIntoView,
       });
+      // jsdom has no layout: put each step label above the scroll area.
+      const rect = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          return this.id.endsWith("-header")
+            ? DOMRect.fromRect({ y: -40, height: 16 })
+            : new DOMRect();
+        });
       const headerScrolls = () =>
         scrollIntoView.mock.contexts.filter(
           (_, i) => scrollIntoView.mock.calls[i]?.[0]?.block === "start",
@@ -1363,7 +1378,9 @@ describe("PassageSession", () => {
           ),
         );
         expect(headerScrolls()).toHaveLength(2);
+        expect(settled).toEqual([true, true]);
       } finally {
+        rect.mockRestore();
         delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
       }
     });
