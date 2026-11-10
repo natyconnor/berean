@@ -543,6 +543,90 @@ describe("Summary Refresh (S9, R21)", () => {
   });
 });
 
+describe("Summary row scores (#346 AC14, R23)", () => {
+  const scored: ReviewSessionAttempt[] = [
+    // Clean scheduled verse, no refresher.
+    { reference: ref(1), accuracy: 100, schedule: schedule("reviewing") },
+    // Scheduled verse with a refresher.
+    { reference: ref(2), accuracy: 78, offerPractice: true },
+    {
+      reference: ref(2),
+      accuracy: 100,
+      refresherUsed: true,
+      schedule: schedule("reviewing"),
+    },
+    // Scheduled passage, no refresher.
+    {
+      reference: ref(5),
+      label: "Shepherd Psalm",
+      accuracy: 90,
+      savedStatus: "reviewing",
+      schedule: schedule("reviewing"),
+      passage: {
+        packId: "pack_ps23",
+        references: [ref(5), ref(6)],
+      },
+    },
+    // Unscheduled verse.
+    { reference: ref(3), accuracy: 70 },
+  ];
+
+  function row(label: string) {
+    return screen.getByText(label).closest("li") as HTMLElement;
+  }
+
+  function journeyBar(label: string) {
+    return row(label).querySelector("[data-journey-track]");
+  }
+
+  it.each([
+    [
+      "Review",
+      <ReviewSummary
+        attempts={scored}
+        averageAccuracy={averageReviewAccuracy(scored)}
+        remaining={0}
+        onDone={onDone}
+      />,
+    ],
+    [
+      "Today",
+      <TodaySessionSummary
+        title="Today"
+        passages={[]}
+        learned={[]}
+        attempts={scored}
+        onDone={onDone}
+        returnTo="/memory"
+      />,
+    ],
+  ])("shows each row's score on the %s summary", async (_, element) => {
+    renderSummary(element);
+    await screen.findByText("Psalm 23:1");
+
+    const clean = row("Psalm 23:1");
+    expect(within(clean).getByText("100% recalled")).toBeInTheDocument();
+    expect(journeyBar("Psalm 23:1")).not.toBeNull();
+    expect(within(clean).getByText(/^Next review /)).toBeInTheDocument();
+
+    const refreshed = row("Psalm 23:2");
+    expect(
+      within(refreshed).getByText("78% → 100% · Refresher used"),
+    ).toBeInTheDocument();
+    expect(within(refreshed).queryByText(/recalled$/)).toBeNull();
+
+    const passage = row("Shepherd Psalm");
+    expect(within(passage).getByText("90% recalled")).toBeInTheDocument();
+    expect(journeyBar("Shepherd Psalm")).not.toBeNull();
+    expect(within(passage).getByText(/^Next review /)).toBeInTheDocument();
+
+    const unscheduled = row("Psalm 23:3");
+    expect(within(unscheduled).getByText("70% recalled")).toBeInTheDocument();
+    expect(journeyBar("Psalm 23:3")).toBeNull();
+    expect(within(unscheduled).queryByText(/^Next review /)).toBeNull();
+  });
+});
+
 describe("Today passage summary Refresh (S16, R51)", () => {
   const PACK_ID = "pack_ps23" as Id<"packs">;
   const members = [ref(1), ref(2)];
