@@ -449,6 +449,9 @@ export function PassageSession({
   const cue = (refresher.isOpen ? null : stallCue) ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
+  // The day's step starts once warm-up ends. Until then (warm-up, or a
+  // stall-repair inside it) a reload restarts the warm-up, so leave no marker.
+  const dayStepStarted = useRef(false);
 
   useEffect(() => {
     // A Refresh is no step of the Learning session: it leaves the marker be.
@@ -457,6 +460,10 @@ export function PassageSession({
       clearPassageStepInProgress(packId);
       return;
     }
+    if (state.phase !== "rope" && state.phase !== "stall-repair") {
+      dayStepStarted.current = true;
+    }
+    if (!dayStepStarted.current) return;
     markPassageStepInProgress(packId);
     return () => {
       releasePassageStepInProgress(packId);

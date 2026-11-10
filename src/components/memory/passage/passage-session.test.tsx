@@ -314,9 +314,44 @@ describe("PassageSession", () => {
     expect(screen.queryByLabelText(STOP_BEFORE_LABEL)).not.toBeInTheDocument();
   });
 
+  /** Skip warm-up, so the day's step starts. */
+  async function startDayStep() {
+    await userEvent.click(
+      await screen.findByRole("button", { name: WARMUP_SKIP_LABEL }),
+    );
+  }
+
+  it("leaves no in-progress marker during warm-up, so a reload restarts it", async () => {
+    const first = renderSession(practicedDueView());
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+
+    first.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+  });
+
+  it("marks the step in progress once warm-up is skipped", async () => {
+    renderSession(practicedDueView());
+    await startDayStep();
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: First letters" }),
+    ).toBeInTheDocument();
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+  });
+
   it("clears the in-progress marker when the learner leaves", async () => {
     const onExit = vi.fn();
     renderSession(practicedDueView(), onExit);
+    await startDayStep();
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
 
     await userEvent.click(
@@ -341,6 +376,7 @@ describe("PassageSession", () => {
         />
       </TooltipProvider>,
     );
+    await startDayStep();
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
 
     await userEvent.click(screen.getByRole("link", { name: "Go to Memory" }));
@@ -385,6 +421,7 @@ describe("PassageSession", () => {
 
   it("shows the warm-up after leaving without Back and opening on a later page load", async () => {
     const { unmount } = renderSession(practicedDueView());
+    await startDayStep();
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
 
     unmount();
@@ -3104,6 +3141,15 @@ describe("PassageSession", () => {
       expect(record()).toHaveBeenCalledWith(
         expect.objectContaining({ kind: "rope", accuracy: 100 }),
       );
+    });
+
+    it("leaves no in-progress marker while fixing a tricky spot in the warm-up", async () => {
+      renderSession(longWarmup());
+      await check(LONG_PAIR);
+      await clickButton(/Continue/);
+
+      expect(header("Fix a tricky spot")).toBeInTheDocument();
+      expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
     });
 
     it("R32: a post-miss refresher leaves the logged try and its next screen as they were", async () => {
