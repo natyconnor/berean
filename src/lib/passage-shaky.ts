@@ -1,5 +1,5 @@
 import { PASSAGE_PASS_ACCURACY } from "./passage-frontier";
-import { maskVerseText } from "./verse-hint";
+import { halfFirstLetters, maskVerseText } from "./verse-hint";
 
 /**
  * Shaky verses on a Memorized passage. Each verse is scored on its own inside
@@ -56,18 +56,25 @@ export function shakyAfterUnhintedTry(
 /**
  * First letters on `targets` only, every other word blank in place. One
  * masked text per verse, so a hint never spills onto a neighbouring verse in
- * the same piece. No target means nothing is revealed.
+ * the same piece. A First letters step is never all blanks: with no target
+ * among `verses`, every verse is hinted. With `random`, each hinted verse gets
+ * its own random half of first letters ({@link halfFirstLetters}) instead of
+ * one on every word.
  */
 export function shakyFirstLettersHint(
   verses: ReadonlyArray<PassageVerseKey & { text: string }>,
   targets: readonly PassageVerseKey[],
+  random?: () => number,
 ): string[] {
-  return verses.map((verse) =>
-    maskVerseText(
-      verse.text,
-      targets.some((key) => sameVerse(key, verse)) ? "first-letters" : "hidden",
-    )
-      .map((token) => token.text)
-      .join(""),
-  );
+  const targeted = (verse: PassageVerseKey) =>
+    targets.some((key) => sameVerse(key, verse));
+  const hintAll = !verses.some(targeted);
+  return verses.map((verse) => {
+    const tokens = !(hintAll || targeted(verse))
+      ? maskVerseText(verse.text, "hidden")
+      : random
+        ? halfFirstLetters(verse.text, random)
+        : maskVerseText(verse.text, "first-letters");
+    return tokens.map((token) => token.text).join("");
+  });
 }

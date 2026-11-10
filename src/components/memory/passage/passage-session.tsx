@@ -8,7 +8,6 @@ import {
 } from "react";
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
-import { useQuery } from "convex-helpers/react/cache";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
@@ -70,7 +69,10 @@ import type { SessionSummarySnapshot } from "@/hooks/use-start-verse-refresh";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { MEMORY_HOME } from "@/lib/memory-exit";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
-import { useVerseRefresher } from "@/components/memory/practice/use-verse-refresher";
+import {
+  useVerseRefresher,
+  type VerseRefresherPhase,
+} from "@/components/memory/practice/use-verse-refresher";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
 import {
   SessionHeaderProgress,
@@ -125,23 +127,29 @@ import {
   TRY_ANOTHER_REFRESHER_LABEL,
 } from "@/lib/memory-copy";
 import { isDueForReview } from "@/lib/memory-scheduler";
-import { isStaleVerse } from "@/lib/memory-stale";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
-import type { PassageVerseKey } from "@/lib/passage-shaky";
+import {
+  missedVerses,
+  type PassageVerseKey,
+  type PassageVerseScore,
+} from "@/lib/passage-shaky";
 import {
   firstLettersHintText,
   passageVersesIn,
   usePassageReview,
+  usePassageStale,
   type ReviewSave,
 } from "@/components/memory/passage/use-passage-review";
-import { countVerseWords, maskVerseText } from "@/lib/verse-hint";
+import { countVerseWords, seededRandom } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 type BuiltRecall = {
   mode: "rope" | "repair" | "frontier" | "review";
+  /** A rope recital's pieces, the range a Learning refresher hints. */
+  pieceIndexes?: readonly number[];
   title: string;
   subtitle?: string;
   promptLine: string;
@@ -260,10 +268,6 @@ export function PassageSession({
       (view.status === "reviewing" || view.status === "mastered") &&
       !isDueForReview({ status: view.status, dueAt: view.dueAt }, now),
   );
-  const recentReviews = useQuery(
-    api.passageMemory.recentReviews,
-    isMaintenance ? { packId } : "skip",
-  );
 
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
@@ -319,9 +323,6 @@ export function PassageSession({
           ? "pre-try"
           : "practice",
   );
-  // A ••• or summary Refresh's own round hints every verse when none is shaky
-  // (Nov 8, 9:36 AM). Any later round hints as S11 does.
-  const [hintAllIfSteady, setHintAllIfSteady] = useState(refresh !== undefined);
   const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
   const [shakyVerses, setShakyVerses] = useState<PassageVerseKey[]>(
     view.shakyVerses ?? [],
@@ -377,17 +378,20 @@ export function PassageSession({
   );
   const reviewDue =
     isMaintenance && isDueForReview({ status, dueAt: reviewDueAt }, now);
-  const stale =
-    isMaintenance &&
-    recentReviews !== undefined &&
-    isStaleVerse({
-      status,
-      dueAt: reviewDueAt,
-      intervalDays: view.intervalDays,
-      now,
-      startedOverAt: view.startedOverAt,
-      lastReviews: recentReviews,
-    });
+  // Undefined until the recent reviews load.
+  const staleCheck = usePassageStale(
+    isMaintenance
+      ? {
+          packId,
+          status,
+          dueAt: reviewDueAt,
+          intervalDays: view.intervalDays,
+          startedOverAt: view.startedOverAt,
+        }
+      : null,
+    now,
+  );
+  const stale = staleCheck === true;
   const liveRecall =
     isMaintenance || learnedWindow
       ? reviewRecall(
@@ -397,11 +401,11 @@ export function PassageSession({
           pieceTexts,
           composite,
           {
-            step: refresher.step,
+            phase: refresher.phase,
+            seed: refresher.seed,
+            everyWordVerses: refresher.everyWordVerses,
             targets: review.hintTargets(shakyVerses),
             segments: composite.segments,
-            passageVerses,
-            hintAllIfSteady,
           },
         )
       : buildingRecall({
@@ -424,9 +428,22 @@ export function PassageSession({
   // The card being refreshed: the held result after a logged miss, or the
   // unattempted card before a try. Its own state is left as it was.
   const shownRecall = holdResult && heldRecall ? heldRecall : liveRecall;
+  // The Learning refresher's range, verse by verse, to hint and score.
+  const learningRefresherSegments =
+    learning && shownRecall
+      ? (shownRecall.pieceIndexes ?? []).flatMap((index) => {
+          const segment = composite.segments[index];
+          return segment ? [segment] : [];
+        })
+      : [];
   const recall =
-    learning && refresher.step && shownRecall
-      ? learningRefresherRecall(shownRecall, refresher.step)
+    learning && refresher.isOpen && shownRecall
+      ? learningRefresherRecall(shownRecall, {
+          phase: refresher.phase,
+          seed: refresher.seed,
+          everyWordVerses: refresher.everyWordVerses,
+          segments: learningRefresherSegments,
+        })
       : shownRecall;
   // A logged miss's starting hint is for its next try, not the refresher.
   const cue = (refresher.isOpen ? null : stallCue) ?? recall?.pickUpCue ?? null;
@@ -641,9 +658,27 @@ export function PassageSession({
     if (isMaintenance) {
       setHoldResult(false);
       setHeldRecall(null);
-      setHintAllIfSteady(false);
     }
     refresher.open(kind);
+  }
+
+  /**
+   * A First letters try saves nothing. Step 1 always continues (no Try
+   * again), into an every-word step on its verses under 85% when there are
+   * any; the every-word step offers Try again under 85%, as today.
+   */
+  function gradeFirstLetters(
+    scores: readonly PassageVerseScore[],
+    missed: boolean,
+  ) {
+    if (refresher.phase === "step1") {
+      const weak = missedVerses(scores);
+      if (weak.length > 0) refresher.needEveryWord(weak);
+    }
+    setResultView({
+      firstLetters: true,
+      tryAgain: refresher.phase === "every-word" && missed,
+    });
   }
 
   /** A Memorized passage's typed try, cold or inside the refresher. */
@@ -657,8 +692,8 @@ export function PassageSession({
     };
     const missed = result.accuracy < PASSAGE_PASS_ACCURACY;
 
-    if (refresher.phase === "step1") {
-      setResultView({ firstLetters: true, tryAgain: missed });
+    if (refresher.firstLetters) {
+      gradeFirstLetters(save.verseScores, missed);
       return true;
     }
     if (refresher.kind === "practice" || practiceSession) {
@@ -728,10 +763,10 @@ export function PassageSession({
       await retrySave();
       return false;
     }
-    if (refresher.phase === "step1") {
+    if (refresher.firstLetters) {
       const retry = resultView?.tryAgain === true;
       setResultView(null);
-      if (!retry) refresher.continueToStep2();
+      if (!retry) refresher.continueToNext();
       return true;
     }
     if ((refresh && refresher.isOpen) || practiceSession) {
@@ -775,15 +810,23 @@ export function PassageSession({
   async function handleGraded(result: PassageRecallResult): Promise<boolean> {
     if (isMaintenance) return gradeReview(result);
     // A Learning passage's refresher is practice only: nothing is saved.
-    if (refresher.isOpen) {
-      setResultView(
-        refresher.phase === "step1"
-          ? {
-              firstLetters: true,
-              tryAgain: result.accuracy < PASSAGE_PASS_ACCURACY,
-            }
-          : { practiceOnly: true, closingLine: PRACTICE_ONLY_CLOSING },
+    if (refresher.firstLetters) {
+      // S15 scores its warm-up or section range; S14's text is already just
+      // the learned verses.
+      gradeFirstLetters(
+        verseScores(
+          result.tokens,
+          learning ? passageVersesIn(learningRefresherSegments) : passageVerses,
+        ),
+        result.accuracy < PASSAGE_PASS_ACCURACY,
       );
+      return true;
+    }
+    if (refresher.isOpen) {
+      setResultView({
+        practiceOnly: true,
+        closingLine: PRACTICE_ONLY_CLOSING,
+      });
       return true;
     }
 
@@ -1080,7 +1123,7 @@ export function PassageSession({
               recall.mode === "frontier"
                 ? (PRACTICE_STAGES[recall.learnStage]?.label ?? "Learn")
                 : refresher.step
-                  ? refresherHeader(refresher.step)
+                  ? refresherHeader(refresher.step, refresher.total)
                   : phaseLabel
             }
             title={recall.title}
@@ -1105,7 +1148,7 @@ export function PassageSession({
               // A Memorized passage waits for its recent reviews (S12's stale
               // prompt); a Learning passage has none to wait for (S15).
               (isMaintenance
-                ? (reviewDue || practiceSession) && recentReviews !== undefined
+                ? (reviewDue || practiceSession) && staleCheck !== undefined
                 : learningRefreshable) &&
               !refresher.isOpen &&
               !recall.loading &&
@@ -1367,66 +1410,89 @@ function tryAnotherRefresher(
   };
 }
 
-type ReviewRefresher = {
-  step: 1 | 2 | null;
+/** Where the refresher is, and what its First letters steps hint. */
+type RefresherHint = {
+  phase: VerseRefresherPhase;
+  /** Picks step 1's random half, verse by verse. */
+  seed: number;
+  /** The verses step 1 missed, first-lettered on every word. */
+  everyWordVerses: readonly PassageVerseKey[];
+};
+
+type ReviewRefresher = RefresherHint & {
   /** Shaky verses and the held miss's weak ones. */
   targets: readonly PassageVerseKey[];
   /** The verses recited: the whole passage, or a Refresh's learned window. */
   segments: readonly CompositePassageSegment[];
-  passageVerses: readonly PassageVerseKey[];
-  /** With nothing to target, hint every verse (••• and summary Refresh). */
-  hintAllIfSteady: boolean;
 };
 
 /**
- * The refresher's hint: First letters shows first letters on shaky verses and
- * on verses the held miss scored under 85%, every other word blank in place,
- * verse by verse even inside one piece; with none of those among the verses
- * recited and `hintAllIfSteady`, on every verse. From memory shows none.
+ * The refresher's hint: step 1 shows a random half of first letters on shaky
+ * verses and on verses the held miss scored under 85%, every other word blank
+ * in place, verse by verse even inside one piece; with none of those among the
+ * verses recited, on every verse. The every-word step shows first letters on
+ * every word of the verses step 1 missed. From memory shows none.
  */
 function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
-  if (refresher.step === 2) {
+  if (refresher.phase === "step2") {
     return { type: "hidden", message: NOW_TRY_WITHOUT_HINTS };
   }
-  if (refresher.step === null) {
+  if (refresher.phase === "off") {
     return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
   }
-  const { passageVerses } = refresher;
-  const targets = refresher.targets.filter((target) =>
-    passageVerses.some(
-      (verse) =>
-        verse.chapter === target.chapter && verse.verse === target.verse,
-    ),
-  );
+  if (refresher.phase === "every-word") {
+    return everyWordHint(refresher.segments, refresher.everyWordVerses);
+  }
   return {
     type: "text",
     text: firstLettersHintText(
       refresher.segments,
-      targets.length === 0 && refresher.hintAllIfSteady
-        ? passageVerses
-        : targets,
+      refresher.targets,
+      seededRandom(refresher.seed),
     ),
     label: "Hint",
   };
 }
 
+function everyWordHint(
+  segments: readonly CompositePassageSegment[],
+  verses: readonly PassageVerseKey[],
+): PassageRecallHint {
+  return {
+    type: "text",
+    text: firstLettersHintText(segments, verses),
+    label: "Hint",
+  };
+}
+
 /**
- * A Learning warm-up or section recital as its refresher: first letters on
- * every verse of the same range, then no hints.
+ * A Learning warm-up or section recital as its refresher: a random half of
+ * first letters on every verse of the same range (`segments`), then first
+ * letters on every word of the verses that missed, then no hints.
  */
-function learningRefresherRecall(base: BuiltRecall, step: 1 | 2): BuiltRecall {
+function learningRefresherRecall(
+  base: BuiltRecall,
+  refresher: RefresherHint & {
+    segments: readonly CompositePassageSegment[];
+  },
+): BuiltRecall {
+  const { phase, segments } = refresher;
   return {
     ...base,
     hint:
-      step === 1
+      phase === "step1"
         ? {
             type: "text",
-            text: maskVerseText(base.versePlainText, "first-letters")
-              .map((token) => token.text)
-              .join(""),
+            text: firstLettersHintText(
+              segments,
+              passageVersesIn(segments),
+              seededRandom(refresher.seed),
+            ),
             label: "Hint",
           }
-        : { type: "hidden", message: NOW_TRY_WITHOUT_HINTS },
+        : phase === "every-word"
+          ? everyWordHint(segments, refresher.everyWordVerses)
+          : { type: "hidden", message: NOW_TRY_WITHOUT_HINTS },
   };
 }
 
@@ -1488,6 +1554,7 @@ function ropeRecall(
 
   return {
     mode: "rope",
+    pieceIndexes: indexes,
     title: windowTitle(packName, pieces, indexes),
     subtitle,
     promptLine,

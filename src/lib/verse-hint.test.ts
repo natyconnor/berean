@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { SUPPORT_BANDS } from "./memory-scheduler";
-import { countVerseWords, hintForProgress, maskVerseText } from "./verse-hint";
+import {
+  countVerseWords,
+  halfFirstLetters,
+  hintForProgress,
+  maskVerseText,
+  seededRandom,
+} from "./verse-hint";
 
 const CLOZE_TEXT =
   "In the beginning God created the heavens and the earth with wisdom";
@@ -290,6 +296,56 @@ describe("hintForProgress", () => {
     expect(hintForProgress(1, 2, 24).density).toBeLessThan(
       hintForProgress(1, 2).density,
     );
+  });
+});
+
+describe("halfFirstLetters", () => {
+  const join = (tokens: ReturnType<typeof halfFirstLetters>) =>
+    tokens.map((token) => token.text).join("");
+
+  it("first-letters a random half and blanks the rest, punctuation kept", () => {
+    // random() = 0 keeps the words in order, so the first half is picked.
+    expect(join(halfFirstLetters("I'll go, and see.", () => 0))).toBe(
+      "I___ g_, ___ ___.",
+    );
+  });
+
+  it("rounds an odd count up, so a one-word verse keeps its letter", () => {
+    expect(join(halfFirstLetters("Amen.", () => 0.99))).toBe("A___.");
+    const tokens = halfFirstLetters("Jesus wept and they saw", () => 0.5);
+    const lettered = tokens.filter((token) => /^[A-Za-z]_*$/.test(token.text));
+    expect(lettered).toHaveLength(3);
+  });
+
+  it("never leaves a word visible", () => {
+    const text = "In the beginning God created the heavens and the earth.";
+    const tokens = halfFirstLetters(text, seededRandom(7));
+    expect(tokens.filter((token) => token.word)).toHaveLength(10);
+    for (const token of tokens.filter((token) => token.word)) {
+      expect(token.masked).toBe(true);
+      expect(token.text).toMatch(/^[A-Za-z]?_+$|^[A-Za-z]$/);
+    }
+    expect(join(tokens)).toHaveLength(text.length);
+  });
+
+  it("picks a different half with a different random", () => {
+    const text = "For God so loved the world, that he gave his only Son";
+    const picks = new Set(
+      [1, 2, 3, 4].map((seed) =>
+        join(halfFirstLetters(text, seededRandom(seed))),
+      ),
+    );
+    expect(picks.size).toBeGreaterThan(1);
+  });
+});
+
+describe("seededRandom", () => {
+  it("repeats the same [0, 1) sequence for one seed", () => {
+    const a = seededRandom(42);
+    const b = seededRandom(42);
+    const values = Array.from({ length: 20 }, () => a());
+    expect(values).toEqual(Array.from({ length: 20 }, () => b()));
+    expect(values.every((value) => value >= 0 && value < 1)).toBe(true);
   });
 });
 

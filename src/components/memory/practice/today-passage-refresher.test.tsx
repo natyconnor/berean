@@ -9,6 +9,7 @@ import {
   NEED_A_REFRESHER_LABEL,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
+  REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
@@ -16,7 +17,11 @@ import {
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
-import { maskVerseText, type HintStage } from "@/lib/verse-hint";
+import {
+  halfFirstLetters,
+  maskVerseText,
+  type HintStage,
+} from "@/lib/verse-hint";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -76,6 +81,13 @@ vi.mock("@/components/memory/packs/add-to-pack", () => ({
   AddToPack: () => null,
 }));
 
+// Refresh's first First letters step letters the first half of each hinted
+// verse, so its hint is predictable here (the random pick is unit-tested).
+vi.mock("@/lib/verse-hint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/verse-hint")>()),
+  seededRandom: () => () => 0,
+}));
+
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     esv: {
@@ -89,6 +101,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       holdAttempt: "passageMemory.holdAttempt",
       applyHeldAttempt: "passageMemory.applyHeldAttempt",
       notePracticeRecital: "passageMemory.notePracticeRecital",
+      recentReviews: "passageMemory.recentReviews",
     },
     savedVerses: {
       listAll: "savedVerses.listAll",
@@ -204,8 +217,13 @@ function answer(dropOne: number, dropTwo: number): string {
   ].join(" ");
 }
 
-function masked(text: string, stage: HintStage): string {
-  return maskVerseText(text, stage)
+/** `half` is step 1's hint: the first half lettered, per the mock above. */
+function masked(text: string, stage: HintStage | "half"): string {
+  return (
+    stage === "half"
+      ? halfFirstLetters(text, () => 0)
+      : maskVerseText(text, stage)
+  )
     .map((token) => token.text)
     .join("");
 }
@@ -221,8 +239,16 @@ function findHint(text: string) {
   return waitFor(() => hintShown(text));
 }
 
-/** The First letters hint with verse one and/or two targeted. */
+/** Step 1's First letters hint with verse one and/or two targeted. */
 function hint(one: boolean, two: boolean): string {
+  return `${masked(VERSE_ONE, one ? "half" : "hidden")} ${masked(
+    VERSE_TWO,
+    two ? "half" : "hidden",
+  )}`;
+}
+
+/** The every-word First letters hint on verse one and/or two. */
+function everyWordHint(one: boolean, two: boolean): string {
   return `${masked(VERSE_ONE, one ? "first-letters" : "hidden")} ${masked(
     VERSE_TWO,
     two ? "first-letters" : "hidden",
@@ -627,7 +653,7 @@ describe("Today passage card: leaving", () => {
 });
 
 describe("Today passage card: refresher", () => {
-  it("hints only the held miss's weak verse, with no all-verse fallback", async () => {
+  it("hints only the held miss's weak verse when there is one", async () => {
     renderRun("alone");
     // 70% overall: verse one 40%, verse two clean.
     await checkPassage(answer(60, 0));
@@ -657,30 +683,64 @@ describe("Today passage card: refresher", () => {
     expect(await findHint(hint(true, true))).toBeInTheDocument();
   });
 
-  it("hints nothing before a try when no verse is shaky", async () => {
+  it("hints every verse before a try when no verse is shaky (AC9)", async () => {
     renderRun("alone");
     await userEvent.click(
       await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
     expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
-    expect(hintShown(hint(false, false))).toBeInTheDocument();
+    expect(hintShown(hint(true, true))).toBeInTheDocument();
   });
 
-  it("retries First letters without limit and saves nothing for it", async () => {
+  it("gives every word only to the verses step 1 missed, in place (F4)", async () => {
+    renderRun("alone");
+    await userEvent.click(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    await screen.findByText(refresherHeader(1));
+    // Verse one 100%, verse two 83%: Continue only, and the count grows.
+    await checkPassage(answer(0, 17));
+    expect(await screen.findByText(refresherHeader(1, 3))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(2, 3))).toBeInTheDocument();
+    expect(hintShown(everyWordHint(false, true))).toBeInTheDocument();
+    await checkPassage(answer(0, 0));
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(3, 3))).toBeInTheDocument();
+  });
+
+  it("skips the every-word step when each verse reaches 85% (F3)", async () => {
     renderRun("alone");
     await checkPassage(answer(50, 30));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));
+    await checkPassage(answer(15, 15));
+    expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+    await clickContinue();
+    expect(await screen.findByText(refresherHeader(2))).toBeInTheDocument();
+  });
+
+  it("retries the every-word step without limit and saves nothing for it", async () => {
+    renderRun("alone");
+    await checkPassage(answer(50, 30));
+    await userEvent.click(await offer());
+    await screen.findByText(refresherHeader(1));
+    await checkPassage(answer(40, 40));
+    await clickContinue();
     for (let round = 0; round < 3; round += 1) {
+      expect(
+        await screen.findByText(refresherHeader(2, 3)),
+      ).toBeInTheDocument();
+      expect(hintShown(everyWordHint(true, true))).toBeInTheDocument();
       await checkPassage(answer(40, 40));
       await userEvent.click(
         await screen.findByRole("button", { name: /Try again/ }),
       );
-      expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
     }
     await checkPassage(answer(15, 15));
     await clickContinue();
-    expect(await screen.findByText(refresherHeader(2))).toBeInTheDocument();
+    expect(await screen.findByText(refresherHeader(3, 3))).toBeInTheDocument();
     expect(mutationMock("passageMemory.holdAttempt")).toHaveBeenCalledTimes(1);
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(
@@ -953,6 +1013,55 @@ describe("Today end summary", () => {
   });
 });
 
+describe("Today passage card: stale (AC10)", () => {
+  function servePassage(accuracies: number[]) {
+    queryResults.set("passageMemory.getForPack", {
+      shakyVerses: [],
+      status: "reviewing",
+      dueAt: NOW - 1000,
+      intervalDays: 5,
+    });
+    queryResults.set(
+      "passageMemory.recentReviews",
+      accuracies.map((accuracy, index) => ({
+        accuracy,
+        createdAt: NOW - (index + 1) * DAY_MS,
+      })),
+    );
+  }
+
+  it("shows only Refresh it first on a stale passage, as its Review page does", async () => {
+    // Two of the last three tries under 60%: stale (R48).
+    servePassage([40, 90, 30]);
+    renderRun("alone");
+    const button = await screen.findByRole("button", {
+      name: REFRESH_IT_FIRST_LABEL,
+    });
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).toBeNull();
+    expect(queryCalls).toContainEqual([
+      "passageMemory.recentReviews",
+      { packId: PACK_ID },
+    ]);
+
+    await userEvent.click(button);
+    expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
+    expect(hintShown(hint(true, true))).toBeInTheDocument();
+  });
+
+  it("keeps the quiet link on a passage that is not stale", async () => {
+    servePassage([95]);
+    renderRun("alone");
+    expect(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    ).toBeNull();
+  });
+});
+
 describe("Regressions", () => {
   it("keeps a not-due Memorized passage in Practice as one plain recital", async () => {
     render(
@@ -1020,7 +1129,7 @@ describe("Regressions", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));
-    expect(hintShown(masked(BEFORE_TEXT, "first-letters"))).toBeInTheDocument();
+    expect(hintShown(masked(BEFORE_TEXT, "half"))).toBeInTheDocument();
     expect(mutationMock("verseMemory.holdAttempt")).toHaveBeenCalledTimes(1);
     expect(mutationMock("passageMemory.holdAttempt")).not.toHaveBeenCalled();
   });

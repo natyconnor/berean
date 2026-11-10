@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
@@ -10,6 +11,7 @@ import {
   type PassageVerseKey,
   type PassageVerseScore,
 } from "@/lib/passage-shaky";
+import { isStaleVerse } from "@/lib/memory-stale";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 import { api } from "../../../../convex/_generated/api";
@@ -53,16 +55,19 @@ export function passageVersesIn(
 }
 
 /**
- * First letters on `targets` only, every other word blank in place, laid out
- * like the composite text: verses joined by a space, a new line where the
- * chapter changes.
+ * First letters on `targets` only (every verse when none is among them),
+ * every other word blank in place, laid out like the composite text: verses
+ * joined by a space, a new line where the chapter changes. With `random`, each
+ * hinted verse shows a random half of first letters instead of one on every
+ * word.
  */
 export function firstLettersHintText(
   segments: readonly CompositePassageSegment[],
   targets: readonly PassageVerseKey[],
+  random?: () => number,
 ): string {
   const verses = passageVersesIn(segments);
-  const masked = shakyFirstLettersHint(verses, targets);
+  const masked = shakyFirstLettersHint(verses, targets, random);
   return segments
     .map((segment, pieceIndex) => ({
       chapter: `${segment.reference.book}|${segment.reference.chapter}`,
@@ -77,6 +82,36 @@ export function firstLettersHintText(
           : `${result}${all[index - 1]?.chapter === segment.chapter ? " " : "\n"}${segment.text}`,
       "",
     );
+}
+
+/**
+ * Whether a Memorized passage is stale (R48): a verse's rule over the
+ * passage's own recent reviews. One rule for the passage session and the
+ * Today passage card. Undefined while the reviews load, or with no passage.
+ */
+export function usePassageStale(
+  passage: {
+    packId: Id<"packs">;
+    status: "reviewing" | "mastered";
+    dueAt: number;
+    intervalDays: number;
+    startedOverAt?: number;
+  } | null,
+  now: number,
+): boolean | undefined {
+  const recentReviews = useQuery(
+    api.passageMemory.recentReviews,
+    passage ? { packId: passage.packId } : "skip",
+  );
+  if (!passage || recentReviews === undefined) return undefined;
+  return isStaleVerse({
+    status: passage.status,
+    dueAt: passage.dueAt,
+    intervalDays: passage.intervalDays,
+    now,
+    startedOverAt: passage.startedOverAt,
+    lastReviews: recentReviews,
+  });
 }
 
 function tzOffsetMinutesAt(now: number): number {

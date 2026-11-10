@@ -212,6 +212,41 @@ export function maskVerseText(
 }
 
 /**
+ * Refresh's first First letters step: a random half of the words (rounded up,
+ * so a one-word verse keeps its letter) show a first letter, and every other
+ * word is a blank slot. Unlike Learn's first-letters density mix, no word is
+ * left visible. `random` returns [0, 1), like `Math.random`.
+ */
+export function halfFirstLetters(
+  text: string,
+  random: () => number,
+): HintToken[] {
+  const blanks = maskVerseText(text, "hidden");
+  const words = blanks.flatMap((token, index) => (token.word ? [index] : []));
+  // Partial Fisher-Yates: the first half of `words` becomes a random pick.
+  const hinted = Math.ceil(words.length / 2);
+  for (let index = 0; index < hinted; index += 1) {
+    const swap = index + Math.floor(random() * (words.length - index));
+    [words[index], words[swap]] = [words[swap], words[index]];
+  }
+  const picked = new Set(words.slice(0, hinted));
+  return maskVerseText(text, "first-letters").map((token, index) =>
+    picked.has(index) ? token : blanks[index],
+  );
+}
+
+/** A repeatable `Math.random` stand-in (mulberry32), so a hint holds still. */
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
  * Lerp density from `densityStart` to `densityEnd` across the band's required
  * reps. A single-rep band (denominator = 0) holds at `densityStart`.
  */

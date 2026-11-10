@@ -17,15 +17,15 @@ const FROM_MEMORY_EMPTY_HINT_PASSAGE =
 export function EmptyHintPrompt({
   passage = false,
   onRefresher,
-  onRefreshFirst,
+  refreshFirst = false,
   disabled,
   message,
   messageId,
 }: {
   passage?: boolean;
   onRefresher?: () => void;
-  /** Stale verses: a more prominent "Refresh it first" above the link. */
-  onRefreshFirst?: () => void;
+  /** A stale card: only a prominent "Refresh it first", no quiet link. */
+  refreshFirst?: boolean;
   disabled?: boolean;
   message?: string;
   messageId?: string;
@@ -36,15 +36,14 @@ export function EmptyHintPrompt({
         {message ??
           (passage ? FROM_MEMORY_EMPTY_HINT_PASSAGE : FROM_MEMORY_EMPTY_HINT)}
       </p>
-      {onRefreshFirst ? (
+      {onRefresher && refreshFirst ? (
         <RefresherOfferButton
           label={REFRESH_IT_FIRST_LABEL}
-          onClick={onRefreshFirst}
+          onClick={onRefresher}
           disabled={disabled}
           className="h-auto min-h-9 max-w-full flex-none whitespace-normal"
         />
-      ) : null}
-      {onRefresher ? (
+      ) : onRefresher ? (
         <NeedARefresherLink onClick={onRefresher} disabled={disabled} />
       ) : null}
     </div>

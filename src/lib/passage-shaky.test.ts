@@ -79,8 +79,12 @@ describe("shakyFirstLettersHint", () => {
     ]);
   });
 
-  it("reveals nothing when no verse is targeted", () => {
-    expect(shakyFirstLettersHint(verses, []).join(" ")).not.toMatch(/[a-z]/i);
+  it("hints every verse when none of them is targeted, never all blanks", () => {
+    const every = shakyFirstLettersHint(verses, [V3, V4, V5]);
+    expect(shakyFirstLettersHint(verses, [])).toEqual(every);
+    expect(shakyFirstLettersHint(verses, [{ chapter: 14, verse: 1 }])).toEqual(
+      every,
+    );
   });
 
   it("hints every verse when every verse is targeted", () => {
@@ -88,6 +92,15 @@ describe("shakyFirstLettersHint", () => {
       "C_______ a__ a_____ m_,",
       "l___ m_ e____ s__,",
       "B__ I h___ t______",
+    ]);
+  });
+
+  it("with a random, gives each target its own half and blanks the rest", () => {
+    // random() = 0 picks the first half of each target verse's own words.
+    expect(shakyFirstLettersHint(verses, [V3, V5], () => 0)).toEqual([
+      "C_______ a__ ______ __,",
+      "____ __ _____ ___,",
+      "B__ I ____ _______",
     ]);
   });
 });

@@ -245,4 +245,19 @@ describe("refresher copy", () => {
     expect(refresherHeader(1)).toBe("Refresh · First letters · 1 of 2");
     expect(refresherHeader(2)).toBe("Refresh · From memory · 2 of 2");
   });
+
+  it("counts 3 steps once the every-word First letters step appears", () => {
+    expect(refresherHeader(1, 3)).toBe("Refresh · First letters · 1 of 3");
+    expect(refresherHeader(2, 3)).toBe("Refresh · First letters · 2 of 3");
+    expect(refresherHeader(3, 3)).toBe("Refresh · From memory · 3 of 3");
+    for (const [step, total] of [
+      [1, 2],
+      [2, 2],
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ] as const) {
+      expect(refresherHeader(step, total)).not.toMatch(/light|full/i);
+    }
+  });
 });

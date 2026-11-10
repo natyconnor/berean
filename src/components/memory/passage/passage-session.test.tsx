@@ -82,6 +82,13 @@ vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (name: string, args: unknown) => queryMock(name, args),
 }));
 
+// Refresh's first First letters step letters the first half of each hinted
+// verse, so its hint is predictable here (the random pick is unit-tested).
+vi.mock("@/lib/verse-hint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/verse-hint")>()),
+  seededRandom: () => () => 0,
+}));
+
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     esv: {
@@ -103,6 +110,14 @@ vi.mock("../../../../convex/_generated/api", () => ({
 const PACK_ID = "pack_1" as Id<"packs">;
 const PASSAGE_ONE = "The Lord is my shepherd; I shall not want.";
 const PASSAGE_TWO = "He makes me lie down in green pastures.";
+// Step 1 (first half lettered, see the verse-hint mock) and the every-word
+// First letters hints of each verse.
+const ONE_HALF = "T__ L___ i_ m_ s_______; _ _____ ___ ____.";
+const ONE_EVERY = "T__ L___ i_ m_ s_______; I s____ n__ w___.";
+const ONE_BLANK = "___ ____ __ __ ________; _ _____ ___ ____.";
+const TWO_HALF = "H_ m____ m_ l__ ____ __ _____ ________.";
+const TWO_EVERY = "H_ m____ m_ l__ d___ i_ g____ p_______.";
+const TWO_BLANK = "__ _____ __ ___ ____ __ _____ ________.";
 
 const psalm23: EsvChapterData = {
   canonical: "Psalm 23",
@@ -1207,18 +1222,31 @@ describe("PassageSession", () => {
       renderReview(reviewView({ shakyVerses: [verse(2)] }));
       await clickButton("Need a refresher?");
       await expectFreshStep("Refresh · First letters · 1 of 2");
-      // Only the shaky verse 2 is hinted; verse 1 before it stays blank.
-      expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
-      expect(hintText()).not.toMatch(/T__/);
+      // Only the shaky verse 2 is hinted, on half its words; verse 1 before
+      // it stays blank.
+      expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
 
+      // Step 1 under 85% only continues, and the count grows to 3 (F9).
       await check("The Lord");
       expect(await screen.findByText(/recalled/)).toBeInTheDocument();
+      expect(
+        screen.getByText("Refresh · First letters · 1 of 3"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      // Both verses missed, so both get every word, verse 1 included.
+      expect(hintText()).toBe(`${ONE_EVERY} ${TWO_EVERY}`);
+
+      // The every-word step retries on the same hint (F10).
+      await check("The Lord");
       await clickButton(/Try again/);
-      await expectFreshStep("Refresh · First letters · 1 of 2");
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      expect(hintText()).toBe(`${ONE_EVERY} ${TWO_EVERY}`);
 
       await check(FULL);
       await clickButton(/Continue/);
-      await expectFreshStep("Refresh · From memory · 2 of 2");
+      await expectFreshStep("Refresh · From memory · 3 of 3");
       expect(
         screen.getByText("Now try it without the hints."),
       ).toBeInTheDocument();
@@ -1256,17 +1284,47 @@ describe("PassageSession", () => {
       expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
     });
 
-    it("hints nothing when no verse is shaky, and every verse when all are", async () => {
+    it("hints every verse when none is shaky or when all are (AC9)", async () => {
       const { unmount } = renderReview();
       await clickButton("Need a refresher?");
       await screen.findByText("Refresh · First letters · 1 of 2");
-      expect(hintText()).not.toMatch(/[a-z]/i);
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       unmount();
 
       renderReview(reviewView({ shakyVerses: [verse(1), verse(2)] }));
       await clickButton("Need a refresher?");
       await screen.findByText("Refresh · First letters · 1 of 2");
-      expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
+    });
+
+    it("skips the every-word step when every verse reaches 85% (F3)", async () => {
+      renderReview(reviewView({ shakyVerses: [verse(2)] }));
+      await clickButton("Need a refresher?");
+      await check(FULL);
+      expect(
+        screen.getByText("Refresh · First letters · 1 of 2"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · From memory · 2 of 2");
+      expect(screen.queryByLabelText("Hint")).toBeNull();
+      expect(record()).not.toHaveBeenCalled();
+    });
+
+    it("gives every word only to the verses step 1 missed (F4, S11)", async () => {
+      // Nothing shaky and no held miss: step 1 half-hints every verse (AC9).
+      renderReview();
+      await clickButton("Need a refresher?");
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
+      await check(PASSAGE_ONE);
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      // Verse 1 passed and stays blank in place; the range is unchanged.
+      expect(hintText()).toBe(`${ONE_BLANK} ${TWO_EVERY}`);
+      await check(FULL);
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · From memory · 3 of 3");
+      expect(record()).not.toHaveBeenCalled();
     });
 
     it("holds a cold miss on the server and counts it on Continue", async () => {
@@ -1337,12 +1395,14 @@ describe("PassageSession", () => {
       await check("The Lorf is my shepherf; I shall not want. He makes me");
       expect(await screen.findByText(/68% recalled/)).toBeInTheDocument();
       await clickButton("Need a refresher?");
-      // A First letters miss and then a pass never reach the summary.
+      // First letters misses and a pass never reach the summary.
+      await check("The Lord");
+      await clickButton(/Continue/);
       await check("The Lord");
       await clickButton(/Try again/);
       await check(FULL);
       await clickButton(/Continue/);
-      await screen.findByText("Refresh · From memory · 2 of 2");
+      await screen.findByText("Refresh · From memory · 3 of 3");
       await check(FULL);
       await clickButton(/Continue/);
 
@@ -1629,9 +1689,21 @@ describe("PassageSession", () => {
         async (refresh) => {
           renderRefresh(refresh);
           await screen.findByLabelText("Hint");
-          expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____ m_ l__ d___/);
+          expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
         },
       );
+
+      it("gives every word only to the fallback verses step 1 missed (F4)", async () => {
+        renderRefresh("practice");
+        await screen.findByLabelText("Hint");
+        await check(`${PASSAGE_ONE} He makes`);
+        expect(
+          screen.getByText("Refresh · First letters · 1 of 3"),
+        ).toBeInTheDocument();
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · First letters · 2 of 3");
+        expect(hintText()).toBe(`${ONE_BLANK} ${TWO_EVERY}`);
+      });
 
       it("hints only the shaky verses, never the verse before one", async () => {
         const { unmount } = renderRefresh(
@@ -1639,8 +1711,7 @@ describe("PassageSession", () => {
           reviewView({ shakyVerses: [verse(2)] }),
         );
         await screen.findByLabelText("Hint");
-        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
-        expect(hintText()).not.toMatch(/T__/);
+        expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
         unmount();
 
         renderRefresh(
@@ -1648,7 +1719,7 @@ describe("PassageSession", () => {
           reviewView({ shakyVerses: [verse(1), verse(2)] }),
         );
         await screen.findByLabelText("Hint");
-        expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       });
 
       it("hints a shaky verse alone inside a multi-verse piece", async () => {
@@ -1657,20 +1728,17 @@ describe("PassageSession", () => {
           reviewView({ pieces: onePiece(), shakyVerses: [verse(1)] }),
         );
         await screen.findByLabelText("Hint");
-        expect(hintText()).toMatch(
-          /^T__ L___ i_ m_ s_______; I s____ n__ w___\. _/,
-        );
-        expect(hintText()).not.toMatch(/H_/);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_BLANK}`);
       });
 
-      it("keeps the all-verses fallback out of a later refresher round", async () => {
+      it("hints every verse on Try another refresher too, as on the first round (AC9)", async () => {
         const { unmount } = renderRefresh("review");
         await toFromMemory();
         await check(WEAK_TWO);
         await clickButton("Try another refresher");
         await expectFreshStep("Refresh · First letters · 1 of 2");
-        // The saved view marks nothing shaky: S11's hint, nothing revealed.
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        // The saved view marks nothing shaky: every verse, never all blanks.
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
         unmount();
 
         renderRefresh("practice");
@@ -1678,19 +1746,25 @@ describe("PassageSession", () => {
         await check(FULL);
         await clickButton("Try another refresher");
         await expectFreshStep("Refresh · First letters · 1 of 2");
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       });
 
-      it("retries First letters without limit and counts nothing for it", async () => {
+      it("retries the every-word step without limit and counts nothing for it", async () => {
         renderRefresh("review");
+        await check("The Lord");
+        expect(screen.queryByText(COUNTED)).toBeNull();
+        await clickButton(/Continue/);
         for (let round = 0; round < 3; round += 1) {
+          await expectFreshStep("Refresh · First letters · 2 of 3");
+          expect(hintText()).toBe(`${ONE_EVERY} ${TWO_EVERY}`);
           await check("The Lord");
           expect(await screen.findByText(/recalled/)).toBeInTheDocument();
           expect(screen.queryByText(COUNTED)).toBeNull();
           await clickButton(/Try again/);
-          await expectFreshStep("Refresh · First letters · 1 of 2");
         }
-        await toFromMemory();
+        await check(FULL);
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · From memory · 3 of 3");
         expectNothingCounted();
         expect(practice()).not.toHaveBeenCalled();
       });
@@ -1780,12 +1854,17 @@ describe("PassageSession", () => {
         expect(record()).toHaveBeenCalledTimes(2);
       });
 
-      it.each(["First letters", "From memory"])(
+      it.each(["First letters", "every-word First letters", "From memory"])(
         "counts nothing on Back from %s",
         async (step) => {
           const { onExit } = renderRefresh("review");
           await screen.findByLabelText("Hint");
           if (step === "From memory") await toFromMemory();
+          if (step === "every-word First letters") {
+            await check("The Lord");
+            await clickButton(/Continue/);
+            await expectFreshStep("Refresh · First letters · 2 of 3");
+          }
           await userEvent.click(screen.getByRole("button", { name: BACK }));
           expect(onExit).toHaveBeenCalledTimes(1);
           expectNothingCounted();
@@ -1809,8 +1888,10 @@ describe("PassageSession", () => {
             reviewView({ dueAt: dueAt() }),
           );
           await check("The Lord");
-          await clickButton(/Try again/);
-          await toFromMemory();
+          await clickButton(/Continue/);
+          await check(FULL);
+          await clickButton(/Continue/);
+          await expectFreshStep("Refresh · From memory · 3 of 3");
           // First letters never touches shaky metadata.
           expect(practice()).not.toHaveBeenCalled();
 
@@ -2142,10 +2223,7 @@ describe("PassageSession", () => {
         );
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).toMatch(
-          /^T__ L___ i_ m_ s_______; I s____ n__ w___\. _/,
-        );
-        expect(hintText()).not.toMatch(/H_/);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_BLANK}`);
       });
 
       it("marks and hints only an omitted second verse, not its piece-mate", async () => {
@@ -2156,8 +2234,7 @@ describe("PassageSession", () => {
         );
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
-        expect(hintText()).not.toMatch(/T__/);
+        expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
       });
 
       it("hints a remembered shaky verse alone within its piece", async () => {
@@ -2166,8 +2243,7 @@ describe("PassageSession", () => {
         );
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____/);
-        expect(hintText()).not.toMatch(/T__/);
+        expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
       });
 
       it("sends practice scores per verse, so only the clean verse can clear", async () => {
@@ -2303,17 +2379,16 @@ describe("PassageSession", () => {
           await clickButton("Need a refresher?");
           await expectFreshStep("Refresh · First letters · 1 of 2");
           // Only the remembered shaky verse 2; verse 1 before it stays blank.
-          expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
-          expect(hintText()).not.toMatch(/T__/);
+          expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
 
           await check("The Lord");
-          await clickButton(/Try again/);
-          await expectFreshStep("Refresh · First letters · 1 of 2");
+          await clickButton(/Continue/);
+          await expectFreshStep("Refresh · First letters · 2 of 3");
           // A hinted 100% never clears shakiness.
           await check(FULL);
           expect(notePractice()).not.toHaveBeenCalled();
           await clickButton(/Continue/);
-          await expectFreshStep("Refresh · From memory · 2 of 2");
+          await expectFreshStep("Refresh · From memory · 3 of 3");
           expect(
             screen.getByText("Now try it without the hints."),
           ).toBeInTheDocument();
@@ -2351,17 +2426,17 @@ describe("PassageSession", () => {
         await continueBack(onExit);
       });
 
-      it("R40: First letters hints nothing when no verse is shaky, every verse when all are", async () => {
+      it("R40: First letters hints every verse when none is shaky or when all are (AC9)", async () => {
         renderPractice(notDueView());
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).not.toMatch(/[a-z]/i);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
         cleanup();
 
         renderPractice(notDueView({ shakyVerses: [verse(1), verse(2)] }));
         await clickButton("Need a refresher?");
         await screen.findByText("Refresh · First letters · 1 of 2");
-        expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       });
 
       it("R40: a failed shaky-verse save keeps the practice result, with no error or retry", async () => {
@@ -2430,16 +2505,14 @@ describe("PassageSession", () => {
         const refreshFirst = screen.getByRole("button", {
           name: REFRESH_FIRST,
         });
-        const link = screen.getByRole("button", { name: "Need a refresher?" });
-        // Sentence, then Refresh it first, then the quiet link.
+        // Sentence, then only Refresh it first: no quiet link (AC10).
         expect(
           sentence.compareDocumentPosition(refreshFirst) &
             Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
         expect(
-          refreshFirst.compareDocumentPosition(link) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
         // No tooltip.
         expect(refreshFirst).not.toHaveAttribute("aria-describedby");
         return refreshFirst;
@@ -2500,19 +2573,6 @@ describe("PassageSession", () => {
         await screen.findByRole("heading", { name: "Review complete" });
         expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
         expect(notePractice()).not.toHaveBeenCalled();
-      });
-
-      it("R48: the quiet link on a stale due passage opens the same counted refresher", async () => {
-        renderReview(staleDue());
-        await expectCueStack();
-        await clickButton("Need a refresher?");
-        await expectFreshStep("Refresh · First letters · 1 of 2");
-        await check(FULL);
-        await clickButton(/Continue/);
-        await check(FULL);
-        expect(record()).toHaveBeenCalledWith(
-          expect.objectContaining({ refresherUsed: true }),
-        );
       });
 
       it("R48: two of the last three tries under 60% make a not-due passage stale; its cue opens practice", async () => {
@@ -2723,6 +2783,18 @@ describe("PassageSession", () => {
       ).join(" ");
     const LONG = [1, 2, 3, 4, 5].map(longVerse);
     const LONG_PAIR = `${LONG[0]} ${LONG[1]}`;
+    const lettered = (word: string) => word[0].padEnd(word.length, "_");
+    const blank = (word: string) => "_".repeat(word.length);
+    /** An unpunctuated verse's step 1 hint: its first half lettered. */
+    const longHalf = (text: string) => {
+      const words = text.split(" ");
+      const hinted = Math.ceil(words.length / 2);
+      return words
+        .map((word, index) => (index < hinted ? lettered(word) : blank(word)))
+        .join(" ");
+    };
+    const longEvery = (text: string) => text.split(" ").map(lettered).join(" ");
+    const longBlank = (text: string) => text.split(" ").map(blank).join(" ");
 
     const record = () => mutationMock("passageMemory.recordAttempt");
     const answerBox = () => screen.getByLabelText("Your recited passage");
@@ -2920,10 +2992,8 @@ describe("PassageSession", () => {
 
       await userEvent.click(link);
       await expectFreshStep(STEP_ONE);
-      // First letters on both warm-up verses, nothing from verse 3.
-      expect(hintText()).toBe(
-        "T__ L___ i_ m_ s_______; I s____ n__ w___. H_ m____ m_ l__ d___ i_ g____ p_______.",
-      );
+      // Half first letters on each warm-up verse, nothing from verse 3.
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       expect(hintText()).not.toMatch(/r_______/);
       expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
       expect(answerBox()).toHaveAttribute(
@@ -2956,9 +3026,9 @@ describe("PassageSession", () => {
 
       await userEvent.click(link);
       await expectFreshStep(STEP_ONE);
-      // Full first letters now, including the verse the hint had hidden.
-      expect(hintText()).toMatch(/^T__ L___ i_ m_ s_______;/);
-      expect(hintText()).toMatch(/H_ m____ m_ l__ d___/);
+      // Half first letters on each verse now, including the one the hint had
+      // hidden.
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
     });
 
     it("R32: refreshes a warm-up widened to the beginning of the passage, with nothing cut off", async () => {
@@ -2974,11 +3044,8 @@ describe("PassageSession", () => {
       await clickButton("From the beginning of the passage");
       await clickButton(LINK);
       await expectFreshStep(STEP_ONE);
-      const firstLetters = (text: string) =>
-        text.replace(/(\p{L})\p{L}*/gu, (word, first: string) =>
-          first.padEnd(word.length, "_"),
-        );
-      expect(hintText()).toBe(LONG.slice(0, 4).map(firstLetters).join(" "));
+      // Each verse gets its own half, not one half over the joined text.
+      expect(hintText()).toBe(LONG.slice(0, 4).map(longHalf).join(" "));
     });
 
     it("R32: offers a refresher under 85% with focus on Continue, and none at 85% or 100%", async () => {
@@ -3060,20 +3127,29 @@ describe("PassageSession", () => {
       // The refresher covers the warm-up's verses 1–3, not the tricky spot,
       // and the tricky spot's starting hint stays out of it.
       await expectFreshStep(STEP_ONE);
-      expect(hintText()).toMatch(/^b__ .* c__ .* d__ .*d__$/);
+      expect(hintText()).toBe(LONG.slice(0, 3).map(longHalf).join(" "));
       expect(screen.queryByText("Try this part again")).toBeNull();
       const noRepairCue = () => {
         expect(screen.queryByLabelText("Starting hint")).toBeNull();
         expect(screen.queryByLabelText("Pick up after")).toBeNull();
       };
       noRepairCue();
-      // A First letters miss reads Try again, then a clean pass Continue.
+      // Step 1 under 85% continues to every word on the verses it missed
+      // (verse 1 passed); a miss there reads Try again, a pass Continue.
+      await check(LONG[0]);
+      expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      expect(hintText()).toBe(
+        [longBlank(LONG[0]), longEvery(LONG[1]), longEvery(LONG[2])].join(" "),
+      );
+      noRepairCue();
       await check("baa");
       await clickButton(/Try again/);
-      await expectFreshStep(STEP_ONE);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
       await check(LONG_WARMUP);
       await clickButton(/Continue/);
-      await expectFreshStep(STEP_TWO);
+      await expectFreshStep("Refresh · From memory · 3 of 3");
       noRepairCue();
       await check(LONG_WARMUP);
       expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
@@ -3150,19 +3226,28 @@ describe("PassageSession", () => {
       expectOnlyLoggedTries(2);
     });
 
-    it("first letters at 84% reads Try again and at 85% Continue; From memory has no hints", async () => {
+    it("every-word First letters at 84% reads Try again and at 85% Continue; From memory has no hints", async () => {
       renderSession(
         warmup(["solid", "solid"], [...LONG.slice(0, 2), VERSE_THREE]),
       );
       await clickButton(LINK);
       await expectFreshStep(STEP_ONE);
-      await check(typedAt(LONG_PAIR, 84));
+      // 85% overall, but verse 2 alone is under 85%: Continue only.
+      await check(typedAt(LONG_PAIR, 85));
       expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      expect(
+        screen.getByText("Refresh · First letters · 1 of 3"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      expect(hintText()).toBe(`${longBlank(LONG[0])} ${longEvery(LONG[1])}`);
+      await check(typedAt(LONG_PAIR, 84));
       await clickButton(/Try again/);
-      await expectFreshStep(STEP_ONE);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
       await check(typedAt(LONG_PAIR, 85));
       await clickButton(/Continue/);
-      await expectFreshStep(STEP_TWO);
+      await expectFreshStep("Refresh · From memory · 3 of 3");
       expect(
         screen.getByText("Now try it without the hints."),
       ).toBeInTheDocument();
@@ -3348,13 +3433,16 @@ describe("PassageSession", () => {
       expect(await screen.findByText("This section")).toBeInTheDocument();
       await clickButton(LINK);
       await expectFreshStep(STEP_ONE);
+      // Each verse of the section gets its own half.
       expect(hintText()).toBe(
         section
-          .map(versesOf)
-          .join(" ")
-          .replace(/(\p{L})\p{L}*/gu, (word, first: string) =>
-            first.padEnd(word.length, "_"),
-          ),
+          .flatMap((item) =>
+            Array.from(
+              { length: item.endVerse - item.startVerse + 1 },
+              (_, offset) => longHalf(text(item.startVerse + offset)),
+            ),
+          )
+          .join(" "),
       );
     });
 
@@ -3618,9 +3706,7 @@ describe("PassageSession", () => {
       ).toBeNull();
       // Every learned verse is hinted (none is shaky); verse 3, in progress,
       // and verse 4, unreached, never appear.
-      expect(hintText()).toBe(
-        `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
-      );
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       expect(screen.queryByText(/restores/)).toBeNull();
 
       // The answer is the learned verses: typing them is 100%.
@@ -3639,7 +3725,7 @@ describe("PassageSession", () => {
       );
       await expectFreshStep(STEP_ONE);
       expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
-      expect(hintText()).toBe(masked(PASSAGE_ONE, "first-letters"));
+      expect(hintText()).toBe(ONE_HALF);
       await check(PASSAGE_ONE);
       expect(screen.getByText("100% recalled")).toBeInTheDocument();
     });
@@ -3647,10 +3733,7 @@ describe("PassageSession", () => {
     it("hints only the shaky learned verses, every other learned word blank", async () => {
       renderRefresh(learningView({ shakyVerses: [verse(2)] }));
       await expectFreshStep(STEP_ONE);
-      expect(hintText()).toBe(
-        `${masked(PASSAGE_ONE, "hidden")} ${masked(PASSAGE_TWO, "first-letters")}`,
-      );
-      expect(hintText()).not.toMatch(/T__/);
+      expect(hintText()).toBe(`${ONE_BLANK} ${TWO_HALF}`);
     });
 
     it.each([
@@ -3669,14 +3752,11 @@ describe("PassageSession", () => {
           ]),
         );
         await expectFreshStep(STEP_ONE);
-        expect(hintText()).toBe(
-          `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
-        );
-        expect(hintText()).not.toMatch(/H_ r_______|E___/);
+        expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       },
     );
 
-    it("First letters at 84% reads Try again and at 85% Continue; From memory is unhinted and ends practice only", async () => {
+    it("every-word First letters at 84% reads Try again and at 85% Continue; From memory is unhinted and ends practice only", async () => {
       const long = [longVerse(1), longVerse(2)];
       const full = long.join(" ");
       const typedAt = (percent: number) => {
@@ -3691,14 +3771,23 @@ describe("PassageSession", () => {
       };
       const { onExit } = renderRefresh(learningView(undefined, long));
       await expectFreshStep(STEP_ONE);
+      // 84% overall with verse 2 under 85%: Continue only, to every word on
+      // verse 2 alone.
       await check(typedAt(84));
       expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+      await clickButton(/Continue/);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
+      expect(hintText()).toBe(
+        `${masked(long[0], "hidden")} ${masked(long[1], "first-letters")}`,
+      );
+      await check(typedAt(84));
       await clickButton(/Try again/);
-      await expectFreshStep(STEP_ONE);
+      await expectFreshStep("Refresh · First letters · 2 of 3");
       await check(typedAt(85));
       await clickButton(/Continue/);
 
-      await expectFreshStep(STEP_TWO);
+      await expectFreshStep("Refresh · From memory · 3 of 3");
       expect(
         screen.getByText("Now try it without the hints."),
       ).toBeInTheDocument();
@@ -3805,9 +3894,7 @@ describe("PassageSession", () => {
       await clickButton("Retry");
       await screen.findByLabelText("Hint");
       expect(screen.getByText(STEP_ONE)).toBeInTheDocument();
-      expect(hintText()).toBe(
-        `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
-      );
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
       expectNothingSaved();
     });
 
@@ -3833,7 +3920,7 @@ describe("PassageSession", () => {
       );
       await clickButton("Need a refresher?");
       await expectFreshStep(STEP_ONE);
-      expect(hintText()).toBe(masked(LEARNED, "first-letters"));
+      expect(hintText()).toBe(`${ONE_HALF} ${TWO_HALF}`);
     });
   });
 
