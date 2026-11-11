@@ -31,10 +31,23 @@ export function readLearnPacksDismissedToday(dayKey: number): Set<string> {
   return new Set(stored.packIds);
 }
 
+const listeners = new Set<() => void>();
+
+/** Called after a pack is set aside or its dismissal is cleared. */
+export function subscribeLearnPackDismissals(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notifyListeners(): void {
+  for (const listener of listeners) listener();
+}
+
 export function dismissLearnPackForToday(packId: string, dayKey: number): void {
   const packIds = readLearnPacksDismissedToday(dayKey);
   packIds.add(packId);
   writeRecord({ day: dayKey, packIds: [...packIds] });
+  notifyListeners();
 }
 
 export function clearLearnPackDismissal(
@@ -43,11 +56,9 @@ export function clearLearnPackDismissal(
 ): boolean {
   const packIds = readLearnPacksDismissedToday(dayKey);
   if (!packIds.delete(packId)) return false;
-  if (packIds.size === 0) {
-    clearRecord();
-    return true;
-  }
-  writeRecord({ day: dayKey, packIds: [...packIds] });
+  if (packIds.size === 0) clearRecord();
+  else writeRecord({ day: dayKey, packIds: [...packIds] });
+  notifyListeners();
   return true;
 }
 
