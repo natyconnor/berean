@@ -2918,9 +2918,10 @@ describe("PracticeBoard held first try", () => {
     expect(screen.queryByText("🎉")).not.toBeInTheDocument();
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    // A 100% practice pass leaves only Continue.
     expect(
-      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus();
     const [state] = onRunStateChange.mock.lastCall ?? [];
     const missAccuracy = verseAttemptAccuracy(
@@ -2992,6 +2993,10 @@ describe("PracticeBoard held first try", () => {
     expect(banner).not.toHaveTextContent("see if it comes back");
     expect(screen.queryByText("🙌")).not.toBeInTheDocument();
     expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    // Under 100%, practice still offers another refresher.
+    expect(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).toBeVisible();
   });
 
   it("keeps S1 miss copy plus the practice-only line at 70%", async () => {
@@ -3007,6 +3012,9 @@ describe("PracticeBoard held first try", () => {
     );
     expect(banner).not.toHaveTextContent(PRACTICE_PASS_LEAD);
     expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).toBeVisible();
   });
 
   it("shows no leave line on either after-miss step", async () => {
@@ -3529,6 +3537,11 @@ describe("PracticeBoard not-due Practice", () => {
     await recite(PASSAGE_ONE);
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     expect(screen.getByText(PRACTICE_PASS_LEAD)).toBeVisible();
+    // A 100% practice pass leaves only Continue.
+    expect(
+      screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
 
     expectNoProgressWrite();
   });
@@ -3782,13 +3795,13 @@ describe("PracticeBoard ••• Refresh", () => {
   });
 
   it.each([
-    ["Practice, pass", "practice", PASSAGE_ONE],
-    ["Practice, miss", "practice", BAD_MISS],
-    ["Review reopened after it counted, pass", "review", PASSAGE_ONE],
-    ["Review reopened after it counted, miss", "review", CLOSE_MISS],
+    ["Practice, pass", "practice", PASSAGE_ONE, false],
+    ["Practice, miss", "practice", BAD_MISS, true],
+    ["Review reopened after it counted, pass", "review", PASSAGE_ONE, false],
+    ["Review reopened after it counted, miss", "review", CLOSE_MISS, true],
   ] as const)(
     "is practice only on a not-due verse (%s) and Continue goes back",
-    async (_, kind, answer) => {
+    async (_, kind, answer, offersTryAnother) => {
       const onExit = renderRefresh(kind, notDueVerse);
       await passStep1();
       await recite(answer);
@@ -3796,6 +3809,11 @@ describe("PracticeBoard ••• Refresh", () => {
       expect(screen.getByText(/% recalled/)).toBeVisible();
       expect(screen.queryByText(COUNTED_TODAY_CLOSING)).not.toBeInTheDocument();
       expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+      // Try another shows under 100% only.
+      expect(
+        screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }) !==
+          null,
+      ).toBe(offersTryAnother);
 
       await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
       expect(onExit).toHaveBeenCalledTimes(1);
@@ -3877,6 +3895,9 @@ describe("PracticeBoard ••• Refresh", () => {
     await passStep1();
     await recite(PASSAGE_ONE);
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(countedCalls()).toHaveLength(1);

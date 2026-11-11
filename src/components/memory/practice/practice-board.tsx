@@ -2313,7 +2313,7 @@ function PracticeCard({
     checked &&
     !saveError &&
     refresher.phase === "step2" &&
-    (practiceRound || checkedAccuracy < LEARN_PROGRESS_ACCURACY);
+    checkedAccuracy < (practiceRound ? 100 : LEARN_PROGRESS_ACCURACY);
   const resultDescribedBy = [bannerId, saveError ? errorId : undefined]
     .filter(Boolean)
     .join(" ");
