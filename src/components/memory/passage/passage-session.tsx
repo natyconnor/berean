@@ -452,6 +452,9 @@ export function PassageSession({
   // The day's step starts once warm-up ends. Until then (warm-up, or a
   // stall-repair inside it) a reload restarts the warm-up, so leave no marker.
   const dayStepStarted = useRef(false);
+  // A 100% From memory in the untried warm-up's refresher counts as the
+  // warm-up: its Continue ends the warm-up, still saving nothing.
+  const refresherPassedWarmup = useRef(false);
 
   useEffect(() => {
     // A Refresh is no step of the Learning session: it leaves the marker be.
@@ -821,9 +824,12 @@ export function PassageSession({
         return false;
       }
     }
+    const warmupDone = refresher.isOpen && refresherPassedWarmup.current;
+    refresherPassedWarmup.current = false;
     refresher.close();
     setResultView(null);
     handleContinueAfterResult(saved);
+    if (warmupDone) handleSkipWarmup();
     return true;
   }
 
@@ -852,6 +858,8 @@ export function PassageSession({
       return true;
     }
     if (refresher.isOpen) {
+      refresherPassedWarmup.current =
+        state.phase === "rope" && result.accuracy === 100;
       setResultView({
         practiceOnly: true,
         closingLine: PRACTICE_ONLY_CLOSING,
