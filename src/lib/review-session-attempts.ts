@@ -22,6 +22,12 @@ export interface ReviewSessionAttempt {
     MemorySchedule,
     "status" | "learnStage" | "stageReps" | "intervalDays" | "ease" | "dueAt"
   >;
+  /**
+   * Verse word count for the row's bar, so it reads the same learned percent
+   * as the result and the learn page. Absent on a pack member row and on a
+   * row carried over from before it was recorded (short-verse minima).
+   */
+  wordCount?: number;
   /** Status the try saved when the row has no `schedule` (an applied held miss). */
   savedStatus?: MemoryStatus;
   /** A Memorized passage reviewed on its Today card, for its summary Refresh. */
@@ -85,7 +91,10 @@ export function groupReviewSessionAttempts(
     if (attempt.displayOnly) continue;
     groups[existing].countedAccuracy = attempt.accuracy;
     if (attempt.refresherUsed) groups[existing].refresherUsed = true;
-    if (attempt.schedule) groups[existing].schedule = attempt.schedule;
+    if (attempt.schedule) {
+      groups[existing].schedule = attempt.schedule;
+      groups[existing].wordCount = attempt.wordCount;
+    }
     if (attempt.savedStatus) {
       groups[existing].savedStatus = attempt.savedStatus;
     }

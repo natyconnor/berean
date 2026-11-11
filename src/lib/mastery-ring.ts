@@ -75,14 +75,19 @@ export function learningJourneyFraction(
  * The heart ring still compresses both phases onto one circle via
  * {@link LEARNING_RING_CEILING}. This helper does not.
  *
+ * `wordCount` is required so every surface passes the verse's real length:
+ * leaving it out falls back to the short-verse rep minima, and the same verse
+ * would read a different learned percent on different surfaces. Pass
+ * `undefined` only where the bar can't be learning (it has no effect there).
+ *
  * Pure: no React, no `Date.now()`.
  */
 export function memoryProgressFraction(
   status: MemoryStatus | undefined,
   learnStage: number,
   stageReps: number,
-  intervalDays = 0,
-  wordCount?: number,
+  intervalDays: number,
+  wordCount: number | undefined,
   ease = EASE_START,
 ): number {
   if (status === "mastered") return 1;

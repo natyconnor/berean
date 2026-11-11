@@ -287,6 +287,15 @@ describe("learningJourneyFraction", () => {
     expect(oneRep).toBeCloseTo(2 / longTotal, 5);
   });
 
+  it("reads 42% for a 19-word verse at Challenge 0, not the short-verse 40% (#395)", () => {
+    const pct = (wordCount: number | undefined) =>
+      Math.round(memoryProgressFraction("learning", 2, 0, 0, wordCount) * 100);
+    // Read 1 + Guided 4 banked of 1 + 4 + 5 + 2 = 12.
+    expect(pct(19)).toBe(42);
+    // Dropping the word count used the short-verse minima: 4 of 10.
+    expect(pct(undefined)).toBe(40);
+  });
+
   it("masteryRingFraction learning case equals learningJourneyFraction × 0.5", () => {
     // The two helpers must stay in lockstep.
     const ring = masteryRingFraction("learning", 0, 2, 3);
@@ -302,20 +311,20 @@ describe("learningJourneyFraction", () => {
 
 describe("memoryProgressFraction", () => {
   it("fills a learning bar from 0 to 100% learned", () => {
-    expect(memoryProgressFraction("learning", 0, 0)).toBe(0);
-    const mid = memoryProgressFraction("learning", 2, 2);
+    expect(memoryProgressFraction("learning", 0, 0, 0, undefined)).toBe(0);
+    const mid = memoryProgressFraction("learning", 2, 2, 0, undefined);
     expect(mid).toBeCloseTo(
       learningJourneyFraction(2, 2, undefined, "learning"),
     );
     expect(mid).toBeGreaterThan(LEARNING_RING_CEILING);
     expect(
-      memoryProgressFraction("learning", 3, requiredRepsFor(3)),
+      memoryProgressFraction("learning", 3, requiredRepsFor(3), 0, undefined),
     ).toBeCloseTo(1);
   });
 
   it("starts a separate mastery bar at 0 for a fresh graduate", () => {
     expect(barOf(reviewingAt())).toBe(0);
-    expect(memoryProgressFraction("reviewing", 3, 0, 0)).toBe(0);
+    expect(memoryProgressFraction("reviewing", 3, 0, 0, undefined)).toBe(0);
   });
 
   it("fills an equal share of the bar for each exact on the path to mastered", () => {
@@ -376,10 +385,22 @@ describe("memoryProgressFraction", () => {
     expect(s.status).toBe("mastered");
     expect(barOf(s)).toBe(1);
     expect(
-      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS),
+      memoryProgressFraction(
+        "reviewing",
+        3,
+        0,
+        MASTERED_INTERVAL_DAYS,
+        undefined,
+      ),
     ).toBe(1);
     expect(
-      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS * 4),
+      memoryProgressFraction(
+        "reviewing",
+        3,
+        0,
+        MASTERED_INTERVAL_DAYS * 4,
+        undefined,
+      ),
     ).toBe(1);
   });
 
@@ -487,18 +508,24 @@ describe("memoryProgressFraction", () => {
   });
 
   it("leaves learning-phase bar behavior unchanged", () => {
-    expect(memoryProgressFraction("learning", 0, 0)).toBe(0);
-    expect(memoryProgressFraction("learning", 1, 0)).toBeCloseTo(
+    expect(memoryProgressFraction("learning", 0, 0, 0, undefined)).toBe(0);
+    expect(memoryProgressFraction("learning", 1, 0, 0, undefined)).toBeCloseTo(
       learningJourneyFraction(1, 0),
     );
-    expect(memoryProgressFraction("learning", 2, 2)).toBeCloseTo(
+    expect(memoryProgressFraction("learning", 2, 2, 0, undefined)).toBeCloseTo(
       learningJourneyFraction(2, 2, undefined, "learning"),
     );
   });
 
   it("fills the mastery bar once mastered", () => {
     expect(
-      memoryProgressFraction("mastered", 3, 0, MASTERED_INTERVAL_DAYS),
+      memoryProgressFraction(
+        "mastered",
+        3,
+        0,
+        MASTERED_INTERVAL_DAYS,
+        undefined,
+      ),
     ).toBe(1);
   });
 });

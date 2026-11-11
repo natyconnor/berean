@@ -587,6 +587,39 @@ describe("PracticeBoard learning Read prime", () => {
     });
   });
 
+  it("reads 42% learned for a 19-word verse at Challenge 0 (#395)", async () => {
+    getPassageMock.mockResolvedValue({
+      ...psalm23,
+      verses: [
+        {
+          number: 1,
+          text: "But seek first the kingdom of God and his righteousness, and all these things will be added to you.",
+        },
+        psalm23.verses[1],
+      ],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...learningVerse, learnStage: 2, stageReps: 0 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    // The card and the rail both show the bar.
+    await waitFor(() => {
+      const labels = screen
+        .getAllByLabelText(/^Learning journey: /)
+        .map((bar) => bar.getAttribute("aria-label"));
+      expect(labels).toEqual([
+        "Learning journey: Fill in the blanks · 42%",
+        "Learning journey: Fill in the blanks · 42%",
+      ]);
+    });
+  });
+
   it("advances from Read when Enter is pressed", async () => {
     const user = userEvent.setup();
     render(
@@ -2860,6 +2893,63 @@ describe("PracticeBoard held first try", () => {
     );
     const recordCalls = record.mock.calls as Array<[Record<string, unknown>]>;
     expect(recordCalls.some((call) => call[0]?.replaceHeldId)).toBe(true);
+  });
+
+  it("gives the result and the summary row one learned percent after a counted miss (#395)", async () => {
+    // Matthew 6:33, 19 words: Challenge 0 is 5 of 12 reps (42%), not the
+    // short-verse 4 of 10 (40%).
+    const longVerse =
+      "But seek first the kingdom of God and his righteousness, and all these things will be added to you.";
+    getPassageMock.mockResolvedValue({
+      ...psalm23,
+      verses: [{ number: 1, text: longVerse }, psalm23.verses[1]],
+    });
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce({
+        ...stillDueSchedule,
+        status: "learning",
+        learnStage: REVIEW_LAPSE_LEARN_STAGE,
+        intervalDays: 0,
+        dueAt: getSessionNow() + DAY_MS,
+      });
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onRunStateChange });
+    await holdColdMiss(BAD_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(longVerse);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    // The result bar on the card.
+    await waitFor(() => {
+      expect(
+        withinCard().getByLabelText(/^Learning journey: /),
+      ).toHaveAttribute(
+        "aria-label",
+        "Learning journey: Fill in the blanks · 42%",
+      );
+    });
+    // The summary row gets the same word count with its schedule.
+    const [state] = onRunStateChange.mock.lastCall ?? [];
+    const [row] = groupReviewSessionAttempts(state?.attempts ?? []);
+    expect(row?.schedule).toMatchObject({
+      status: "learning",
+      learnStage: REVIEW_LAPSE_LEARN_STAGE,
+      stageReps: 0,
+    });
+    expect(row?.wordCount).toBe(19);
   });
 
   it("runs a later round as practice only", async () => {

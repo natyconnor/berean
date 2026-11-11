@@ -28,11 +28,12 @@ interface LearningJourneyBarProps {
   /** Reps banked on the current band. Defaults to 0 when absent (e.g. legacy rows). */
   stageReps?: number;
   /**
-   * Verse word count. When provided, First letters and Fill in the blanks
-   * required-rep counts are length-adjusted so the bar matches the card and
-   * the server exactly.
+   * Verse word count. First letters and Fill in the blanks required-rep
+   * counts are length-adjusted so the bar matches the card and the server
+   * exactly. Required so no surface drops it and falls back to the
+   * short-verse minima. `undefined` only where the length isn't known.
    */
-  wordCount?: number;
+  wordCount: number | undefined;
   /**
    * Lifecycle status. Learning fills its own bar to 100% learned. Reviewing
    * and mastered replace that with a separate mastery bar.
@@ -79,7 +80,10 @@ function phaseOf(fill: JourneyBarFill): BarPhase {
  * is emerald. Mastered and Memorized share one track so a miss can recolor
  * without remounting. Memorized at 0% keeps a sky start mark.
  */
-function fillPercent(fill: JourneyBarFill, wordCount?: number): number {
+function fillPercent(
+  fill: JourneyBarFill,
+  wordCount: number | undefined,
+): number {
   return Math.round(
     memoryProgressFraction(
       fill.status,
@@ -95,6 +99,7 @@ function fillPercent(fill: JourneyBarFill, wordCount?: number): number {
 function motionKind(
   from: JourneyBarFill | undefined,
   to: JourneyBarFill,
+  wordCount: number | undefined,
   reduceMotion: boolean,
 ): MotionKind {
   if (!from || reduceMotion) return "none";
@@ -103,7 +108,10 @@ function motionKind(
   if (fromPhase !== toPhase) {
     return toPhase === "learning" ? "fade-down" : "fade-up";
   }
-  if (fillPercent(from) === fillPercent(to) && from.status === to.status) {
+  if (
+    fillPercent(from, wordCount) === fillPercent(to, wordCount) &&
+    from.status === to.status
+  ) {
     return "none";
   }
   return "slide";
@@ -152,7 +160,7 @@ export function LearningJourneyBar({
   };
   const toPct = fillPercent(toFill, wordCount);
   const fromPct = from ? fillPercent(from, wordCount) : toPct;
-  const kind = motionKind(from, toFill, reduceMotion);
+  const kind = motionKind(from, toFill, wordCount, reduceMotion);
   const animateKey = `${kind}:${fromPct}:${toPct}:${from?.status ?? ""}:${toFill.status ?? ""}`;
   const [beat, setBeat] = useState<Beat>("idle");
   const [playedKey, setPlayedKey] = useState<string | null>(null);

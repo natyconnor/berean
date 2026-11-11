@@ -28,7 +28,12 @@ describe("LearningJourneyBar", () => {
 
   it("fills the learning bar past halfway and keeps From Memory amber", () => {
     const { container } = render(
-      <LearningJourneyBar learnStage={3} stageReps={0} status="learning" />,
+      <LearningJourneyBar
+        wordCount={undefined}
+        learnStage={3}
+        stageReps={0}
+        status="learning"
+      />,
     );
 
     const label = screen.getByLabelText(/Learning journey: From memory/);
@@ -46,6 +51,7 @@ describe("LearningJourneyBar", () => {
   it("reaches 100% learned when the last learning reps are banked", () => {
     render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={requiredRepsFor(3)}
         status="learning"
@@ -60,6 +66,7 @@ describe("LearningJourneyBar", () => {
   it("starts a separate sky mastery bar after graduation", () => {
     const { container } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -79,6 +86,7 @@ describe("LearningJourneyBar", () => {
   it("keeps one mastery track when Mastered recolors to Memorized", () => {
     const { container, rerender } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         status="mastered"
         intervalDays={MASTERED_INTERVAL_DAYS}
@@ -89,6 +97,7 @@ describe("LearningJourneyBar", () => {
 
     rerender(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         status="reviewing"
         intervalDays={MASTERED_INTERVAL_DAYS}
@@ -111,6 +120,7 @@ describe("LearningJourneyBar", () => {
   it("fades between Memorized and Fill in the blanks without a width slide", () => {
     const { container } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={2}
         stageReps={0}
         status="learning"
@@ -135,6 +145,7 @@ describe("LearningJourneyBar", () => {
     vi.useFakeTimers();
     const { container } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -163,6 +174,7 @@ describe("LearningJourneyBar", () => {
   it("fills the mastery bar when a daily reviewing streak banks a rep", () => {
     const { rerender } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -176,6 +188,7 @@ describe("LearningJourneyBar", () => {
 
     rerender(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={1}
         status="reviewing"
@@ -190,12 +203,18 @@ describe("LearningJourneyBar", () => {
 
   it("says what each bar is working toward", () => {
     const { rerender } = render(
-      <LearningJourneyBar learnStage={0} stageReps={0} status="learning" />,
+      <LearningJourneyBar
+        wordCount={undefined}
+        learnStage={0}
+        stageReps={0}
+        status="learning"
+      />,
     );
     expect(screen.getByText("0% learned")).toBeInTheDocument();
 
     rerender(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -206,6 +225,7 @@ describe("LearningJourneyBar", () => {
 
     rerender(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         status="mastered"
         intervalDays={MASTERED_INTERVAL_DAYS}
@@ -218,6 +238,7 @@ describe("LearningJourneyBar", () => {
     useReducedMotion.mockReturnValue(true);
     const { container } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
@@ -243,6 +264,7 @@ describe("LearningJourneyBar", () => {
     vi.useFakeTimers();
     const { container } = render(
       <LearningJourneyBar
+        wordCount={undefined}
         learnStage={3}
         stageReps={0}
         status="reviewing"
