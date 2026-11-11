@@ -2978,6 +2978,86 @@ describe("PracticeBoard held first try", () => {
     return screen.getByLabelText("Your recalled verse");
   }
 
+  async function tryAnotherFromMemory() {
+    const record = mutationMock("verseMemory.recordAttempt");
+    await holdColdMiss(CLOSE_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const tryAnother = await screen.findByRole("button", {
+      name: TRY_ANOTHER_REFRESHER_LABEL,
+    });
+    // The counted From memory try saved.
+    const counted = record.mock.calls as Array<[Record<string, unknown>]>;
+    expect(counted.at(-1)?.[0]).toMatchObject({ refresherUsed: true });
+    record.mockClear();
+    await userEvent.click(tryAnother);
+    const practice1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(practice1);
+    await userEvent.paste(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(practice1).toHaveValue(PASSAGE_ONE);
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const practice2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(practice2);
+    await userEvent.paste(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(practice2).toHaveValue(PASSAGE_ONE);
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    return record;
+  }
+
+  it("saves nothing from Try another on a verse still in review", async () => {
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onRunStateChange });
+    const record = await tryAnotherFromMemory();
+    expect(record).not.toHaveBeenCalled();
+    const [state] = onRunStateChange.mock.lastCall ?? [];
+    expect(state?.attempts?.at(-1)).toMatchObject({
+      accuracy: 100,
+      displayOnly: true,
+    });
+  });
+
+  it("saves nothing from Try another after a lapse to Learning", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...stillDueSchedule,
+      status: "learning",
+      stageReps: 1,
+      lapses: 1,
+    });
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onRunStateChange });
+    const record = await tryAnotherFromMemory();
+    // No learn rep, schedule, or chart point from a practice round.
+    expect(record).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    const [state] = onRunStateChange.mock.lastCall ?? [];
+    expect(state?.attempts?.at(-1)).toMatchObject({
+      accuracy: 100,
+      displayOnly: true,
+    });
+  });
+
   it("shows practice pass copy at 90% with no Well remembered line", async () => {
     renderReview();
     const practice2 = await reachPracticeFromMemory();
