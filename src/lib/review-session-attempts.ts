@@ -24,8 +24,9 @@ export interface ReviewSessionAttempt {
   >;
   /**
    * Verse word count for the row's bar, so it reads the same learned percent
-   * as the result and the learn page. Absent on a pack member row and on a
-   * row carried over from before it was recorded (short-verse minima).
+   * as the result and the learn page (a pack member's own count, not the
+   * pack's). Absent on a row carried over from before it was recorded
+   * (short-verse minima).
    */
   wordCount?: number;
   /** Status the try saved when the row has no `schedule` (an applied held miss). */

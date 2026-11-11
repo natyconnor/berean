@@ -430,6 +430,19 @@ function dateOnlyNextReviewLine(dueAt: number, now: number): string {
   return `Next review ${formatDueDay(dueAt, now)}`;
 }
 
+/**
+ * A pack member's own word count, from the composite segment for that member
+ * (segments follow the member order). Its bar then reads the same learned
+ * percent as that verse's learn page.
+ */
+function segmentWordCount(
+  segments: readonly CompositePassageSegment[] | undefined,
+  index: number,
+): number | undefined {
+  const segment = segments?.[index];
+  return segment ? countVerseWords(segment.text) : undefined;
+}
+
 function journeyFillFrom(schedule: {
   learnStage: number;
   stageReps?: number;
@@ -1331,7 +1344,15 @@ export function PracticeBoard({
                               reference: member,
                               accuracy,
                               offerPractice: false as const,
-                              ...(next ? { schedule: next } : {}),
+                              ...(next
+                                ? {
+                                    schedule: next,
+                                    wordCount: segmentWordCount(
+                                      compositePassage.segments,
+                                      index,
+                                    ),
+                                  }
+                                : {}),
                             },
                           ];
                         })
@@ -1669,6 +1690,7 @@ function PracticeCard({
       reference: CardReference;
       from: JourneyBarFill;
       next: MemorySchedule;
+      wordCount: number | undefined;
     }>
   >([]);
   const [hasHeldTry, setHasHeldTry] = useState(false);
@@ -2016,6 +2038,7 @@ function PracticeCard({
                 reference: memberRef,
                 from: journeyFillFrom(snapshot),
                 next,
+                wordCount: segmentWordCount(composite?.segments, index),
               },
             ];
           }),
@@ -2411,9 +2434,7 @@ function PracticeCard({
                   <LearningJourneyBar
                     learnStage={row.next.learnStage}
                     stageReps={row.next.stageReps}
-                    // A member's reps follow the whole pack's length, so
-                    // its own word count isn't used here (left as-is, #395).
-                    wordCount={undefined}
+                    wordCount={row.wordCount}
                     status={row.next.status}
                     intervalDays={row.next.intervalDays}
                     ease={row.next.ease}
