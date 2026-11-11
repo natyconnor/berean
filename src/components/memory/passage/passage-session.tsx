@@ -452,8 +452,8 @@ export function PassageSession({
   // The day's step starts once warm-up ends. Until then (warm-up, or a
   // stall-repair inside it) a reload restarts the warm-up, so leave no marker.
   const dayStepStarted = useRef(false);
-  // A 100% From memory in the untried warm-up's refresher counts as the
-  // warm-up: its Continue ends the warm-up, still saving nothing.
+  // A 100% From memory in the warm-up's refresher counts as the warm-up, even
+  // after a logged miss: its Continue ends the warm-up, still saving nothing.
   const refresherPassedWarmup = useRef(false);
 
   useEffect(() => {
@@ -858,8 +858,10 @@ export function PassageSession({
       return true;
     }
     if (refresher.isOpen) {
+      // A Learning refresher is the warm-up's or the section recital's, before
+      // a try or after a logged miss (R32, R37).
       refresherPassedWarmup.current =
-        state.phase === "rope" && result.accuracy === 100;
+        learning && !recitingSection && result.accuracy === 100;
       setResultView({
         practiceOnly: true,
         closingLine: PRACTICE_ONLY_CLOSING,

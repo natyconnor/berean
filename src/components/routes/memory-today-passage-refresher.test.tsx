@@ -336,7 +336,8 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     const refreshed = await runDay(warmupDay, async () => {
       await miss();
       await click(LINK);
-      await refresh(WARMUP);
+      // Under 100%, so the tricky spot still follows (a 100% counts, #403).
+      await refresh(WARMUP, WARMUP.split(" ").slice(0, -1).join(" "));
       await fixTrickySpot();
     });
 
