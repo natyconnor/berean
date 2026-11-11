@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { GoalVerseInput } from "./memory-goals";
 import { DAY_MS } from "./memory-scheduler";
+import {
+  countDuePassageReviews,
+  countProjectedPassageLearning,
+  projectPassageDue,
+  withoutDismissedPassages,
+} from "./passage-due";
 import type { PassagePiece } from "./passage-pieces";
 import {
   applyTodayDismissals,
@@ -456,5 +462,83 @@ describe("formatNextReviewDay", () => {
         "America/Los_Angeles",
       ),
     ).toBe("tomorrow");
+  });
+});
+
+describe("due counts after That's enough for today", () => {
+  const passages: TodayInput["passages"] = [
+    {
+      packId: "psalm16",
+      title: "Psalm 16",
+      status: "building",
+      pieces: [{ ...solidPiece(0), attachment: "unreached" }],
+      addsOnDay: 0,
+      intervalDays: 0,
+      stageReps: 0,
+      ease: 2.3,
+      dueAt: NOW,
+      createdAt: NOW,
+    },
+    {
+      packId: "psalm1",
+      title: "Psalm 1",
+      status: "reviewing",
+      pieces: [solidPiece(0)],
+      addsOnDay: 0,
+      intervalDays: 4,
+      stageReps: 0,
+      ease: 2.3,
+      dueAt: NOW - HOUR_MS,
+      createdAt: NOW - 20 * DAY_MS,
+    },
+  ];
+  const model = buildTodayModel(
+    input({
+      verses: [
+        verse("open", 1),
+        verse("due", 2, {
+          status: "reviewing",
+          intervalDays: 3,
+          dueAt: NOW - HOUR_MS,
+        }),
+      ],
+      passages,
+    }),
+  );
+  // The passage rows `dueCount` and `memoryStats` load (`passageMemoryDue`).
+  const dueRows = passages.map((passage) => ({
+    packId: passage.packId,
+    ...projectPassageDue(passage, NOW),
+  }));
+
+  /** Passage part of `dueCount` (`memoryStats.due + learningDue`). */
+  function passageDue(dismissedPackIds?: string[]) {
+    const rows = withoutDismissedPassages(dueRows, dismissedPackIds);
+    return (
+      countDuePassageReviews(rows, NOW) +
+      countProjectedPassageLearning(rows, NOW, 0)
+    );
+  }
+
+  it("counts each passage once, like the Today card", () => {
+    expect(todayWorkCount(model.counts)).toBe(4);
+    expect(passageDue()).toBe(2);
+  });
+
+  it.each([["psalm16"], ["psalm1"]])(
+    "drops a dismissed %s by exactly what Today drops",
+    (packId) => {
+      const today = applyTodayDismissals(model, new Set([packId]));
+      const todayDrop =
+        todayWorkCount(model.counts) - todayWorkCount(today.counts);
+
+      expect(todayDrop).toBe(1);
+      expect(passageDue() - passageDue([packId])).toBe(todayDrop);
+    },
+  );
+
+  it("leaves the counts alone with no list", () => {
+    expect(withoutDismissedPassages(dueRows, undefined)).toBe(dueRows);
+    expect(withoutDismissedPassages(dueRows, [])).toBe(dueRows);
   });
 });

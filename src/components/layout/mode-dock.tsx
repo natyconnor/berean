@@ -12,6 +12,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useApplyLeftoverHeldAttempts } from "@/hooks/use-apply-leftover-held-attempts";
 import { useEnsureInMemoryBackfill } from "@/hooks/use-ensure-in-memory-backfill";
+import { useLearnPacksDismissedToday } from "@/hooks/use-learn-packs-dismissed-today";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { cn } from "@/lib/utils";
 import { logInteraction } from "@/lib/dev-log";
@@ -66,12 +67,17 @@ export function ModeDock() {
   const now = useLiveNow();
   useEnsureInMemoryBackfill(now);
   useApplyLeftoverHeldAttempts();
+  const dismissedPackIds = useLearnPacksDismissedToday(now);
   const skipDueCount = isMemorySessionPath(location.pathname);
   const dueCountResult = useQuery(
     api.verseMemory.dueCount,
     skipDueCount
       ? "skip"
-      : { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() },
+      : {
+          now,
+          tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+          dismissedPackIds,
+        },
   );
   // Keep the last loaded count so a reconnect or loading gap after a long-lived
   // tab doesn't blank the badge (which looks like the number "disappeared").
