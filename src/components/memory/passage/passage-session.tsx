@@ -1191,11 +1191,9 @@ export function PassageSession({
             resultView={resultView}
             onSubmit={handleGraded}
             onContinueAfterResult={continueAfterResult}
-            // Keyed by phase, so each step mounts fresh; only Continue reaches
-            // these two.
-            revealHeader={
-              refresher.phase === "every-word" || refresher.phase === "step2"
-            }
+            // Keyed by phase, so each refresher step mounts fresh: step 1 when
+            // the refresher opens, the rest on Continue.
+            revealHeader={refresher.isOpen}
           />
         </div>
       ) : null}

@@ -1398,6 +1398,31 @@ describe("PassageSession", () => {
       },
     );
 
+    it.each([
+      ["fully in view stays put", 159, 159],
+      ["above the scroll area scrolls to the top", -40, 105],
+    ])(
+      "opening a refresher, the step 1 label %s (#397)",
+      async (_, labelTop, settledTop) => {
+        const layout = mockStepLabelLayout(labelTop);
+        try {
+          renderReview();
+          await screen.findByRole("button", { name: "Need a refresher?" });
+          layout.scrollToTop();
+          await clickButton("Need a refresher?");
+          await expectFreshStep("Refresh · First letters · 1 of 2");
+          await waitFor(() => expect(layout.labelMeasures).not.toEqual([]));
+          expect(layout.labelMeasures.every((m) => m.settled)).toBe(true);
+          expect(layout.labelTop()).toBe(settledTop);
+          expect(layout.labelScrolls).toHaveLength(
+            labelTop === settledTop ? 0 : 1,
+          );
+        } finally {
+          layout.restore();
+        }
+      },
+    );
+
     it("holds a cold miss on the server and counts it on Continue", async () => {
       renderReview();
       await check(WEAK_TWO);

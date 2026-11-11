@@ -120,7 +120,7 @@ interface PassageRecallCardProps {
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   /** Resolve `false` to stay on the result, e.g. a save to retry. */
   onContinueAfterResult?: () => void | Promise<boolean>;
-  /** Scroll the step label into view on mount: a step reached by Continue. */
+  /** Scroll the step label into view on mount: a refresher step. */
   revealHeader?: boolean;
 }
 
@@ -267,7 +267,7 @@ export function PassageRecallCard({
     defaultActionRef.current?.focus();
   }, [checked, isReadPrime, defaultActionRef, submitPending]);
 
-  // A step reached by Continue brings its label into view once the card has
+  // A refresher step brings its label into view once the card has
   // settled: it eases in from below (onAnimationComplete), or mounts in place
   // under reduced motion. Until then, focusing the answer box must not scroll:
   // bringing a box below the fold in first would push a visible label off the
