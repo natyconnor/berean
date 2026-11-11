@@ -53,7 +53,7 @@ import {
 } from "@/lib/memory-copy";
 import { isHoldableColdMiss } from "@/lib/held-verse-attempt";
 import { isStaleVerse } from "@/lib/memory-stale";
-import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
+import { nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
   LEARN_PROGRESS_ACCURACY,
@@ -89,6 +89,7 @@ import {
 } from "@/lib/reader-typography";
 import {
   averageReviewAccuracy,
+  nextReviewLine,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -423,11 +424,7 @@ function reviewedOutcomeLine(
   if (!isReviewPhase(progress.status)) {
     return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
   }
-  return dateOnlyNextReviewLine(progress.dueAt, now);
-}
-
-function dateOnlyNextReviewLine(dueAt: number, now: number): string {
-  return `Next review ${formatDueDay(dueAt, now)}`;
+  return nextReviewLine(progress, now);
 }
 
 function journeyFillFrom(schedule: {
@@ -2245,7 +2242,7 @@ function PracticeCard({
       : null;
   const dateOnlyClosing =
     (showHeldOffer || afterMissCountedResult) && nextSchedule
-      ? dateOnlyNextReviewLine(nextSchedule.dueAt, outcomeNow)
+      ? nextReviewLine(nextSchedule, outcomeNow)
       : null;
   const defaultFocusRef =
     showHeldOffer && !saveError ? refresherOfferRef : reviewActionRef;
@@ -2413,7 +2410,7 @@ function PracticeCard({
                     from={row.from}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {dateOnlyNextReviewLine(row.next.dueAt, outcomeNow)}
+                    {nextReviewLine(row.next, outcomeNow)}
                   </p>
                 </li>
               ))}

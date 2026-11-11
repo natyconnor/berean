@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import { reviewOutcomeMessage } from "@/components/study/verse-attempt-feedback";
@@ -29,6 +29,9 @@ import {
   MASTERED_INTERVAL_DAYS,
   MIN_LEARNING_LOCK_MS,
   REVIEW_LAPSE_LEARN_STAGE,
+  planVerseAttemptSchedule,
+  type MemorySchedule,
+  type VerseAttemptPlanInput,
 } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import {
@@ -547,7 +550,14 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       screen.getAllByLabelText(/Progress to mastered: Memorized · 0%/).length,
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^Next review /).length).toBeGreaterThan(0);
+    // The first verse had too few reviews banked, so it lapsed.
+    const members = (text: string | RegExp) =>
+      screen
+        .getAllByText(text)
+        .map((line) => line.closest("li")?.querySelector("p")?.textContent)
+        .filter(Boolean);
+    expect(members(LAPSED_ROW_LINE)).toEqual(["Psalm 23:1"]);
+    expect(members(/^Next review /)).toEqual(["Psalm 23:2"]);
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Refresher used/)).not.toBeInTheDocument();
   });
@@ -2585,7 +2595,8 @@ describe("PracticeBoard held first try", () => {
     expect(
       withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/^Next review /)).toBeVisible();
+    expect(screen.getByText(LAPSED_ROW_LINE)).toBeVisible();
+    expect(screen.queryByText(/^Next review /)).toBeNull();
   });
 
   it("applies the held miss once on Continue", async () => {
@@ -2790,9 +2801,39 @@ describe("PracticeBoard held first try", () => {
     ).not.toBeInTheDocument();
   });
 
-  /** Held miss, refresher, then a From memory try; returns its summary row. */
-  async function refresherToSummary(miss: string, fromMemory: string) {
-    renderReview({ verses: [reviewingVerse] });
+  /**
+   * Answers each counted try the way `recordAttempt` does: the real scheduler
+   * on `saved`, with the held miss's score when the try replaces it.
+   */
+  function scheduleLikeServer(saved: MemorySchedule) {
+    const record = mutationMock("verseMemory.recordAttempt") as Mock<
+      (
+        args: VerseAttemptPlanInput & { replaceHeldId?: string },
+      ) => Promise<MemorySchedule>
+    >;
+    record.mockImplementation((args) => {
+      const [held] = (mutationMock("verseMemory.holdAttempt").mock.lastCall ??
+        []) as [{ accuracy: number }?];
+      return Promise.resolve(
+        planVerseAttemptSchedule(saved, {
+          ...args,
+          heldMissAccuracy: args.replaceHeldId ? held?.accuracy : undefined,
+        }).next,
+      );
+    });
+  }
+
+  /** A 1-day gap: no review steps banked yet, so a bad miss lapses it. */
+  const shortGapSchedule = { ...stillDueSchedule, intervalDays: 1 };
+
+  /** Held miss, refresher, then a From memory try, left on its result. */
+  async function refresherFromMemory(
+    saved: MemorySchedule,
+    miss: string,
+    fromMemory: string,
+  ) {
+    scheduleLikeServer(saved);
+    renderReview({ verses: [{ ...reviewingVerse, ...saved }] });
     await holdColdMiss(miss);
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
@@ -2808,6 +2849,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(step2);
     await userEvent.paste(fromMemory);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const record = mutationMock("verseMemory.recordAttempt");
+    await waitFor(() => {
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({ replaceHeldId: HELD_ID }),
+      );
+    });
+    const [args] = record.mock.lastCall as [VerseAttemptPlanInput];
+    return { result: await screen.findByRole("status"), args };
+  }
+
+  /** Continue from the From memory result to the summary's row. */
+  async function continueToSummaryRow() {
     await userEvent.click(
       await screen.findByRole("button", { name: /^Continue/ }),
     );
@@ -2815,20 +2868,21 @@ describe("PracticeBoard held first try", () => {
     return line.closest("li") as HTMLElement;
   }
 
-  const lapsedSchedule = {
-    ...stillDueSchedule,
-    status: "learning" as const,
-    learnStage: 2,
-    intervalDays: 0,
-    dueAt: getSessionNow(),
-    lapses: 1,
-  };
-
   it("dates the row from the schedule the counted pass saved", async () => {
-    // John 11:35: the pass moved the verse out of today.
-    const saved = { ...heldSchedule, dueAt: getSessionNow() + 3 * DAY_MS };
-    mutationMock("verseMemory.recordAttempt").mockResolvedValue(saved);
-    const row = await refresherToSummary(CLOSE_MISS, PASSAGE_ONE);
+    // A close miss, then a pass, keeps the 5-day gap from today.
+    const { args } = await refresherFromMemory(
+      stillDueSchedule,
+      CLOSE_MISS,
+      PASSAGE_ONE,
+    );
+    const saved = planVerseAttemptSchedule(stillDueSchedule, {
+      ...args,
+      heldMissAccuracy: verseAttemptAccuracy(
+        diffWords(CLOSE_MISS, PASSAGE_ONE),
+      ),
+    }).next;
+    expect(saved.status).toBe("reviewing");
+    const row = await continueToSummaryRow();
     expect(
       within(row).getByText(
         `Next review ${formatDueDay(saved.dueAt, getSessionNow())}`,
@@ -2844,12 +2898,16 @@ describe("PracticeBoard held first try", () => {
     // Matthew 6:33: a From memory miss after the refresher.
     ["a miss then a miss", CLOSE_MISS, BAD_MISS],
   ])(
-    "says a lapsed row will be learned again after %s",
+    "says a lapsed result and row will be learned again after %s",
     async (_, miss, fromMemory) => {
-      mutationMock("verseMemory.recordAttempt").mockResolvedValue(
-        lapsedSchedule,
+      const { result } = await refresherFromMemory(
+        shortGapSchedule,
+        miss,
+        fromMemory,
       );
-      const row = await refresherToSummary(miss, fromMemory);
+      expect(result).toHaveTextContent(LAPSED_ROW_LINE);
+      expect(result).not.toHaveTextContent(/Next review/);
+      const row = await continueToSummaryRow();
       expect(within(row).getByText(LAPSED_ROW_LINE)).toBeVisible();
       expect(within(row).queryByText(/Next review/)).toBeNull();
     },
