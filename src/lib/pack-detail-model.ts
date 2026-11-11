@@ -7,8 +7,9 @@ import {
   stepAction,
 } from "./memory-copy";
 import {
-  buildGoalCards,
+  goalLearnPace,
   passageTodayPieceIndex,
+  type GoalCard,
   type PackGoalCard,
   type PassageGoalCard,
 } from "./memory-goals";
@@ -29,10 +30,8 @@ import {
   formatMasteryDuration,
   formatMonthOrDate,
   formatShortDate,
-  projectedFinishDate,
   projectedMasteryDate,
 } from "./memorize-plan";
-import { packUpNextVerseRefIds } from "./pack-pacing";
 import type { PassageDueStatus } from "./passage-due";
 import {
   packAllowsPassageMode,
@@ -94,77 +93,21 @@ export interface PackDetailPassage {
   createdAt: number;
 }
 
-export interface PackDetailInput {
-  pack: PackDetailPack;
-  members: readonly PackDetailMember[];
-  passage: PackDetailPassage | null;
-  now: number;
-  tzOffsetMinutes: number;
-}
-
 export type PackDetailGoal = PassageGoalCard | PackGoalCard;
 
-function reviewTogetherDueAt(
-  members: readonly PackDetailMember[],
-  now: number,
-): number | null {
-  if (!members.every((member) => isReviewPhase(member.status))) return null;
-  let due: number | null = null;
-  for (const member of members) {
-    if (!isDueForReview(member, now)) continue;
-    if (due === null || member.dueAt < due) due = member.dueAt;
-  }
-  return due;
-}
-
 /**
- * The same goal card Today shows for this pack or passage, so counts and
- * "work today" match. `null` for a pack with no verses in Memory.
+ * This pack's or passage's card from Today's goals (`memoryHome.today`), so
+ * the detail shows the same counts, dates and "work today" as Today. `null`
+ * for a pack with no verses in Memory.
  */
-export function packDetailGoal({
-  pack,
-  members,
-  passage,
-  now,
-  tzOffsetMinutes,
-}: PackDetailInput): PackDetailGoal | null {
-  const reviewTogether =
-    pack.unifiedReviewEnabled === true &&
-    passage === null &&
-    members.length > 0;
-  const goals = buildGoalCards({
-    now,
-    tzOffsetMinutes,
-    verses: members.map((member) => ({ ...member, createdAt: pack.createdAt })),
-    packs: [
-      {
-        packId: pack.packId,
-        name: pack.name,
-        kind: pack.kind,
-        verseRefIds: members.map((member) => member.verseRefId),
-        createdAt: pack.createdAt,
-      },
-    ],
-    passages: passage
-      ? [{ ...passage, packId: pack.packId, title: pack.name }]
-      : [],
-    upNextByPackId: new Map([[pack.packId, packUpNextVerseRefIds(members)]]),
-    reviewTogether: new Map<string, number | null>(
-      reviewTogether ? [[pack.packId, reviewTogetherDueAt(members, now)]] : [],
-    ),
-    reviewTogetherVerseRefIds: new Set<string>(
-      reviewTogether
-        ? members
-            .filter((member) => isReviewPhase(member.status))
-            .map((member) => member.verseRefId)
-        : [],
-    ),
-  });
-  const goal = goals.find(
-    (card): card is PackDetailGoal =>
-      card.kind !== "verse" && card.packId === pack.packId,
-  );
-  return goal ?? null;
+export function packDetailGoal<P extends string, V extends string>(
+  goals: readonly GoalCard<P, V>[],
+  packId: string,
+): PackDetailGoal | null {
+  for (const goal of goals) {
+    if (goal.kind !== "verse" && goal.packId === packId) return goal;
+  }
+  return null;
 }
 
 function verseCountLabel(count: number): string {
@@ -419,24 +362,12 @@ export function passageDetailProgress(
   timeZone?: string,
 ): PackDetailProgress {
   if (goal.status === "building") {
-    const remaining = goal.verseCount - goal.learnedVerses;
-    const finish = projectedFinishDate(
-      {
-        mode: "passage",
-        verseCount: goal.verseCount,
-        learnedCount: goal.learnedVerses,
-      },
-      now,
-    );
     return {
       learned: {
         label: `${goal.learnedVerses} of ${verseCountLabel(goal.verseCount)} learned`,
         fraction:
           goal.verseCount === 0 ? 0 : goal.learnedVerses / goal.verseCount,
-        detail:
-          remaining > 0
-            ? `on track for ${formatShortDate(finish, timeZone)}`
-            : null,
+        detail: goalLearnPace(goal, now, timeZone),
       },
       mastery: null,
       masteryNote: `Mastery starts once all ${goal.verseCount} are learned, ${formatMasteryDuration(

@@ -1,7 +1,7 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   MemoryPanelHost,
@@ -22,7 +22,14 @@ import {
   STARTED_OVER_LABEL,
   startOverPassageBody,
 } from "@/lib/memory-copy";
-import { DAY_MS } from "@/lib/memory-scheduler";
+import type {
+  GoalPackInput,
+  GoalPassageInput,
+  GoalVerseInput,
+} from "@/lib/memory-goals";
+import { DAY_MS, isDueForReview, isReviewPhase } from "@/lib/memory-scheduler";
+import { buildTodayModel } from "@/lib/memory-today";
+import { packUpNextAcrossPacks } from "@/lib/pack-pacing";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 
@@ -329,6 +336,85 @@ const PSALM_23_MEMBERS = [
 let passages: Record<string, unknown> = {};
 let membersByPack: Record<string, unknown> = {};
 
+type FixtureMember = GoalVerseInput & { isDue?: boolean };
+type FixturePack = GoalPackInput & {
+  _id: string;
+  unifiedReviewEnabled?: boolean;
+};
+
+/**
+ * `memoryHome.today` over the same fixtures the pack page reads, built the
+ * way `loadTodayModel` builds it.
+ */
+function todayFixture(args: unknown) {
+  const { now, tzOffsetMinutes } = args as {
+    now: number;
+    tzOffsetMinutes: number;
+  };
+  const getPack = mocks.queryByArgs.get("packs.get");
+  const packs = Object.keys(PACKS)
+    .map((id) => getPack?.({ id }) as FixturePack | null)
+    .filter((pack): pack is FixturePack => pack != null)
+    .map((pack) => ({
+      ...pack,
+      members: (membersByPack[pack._id] ?? []) as FixtureMember[],
+    }));
+  const verses = new Map<string, GoalVerseInput>();
+  for (const pack of packs) {
+    for (const member of pack.members) {
+      verses.set(member.verseRefId, { ...member, createdAt: pack.createdAt });
+    }
+  }
+  const passageInputs = packs.flatMap((pack) => {
+    const row = passages[pack._id] as GoalPassageInput | null | undefined;
+    return row ? [{ ...row, packId: pack._id, title: pack.name }] : [];
+  });
+  const passagePackIds = new Set(passageInputs.map((row) => row.packId));
+  const together = packs.filter(
+    (pack) => pack.unifiedReviewEnabled && !passagePackIds.has(pack._id),
+  );
+  const upNext = packUpNextAcrossPacks(
+    packs.map((pack) => ({
+      packId: pack._id,
+      kind: pack.kind,
+      members: pack.members,
+    })),
+  );
+  return buildTodayModel({
+    now,
+    tzOffsetMinutes,
+    verses: [...verses.values()],
+    packs: packs.map((pack) => ({
+      packId: pack._id,
+      name: pack.name,
+      kind: pack.kind,
+      verseRefIds: pack.members.map((member) => member.verseRefId),
+      createdAt: pack.createdAt,
+    })),
+    passages: passageInputs,
+    upNextByPackId: upNext.byPackId,
+    upNextVerseRefIds: upNext.members.map((member) => member.verseRefId),
+    reviewTogether: new Map(
+      together.map((pack) => {
+        const inReview = pack.members.every((m) => isReviewPhase(m.status));
+        const due = pack.members
+          .filter((m) => isDueForReview(m, now))
+          .map((m) => m.dueAt);
+        return [pack._id, inReview && due.length > 0 ? Math.min(...due) : null];
+      }),
+    ),
+    reviewTogetherVerseRefIds: new Set(
+      together.flatMap((pack) =>
+        pack.members
+          .filter((m) => isReviewPhase(m.status))
+          .map((m) => m.verseRefId),
+      ),
+    ),
+    verseLogs: [],
+    passageLogs: [],
+  });
+}
+
 function renderHost(panel: string, from?: "verses") {
   return render(
     <TooltipProvider>
@@ -365,6 +451,7 @@ beforeEach(() => {
     "passageMemory.getForPack",
     (args) => passages[(args as { packId: string }).packId] ?? null,
   );
+  mocks.queryByArgs.set("memoryHome.today", todayFixture);
   mocks.queryResults.set("savedVerses.listForChapter", [
     {
       verseRefId: "heart-ps16",
@@ -1270,6 +1357,9 @@ describe("PackDetail Start over", () => {
   });
 
   it("leaves a That's enough for today dismissal when Start over fails", async () => {
+    // The page reads dismissals for its live `now`; keep the clock on that day.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(NOW);
+    onTestFinished(() => clock.mockRestore());
     const dayKey = learnDismissDayKey(Date.now());
     dismissLearnPackForToday("psalm16x", dayKey);
     mutation("passageMemory.startOver").mockRejectedValueOnce(
@@ -1285,6 +1375,8 @@ describe("PackDetail Start over", () => {
   });
 
   it("clears the That's enough for today dismissal after a passage reset", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(NOW);
+    onTestFinished(() => clock.mockRestore());
     const dayKey = learnDismissDayKey(Date.now());
     dismissLearnPackForToday("psalm16x", dayKey);
     renderHost("pack:psalm16x");

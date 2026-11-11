@@ -7,6 +7,9 @@ import {
   type PassageGoalCard,
 } from "./memory-goals";
 import { DAY_MS, EASE_START } from "./memory-scheduler";
+import { buildTodayModel } from "./memory-today";
+import { packUpNextAcrossPacks } from "./pack-pacing";
+import { todayGoalCardModel } from "./today-goal-card";
 import {
   offersLearnAsPassage,
   packDetailActions,
@@ -109,14 +112,49 @@ function member(
   };
 }
 
-function passageGoal(extra: Partial<PackDetailPassage> = {}): PassageGoalCard {
-  const goal = packDetailGoal({
-    pack: PSALM_16,
-    members: [],
-    passage: passage(extra),
-    now: NOW,
+/** Today's model for one pack, built from the inputs `memoryHome.today` loads. */
+function todayFor(
+  pack: PackDetailPack,
+  members: readonly PackDetailMember[],
+  passageRow: PackDetailPassage | null,
+  now: number = NOW,
+) {
+  const upNext = packUpNextAcrossPacks([
+    { packId: pack.packId, kind: pack.kind, members },
+  ]);
+  return buildTodayModel({
+    now,
     tzOffsetMinutes: 0,
+    verses: members.map((m) => ({ ...m, createdAt: now - 30 * DAY_MS })),
+    packs: [
+      {
+        packId: pack.packId,
+        name: pack.name,
+        kind: pack.kind,
+        verseRefIds: members.map((m) => m.verseRefId),
+        createdAt: pack.createdAt,
+      },
+    ],
+    passages: passageRow
+      ? [{ ...passageRow, packId: pack.packId, title: pack.name }]
+      : [],
+    upNextByPackId: upNext.byPackId,
+    upNextVerseRefIds: upNext.members.map((m) => m.verseRefId),
+    reviewTogether: new Map(),
+    reviewTogetherVerseRefIds: new Set(),
+    verseLogs: [],
+    passageLogs: [],
   });
+}
+
+function passageGoal(
+  extra: Partial<PackDetailPassage> = {},
+  now: number = NOW,
+): PassageGoalCard {
+  const goal = packDetailGoal(
+    todayFor(PSALM_16, [], passage(extra), now).goals,
+    PSALM_16.packId,
+  );
   if (goal?.kind !== "passage") throw new Error("expected a passage goal");
   return goal;
 }
@@ -143,13 +181,7 @@ function packGoal(
   members: PackDetailMember[],
   pack: PackDetailPack = MERCED,
 ): PackGoalCard {
-  const goal = packDetailGoal({
-    pack,
-    members,
-    passage: null,
-    now: NOW,
-    tzOffsetMinutes: 0,
-  });
+  const goal = packDetailGoal(todayFor(pack, members, null).goals, pack.packId);
   if (goal?.kind !== "pack") throw new Error("expected a pack goal");
   return goal;
 }
@@ -355,18 +387,100 @@ describe("primary action", () => {
 
   it("an empty pack has no action", () => {
     expect(
-      packDetailGoal({
-        pack: MERCED,
-        members: [],
-        passage: null,
-        now: NOW,
-        tzOffsetMinutes: 0,
-      }),
+      packDetailGoal(todayFor(MERCED, [], null).goals, MERCED.packId),
     ).toBeNull();
     expect(packDetailActions(null, NOW, TZ)).toEqual({
       main: null,
       practice: false,
       note: null,
+    });
+  });
+});
+
+describe("matches Today's goal card", () => {
+  /** Tuesday, Nov 10, 2026: 3 days of learning left, nothing more today. */
+  const NOV_10 = Date.UTC(2026, 10, 10, 12);
+  const TOMORROW = NOV_10 + DAY_MS;
+
+  function waitingPassage(lastSessionAt?: number): PassageGoalCard {
+    return passageGoal(
+      {
+        pieces: [
+          piece(0, 1, 6, "solid"),
+          piece(1, 7, 11, "learning", { dueAt: TOMORROW }),
+        ],
+        addsOnDay: 1,
+        addDayKey: localDayIndex(NOV_10, 0),
+        lastSessionAt,
+      },
+      NOV_10,
+    );
+  }
+
+  it.each([
+    ["on track", NOV_10 - DAY_MS, "on track for Nov 13"],
+    ["before the first session", undefined, "learn it in about 3 days"],
+    ["after 2 idle days", NOV_10 - 3 * DAY_MS, "about 3 days to go"],
+  ])(
+    "passage %s: same pace on Today and the pack page",
+    (_case, lastSessionAt, expected) => {
+      const goal = waitingPassage(lastSessionAt);
+      expect(goal.hasWorkToday).toBe(false);
+
+      const today = todayGoalCardModel(goal, NOV_10, TZ).signature;
+      const detail = passageDetailProgress(goal, NOV_10, TZ).learned?.detail;
+      expect(today.kind === "passage" && today.detail).toBe(expected);
+      expect(detail).toBe(expected);
+    },
+  );
+
+  it("passage done today: Done today on Today, no Continue on the pack page", () => {
+    const goal = waitingPassage(NOV_10 - HOUR_MS);
+    const card = todayGoalCardModel(goal, NOV_10, TZ);
+    expect(card.chip).toEqual({ tone: "done", label: "Done today" });
+    expect(card.action).toBeNull();
+    expect(passageDetailActions(goal, NOV_10, TZ).main).toEqual({
+      kind: "waiting",
+      label: "Up next tomorrow",
+    });
+  });
+
+  it("pack with work today: Continue on both", () => {
+    const goal = packGoal(MERCED_MEMBERS);
+    expect(goal.hasWorkToday).toBe(true);
+    expect(todayGoalCardModel(goal, NOW, TZ).action?.label).toMatch(
+      /^Continue · /,
+    );
+    expect(packDetailActions(goal, NOW, TZ).main).toMatchObject({
+      emphasis: "primary",
+      label: "Continue · 3 verses today",
+    });
+  });
+
+  it("pack practiced today with nothing left: Done today, no Continue", () => {
+    const goal = packGoal([
+      member("luke", {
+        dueAt: NOW + 3 * DAY_MS,
+        lastReviewedAt: NOW - HOUR_MS,
+      }),
+    ]);
+    expect(goal.hasWorkToday).toBe(false);
+    const card = todayGoalCardModel(goal, NOW, TZ);
+    expect(card.chip).toEqual({ tone: "done", label: "Done today" });
+    expect(card.action).toBeNull();
+    expect(packDetailActions(goal, NOW, TZ).main).toMatchObject({
+      emphasis: "secondary",
+      session: "practice",
+    });
+  });
+
+  it("pack Learned bar reads the same on Today and the pack page", () => {
+    const goal = packGoal(MERCED_MEMBERS);
+    const today = todayGoalCardModel(goal, NOW, TZ).signature;
+    const learned = packDetailProgress(goal, NOW, TZ).learned;
+    expect(today).toMatchObject({
+      label: learned.label,
+      detail: learned.detail,
     });
   });
 });
@@ -628,12 +742,17 @@ describe("passageVerseRows", () => {
 
 describe("progress", () => {
   it("passage building: Learned bar, on track date, mastery note", () => {
-    const progress = passageDetailProgress(passageGoal(), NOW, TZ);
-    expect(progress.learned).toMatchObject({
+    const progress = passageDetailProgress(
+      passageGoal({ lastSessionAt: NOW - DAY_MS }),
+      NOW,
+      TZ,
+    );
+    // 4 days left, learning today counts as day 1.
+    expect(progress.learned).toEqual({
       label: "4 of 11 verses learned",
       fraction: 4 / 11,
+      detail: "on track for Oct 15",
     });
-    expect(progress.learned?.detail).toMatch(/^on track for Oct \d+$/);
     expect(progress.mastery).toBeNull();
     expect(progress.masteryNote).toMatch(
       /^Mastery starts once all 11 are learned, about .+ of short reviews after that\.$/,

@@ -270,21 +270,6 @@ function addCalendarDays(now: number, days: number): Date {
 }
 
 /**
- * The day the learning steps should finish with a session every day. Today
- * counts as day 1; already-learned targets finish today.
- */
-export function projectedFinishDate(
-  progress: MemorizeProgress,
-  now: number,
-): Date {
-  const days = estimateMemorizeDays({
-    mode: progress.mode,
-    verseCount: remainingVerses(progress),
-  });
-  return addCalendarDays(now, Math.max(0, days - 1));
-}
-
-/**
  * The day it would first be mastered if every review passes. A target that
  * has finished learning is projected as if it graduated today.
  */
