@@ -10,6 +10,7 @@ import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
   COUNTED_TODAY_CLOSING,
+  LAPSED_ROW_LINE,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -2788,6 +2789,71 @@ describe("PracticeBoard held first try", () => {
       screen.queryByRole("button", { name: /^Refresh / }),
     ).not.toBeInTheDocument();
   });
+
+  /** Held miss, refresher, then a From memory try; returns its summary row. */
+  async function refresherToSummary(miss: string, fromMemory: string) {
+    renderReview({ verses: [reviewingVerse] });
+    await holdColdMiss(miss);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(fromMemory);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Continue/ }),
+    );
+    const line = await screen.findByText(/· Refresher used$/);
+    return line.closest("li") as HTMLElement;
+  }
+
+  const lapsedSchedule = {
+    ...stillDueSchedule,
+    status: "learning" as const,
+    learnStage: 2,
+    intervalDays: 0,
+    dueAt: getSessionNow(),
+    lapses: 1,
+  };
+
+  it("dates the row from the schedule the counted pass saved", async () => {
+    // John 11:35: the pass moved the verse out of today.
+    const saved = { ...heldSchedule, dueAt: getSessionNow() + 3 * DAY_MS };
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(saved);
+    const row = await refresherToSummary(CLOSE_MISS, PASSAGE_ONE);
+    expect(
+      within(row).getByText(
+        `Next review ${formatDueDay(saved.dueAt, getSessionNow())}`,
+      ),
+    ).toBeVisible();
+    expect(within(row).queryByText("Next review today")).toBeNull();
+    expect(within(row).queryByText(LAPSED_ROW_LINE)).toBeNull();
+  });
+
+  it.each([
+    // John 11:35: a bad miss, then a 100% refresher, drops it to Learning.
+    ["a bad miss then a pass", BAD_MISS, PASSAGE_ONE],
+    // Matthew 6:33: a From memory miss after the refresher.
+    ["a miss then a miss", CLOSE_MISS, BAD_MISS],
+  ])(
+    "says a lapsed row will be learned again after %s",
+    async (_, miss, fromMemory) => {
+      mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+        lapsedSchedule,
+      );
+      const row = await refresherToSummary(miss, fromMemory);
+      expect(within(row).getByText(LAPSED_ROW_LINE)).toBeVisible();
+      expect(within(row).queryByText(/Next review/)).toBeNull();
+    },
+  );
 
   it("replaces the held miss with a From memory miss and offers practice", async () => {
     renderReview();

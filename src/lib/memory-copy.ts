@@ -219,6 +219,9 @@ export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
 /** Header Back of a Refresh started from a session summary, which it returns to. */
 export const SUMMARY_REFRESH_BACK_LABEL = "Back to summary";
 export const COUNTED_TODAY_CLOSING = "Counted as today's review";
+/** A summary row whose verse dropped back to Learning in this session. */
+export const LAPSED_ROW_LINE =
+  "Looks like you're struggling with this one. Let's learn it again.";
 
 /**
  * "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2", or

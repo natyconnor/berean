@@ -25,7 +25,7 @@ import {
 } from "@/hooks/use-start-verse-refresh";
 import { formatDueDay } from "@/lib/memorize-plan";
 import { MEMORY_HOME } from "@/lib/memory-exit";
-import { REFRESH_MENU_LABEL } from "@/lib/memory-copy";
+import { LAPSED_ROW_LINE, REFRESH_MENU_LABEL } from "@/lib/memory-copy";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   averageReviewAccuracy,
@@ -356,7 +356,10 @@ export function ReviewResultRows({
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Next review {formatDueDay(attempt.schedule.dueAt, now)}
+                    {/* Every row here was a review, so Learning is a lapse. */}
+                    {attempt.schedule.status === "learning"
+                      ? LAPSED_ROW_LINE
+                      : `Next review ${formatDueDay(attempt.schedule.dueAt, now)}`}
                   </p>
                 </div>
               ) : (
