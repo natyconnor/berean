@@ -3053,13 +3053,16 @@ describe("PassageSession", () => {
       expect(answerBox()).toHaveValue("");
     }
 
-    /** First letters, then From memory, both passed; ends on the closing. */
-    async function runRefresher(full: string) {
+    /** `full` less its last word: a passing try under 100%. */
+    const allButLast = (full: string) => full.split(" ").slice(0, -1).join(" ");
+
+    /** First letters, then From memory (`full` by default); ends on the closing. */
+    async function runRefresher(full: string, fromMemory = full) {
       await expectFreshStep(STEP_ONE);
       await check(full);
       await clickButton(/Continue/);
       await expectFreshStep(STEP_TWO);
-      await check(full);
+      await check(fromMemory);
       expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
@@ -3185,10 +3188,11 @@ describe("PassageSession", () => {
       }
     });
 
-    it("R32: a pre-try refresher counts nothing and resumes the unattempted warm-up", async () => {
+    it("R32: a pre-try refresher under 100% counts nothing and resumes the unattempted warm-up", async () => {
       renderSession(warmup(["solid", "solid"]));
       await clickButton(LINK);
-      await runRefresher(WARMUP);
+      await runRefresher(WARMUP, allButLast(WARMUP));
+      expect(screen.getByText(/^9\d% recalled/)).toBeInTheDocument();
       expectOnlyLoggedTries(0);
 
       await clickButton(/Continue/);
@@ -3216,6 +3220,50 @@ describe("PassageSession", () => {
       );
     });
 
+    it("#403: a pre-try refresher at 100% counts as the warm-up and Continue opens the day's step", async () => {
+      renderSession(warmup(["solid", "solid"]));
+      await clickButton(LINK);
+      await runRefresher(WARMUP);
+      expect(screen.getByText(/^100% recalled/)).toBeInTheDocument();
+      // A 100% practice refresher offers only Continue (#381).
+      expect(screen.queryByRole("button", { name: /Try another/ })).toBeNull();
+
+      await clickButton(/Continue/);
+      expect(header("First letters")).toBeInTheDocument();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      expect(screen.queryByText(/Refresh ·/)).toBeNull();
+      expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      // The refresher try is still practice only: nothing is saved.
+      expectOnlyLoggedTries(0);
+      expect(
+        sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY),
+      ).not.toBeNull();
+    });
+
+    it("#403: a reload after a 100% warm-up refresher resumes the day's step", async () => {
+      const first = renderSession(warmup(["solid", "solid"]));
+      await clickButton(LINK);
+      await runRefresher(WARMUP);
+      await clickButton(/Continue/);
+      expect(header("First letters")).toBeInTheDocument();
+
+      // A reload runs no unmount cleanup: the marker stays, from an older
+      // page load.
+      const marker = JSON.parse(
+        sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY) ?? "null",
+      ) as { packId: string };
+      first.unmount();
+      sessionStorage.setItem(
+        PASSAGE_STEP_IN_PROGRESS_KEY,
+        JSON.stringify({ ...marker, origin: performance.timeOrigin - 1 }),
+      );
+      renderSession(warmup(["solid", "solid"]));
+
+      expect(header("First letters")).toBeInTheDocument();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      expectOnlyLoggedTries(0);
+    });
+
     it("leaves no in-progress marker while fixing a tricky spot in the warm-up", async () => {
       renderSession(longWarmup());
       await check(LONG_PAIR);
@@ -3233,7 +3281,6 @@ describe("PassageSession", () => {
       await clickButton(/Continue/);
       expect(header("Fix a tricky spot")).toBeInTheDocument();
       expect(screen.getByText("Try this part again")).toBeInTheDocument();
-      const nextScreen = document.body.textContent;
       const loggedTry = record().mock.calls[0]?.[0] as Record<string, unknown>;
       expectOnlyLoggedTries(1);
       control.unmount();
@@ -3274,11 +3321,10 @@ describe("PassageSession", () => {
       expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
       expectOnlyLoggedTries(1);
 
+      // A 100% From memory counts as the warm-up: on to the day's step (#403).
       await clickButton(/Continue/);
-      expect(header("Fix a tricky spot")).toBeInTheDocument();
-      await waitFor(() => expect(answerBox()).toHaveFocus());
-      expect(answerBox()).toHaveValue("");
-      expect(document.body.textContent).toBe(nextScreen);
+      expect(header("Read")).toBeInTheDocument();
+      expect(screen.queryByText("Try this part again")).toBeNull();
       expectOnlyLoggedTries(1);
       const refreshedTry = record().mock.calls[0]?.[0] as Record<
         string,
@@ -3294,6 +3340,54 @@ describe("PassageSession", () => {
       expect(loggedTry).toEqual(
         expect.objectContaining({ kind: "rope", accuracy: 67 }),
       );
+    });
+
+    it("#403: a missed warm-up then a 100% refresher goes to the day's step and stays there on reload", async () => {
+      const first = renderSession(longWarmup());
+      await check(LONG_PAIR);
+      await clickButton(LINK);
+      await runRefresher(LONG_WARMUP);
+      expect(screen.getByText(/^100% recalled/)).toBeInTheDocument();
+
+      await clickButton(/Continue/);
+      expect(header("Read")).toBeInTheDocument();
+      expect(screen.queryByText("Try this part again")).toBeNull();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      // Only the logged miss is saved; the refresher adds nothing.
+      expectOnlyLoggedTries(1);
+      expect(record()).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "rope", accuracy: 67 }),
+      );
+
+      // A reload runs no unmount cleanup: the marker stays, from an older
+      // page load.
+      const marker = JSON.parse(
+        sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY) ?? "null",
+      ) as { packId: string } | null;
+      expect(marker).not.toBeNull();
+      first.unmount();
+      sessionStorage.setItem(
+        PASSAGE_STEP_IN_PROGRESS_KEY,
+        JSON.stringify({ ...marker, origin: performance.timeOrigin - 1 }),
+      );
+      renderSession(longWarmup());
+
+      expect(header("Read")).toBeInTheDocument();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      expectOnlyLoggedTries(1);
+    });
+
+    it("#403: a missed warm-up then an under-100% refresher still goes to Fix a tricky spot", async () => {
+      renderSession(longWarmup());
+      await check(LONG_PAIR);
+      await clickButton(LINK);
+      await runRefresher(LONG_WARMUP, allButLast(LONG_WARMUP));
+      expect(screen.getByText(/^9\d% recalled/)).toBeInTheDocument();
+
+      await clickButton(/Continue/);
+      expect(header("Fix a tricky spot")).toBeInTheDocument();
+      expect(screen.getByText("Try this part again")).toBeInTheDocument();
+      expectOnlyLoggedTries(1);
     });
 
     it("R37: offers the section recital a link and an under-85% offer over that section's verses", async () => {
@@ -3632,7 +3726,7 @@ describe("PassageSession", () => {
         await clickButton(/Continue/);
         await expectFreshStep(STEP_TWO);
         expectControls(false);
-        await check(RANGE);
+        await check(allButLast(RANGE));
         expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
         expectControls(false);
 
@@ -3655,7 +3749,7 @@ describe("PassageSession", () => {
         await clickButton(/Continue/);
         await expectFreshStep(STEP_TWO);
         expectControls(false);
-        await check(RANGE);
+        await check(allButLast(RANGE));
         expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
         expectControls(false);
 
@@ -3687,7 +3781,7 @@ describe("PassageSession", () => {
       );
       await user.keyboard("{Enter}");
       await expectFreshStep(STEP_TWO);
-      await user.paste(WARMUP);
+      await user.paste(allButLast(WARMUP));
       await user.keyboard("{Enter}");
       expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
       await waitFor(() =>

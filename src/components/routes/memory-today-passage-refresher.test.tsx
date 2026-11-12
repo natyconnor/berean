@@ -207,13 +207,13 @@ async function click(name: RegExp | string) {
   await userEvent.click(await screen.findByRole("button", { name }));
 }
 
-/** First letters then From memory, both clean, then Continue. */
-async function refresh(full: string) {
+/** First letters then From memory (clean by default), then Continue. */
+async function refresh(full: string, fromMemory = full) {
   await screen.findByText("Refresh · First letters · 1 of 2");
   await check(full);
   await click(/Continue/);
   await screen.findByText("Refresh · From memory · 2 of 2");
-  await check(full);
+  await check(fromMemory);
   await screen.findByText("Practice only, your progress didn't change.");
   await click(/Continue/);
 }
@@ -336,7 +336,8 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     const refreshed = await runDay(warmupDay, async () => {
       await miss();
       await click(LINK);
-      await refresh(WARMUP);
+      // Under 100%, so the tricky spot still follows (a 100% counts, #403).
+      await refresh(WARMUP, WARMUP.split(" ").slice(0, -1).join(" "));
       await fixTrickySpot();
     });
 
@@ -398,7 +399,8 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     });
     const refreshed = await runDay(warmupDay, async () => {
       await click(LINK);
-      await refresh(WARMUP);
+      // Under 100%, so the warm-up is still asked for (a 100% counts, #403).
+      await refresh(WARMUP, WARMUP.split(" ").slice(0, -1).join(" "));
       // Back on the untried warm-up: nothing was logged by the refresher.
       expect(record()).not.toHaveBeenCalled();
       await check(WARMUP);
