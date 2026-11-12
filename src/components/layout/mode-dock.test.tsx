@@ -1,10 +1,15 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetApplyLeftoverHeldAttemptsForTests } from "@/hooks/use-apply-leftover-held-attempts";
 import { resetEnsureInMemoryBackfillForTests } from "@/hooks/use-ensure-in-memory-backfill";
+import {
+  clearLearnPackDismissal,
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { clearModeLastLocations } from "@/lib/mode-last-location";
 import { ModeDock } from "./mode-dock";
 
@@ -381,6 +386,7 @@ describe("ModeDock dueCount subscription", () => {
 
   afterEach(() => {
     clearModeLastLocations();
+    localStorage.clear();
   });
 
   it("skips live dueCount on Learn, Practice, Review, and pack sessions", () => {
@@ -430,6 +436,39 @@ describe("ModeDock dueCount subscription", () => {
 
     expect(mocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
     expect(screen.getByLabelText("3 verses due today")).toBeInTheDocument();
+  });
+
+  it("passes today's set-aside passages and updates when one is set aside", () => {
+    mocks.useLocation.mockReturnValue({ pathname: "/memory", href: "/memory" });
+    render(<ModeDock />);
+    const lastDueArgs = () =>
+      mocks.useQuery.mock.calls.at(-1)?.[1] as {
+        now: number;
+        dismissedPackIds?: string[];
+      };
+    const dayKey = learnDismissDayKey(lastDueArgs().now);
+    expect(lastDueArgs().dismissedPackIds).toBeUndefined();
+
+    act(() => dismissLearnPackForToday("psalm16", dayKey));
+    expect(lastDueArgs().dismissedPackIds).toEqual(["psalm16"]);
+
+    act(() => {
+      clearLearnPackDismissal("psalm16", dayKey);
+    });
+    expect(lastDueArgs().dismissedPackIds).toBeUndefined();
+  });
+
+  it("counts a passage set aside on an earlier day again", () => {
+    mocks.useLocation.mockReturnValue({ pathname: "/memory", href: "/memory" });
+    localStorage.setItem(
+      "berean:learn-dismissed-packs",
+      JSON.stringify({ day: 0, packIds: ["psalm16"] }),
+    );
+    render(<ModeDock />);
+    const args = mocks.useQuery.mock.calls.at(-1)?.[1] as {
+      dismissedPackIds?: string[];
+    };
+    expect(args.dismissedPackIds).toBeUndefined();
   });
 });
 

@@ -84,6 +84,7 @@ import {
   countDuePassageReviews,
   countProjectedPassageLearning,
   isPassageDueForReview,
+  withoutDismissedPassages,
 } from "../src/lib/passage-due";
 import {
   bucketForecastCounts,
@@ -474,9 +475,17 @@ export const dueForVerse = query({
  * in-progress learning can stamp `dueAt` with a live clock while this query
  * uses a frozen session `now`. Session locks are still excluded by
  * {@link isDueForLearning}.
+ *
+ * `dismissedPackIds` are the passages set aside with "That's enough for today"
+ * on this local day; their passage review or learning session is left out, as
+ * on the Today card.
  */
 export const dueCount = query({
-  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    dismissedPackIds: v.optional(v.array(v.string())),
+  },
   returns: v.number(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
@@ -520,11 +529,15 @@ export const dueCount = query({
         count += 1;
       }
     }
+    const countedPassages = withoutDismissedPassages(
+      passageRows,
+      args.dismissedPackIds,
+    );
     return (
       count +
       countDueUnifiedReviewPacks(unifiedPacks, args.now) +
-      countDuePassageReviews(passageRows, args.now) +
-      countProjectedPassageLearning(passageRows, args.now, tzOffsetMinutes)
+      countDuePassageReviews(countedPassages, args.now) +
+      countProjectedPassageLearning(countedPassages, args.now, tzOffsetMinutes)
     );
   },
 });
@@ -1285,13 +1298,20 @@ export const memoryStatus = query({
  *   learner is still working through. Pass `tzOffsetMinutes` so introduce
  *   budget uses the viewer's local day.
  *
+ * Passages in `dismissedPackIds` (set aside today, as for {@link dueCount})
+ * are left out of both tallies.
+ *
  * Status totals come from denormalized `userMemoryStats` (O(1)). Due counts are
  * still computed live from a bounded due-index scan (time-dependent). Dashboard
  * Mastery / in-memory KPIs should subscribe to {@link memoryStatus} instead so
  * they do not wait on this due half.
  */
 export const memoryStats = query({
-  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    dismissedPackIds: v.optional(v.array(v.string())),
+  },
   returns: memoryStatsValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
@@ -1333,9 +1353,13 @@ export const memoryStats = query({
       if (isDueForLearning(row, args.now)) learningDue += 1;
     }
     due += countDueUnifiedReviewPacks(unifiedPacks, args.now);
-    due += countDuePassageReviews(passageRows, args.now);
-    learningDue += countProjectedPassageLearning(
+    const countedPassages = withoutDismissedPassages(
       passageRows,
+      args.dismissedPackIds,
+    );
+    due += countDuePassageReviews(countedPassages, args.now);
+    learningDue += countProjectedPassageLearning(
+      countedPassages,
       args.now,
       tzOffsetMinutes,
     );

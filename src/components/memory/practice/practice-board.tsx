@@ -1267,26 +1267,29 @@ export function PracticeBoard({
                           ? { ok: true as const, schedule: next }
                           : { ok: false as const },
                       )
-                    : await recordWithSeqAdopt(
-                        verseId,
-                        {
-                          reference: currentVerse.reference,
-                          verseRefId: currentVerse.verseRefId,
-                          tokens,
-                          stage: currentProgress.learnStage,
-                          wordCount,
-                          now: opts?.now,
-                          hint: opts?.hint,
-                          holdSchedule: opts?.holdSchedule,
-                          refresherUsed: opts?.refresherUsed,
-                          replaceHeldId: opts?.replaceHeldId as
-                            Id<"heldVerseAttempts"> | undefined,
-                        },
-                        (schedule) => {
-                          if (hold || opts?.skipSessionRow) return;
-                          adoptVerseSchedule(verseId, schedule);
-                        },
-                      );
+                    : opts?.skipSessionRow
+                      ? // Try another on a verse is practice: neither step saves.
+                        { ok: true as const, schedule: null }
+                      : await recordWithSeqAdopt(
+                          verseId,
+                          {
+                            reference: currentVerse.reference,
+                            verseRefId: currentVerse.verseRefId,
+                            tokens,
+                            stage: currentProgress.learnStage,
+                            wordCount,
+                            now: opts?.now,
+                            hint: opts?.hint,
+                            holdSchedule: opts?.holdSchedule,
+                            refresherUsed: opts?.refresherUsed,
+                            replaceHeldId: opts?.replaceHeldId as
+                              Id<"heldVerseAttempts"> | undefined,
+                          },
+                          (schedule) => {
+                            if (hold) return;
+                            adoptVerseSchedule(verseId, schedule);
+                          },
+                        );
                 if (hold || !counted.ok) return counted;
                 if (opts?.skipSessionRow) {
                   // Try another's From memory: the row shows it last, but it

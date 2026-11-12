@@ -86,6 +86,19 @@ export function countDuePassageReviews(
   return count;
 }
 
+/**
+ * Passages still counted today: drops packs set aside with "That's enough for
+ * today", as `applyTodayDismissals` does on the Today card.
+ */
+export function withoutDismissedPassages<T extends { packId: string }>(
+  rows: readonly T[],
+  dismissedPackIds: readonly string[] | undefined,
+): readonly T[] {
+  if (!dismissedPackIds || dismissedPackIds.length === 0) return rows;
+  const dismissed = new Set(dismissedPackIds);
+  return rows.filter((row) => !dismissed.has(row.packId));
+}
+
 export function countDuePassageLearning(
   rows: readonly PassageDueRow[],
   now: number,

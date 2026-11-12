@@ -7,6 +7,7 @@ import { KpiRow } from "@/components/memory/dashboard/kpi-row";
 import { InternalLink } from "@/components/memory/internal-link";
 import { GoalKindIcon } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
+import { useLearnPacksDismissedToday } from "@/hooks/use-learn-packs-dismissed-today";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTodayModel, type TodayGoal } from "@/hooks/use-today-model";
 import { MASTERED_INTERVAL_DAYS } from "@/lib/memory-scheduler";
@@ -25,9 +26,11 @@ import { progressKpis, useProgressActivity } from "./use-progress-activity";
 export function ProgressBody() {
   const now = useLiveNow();
   const status = useQuery(api.verseMemory.memoryStatus, {});
+  const dismissedPackIds = useLearnPacksDismissedToday(now);
   const stats = useQuery(api.verseMemory.memoryStats, {
     now,
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+    dismissedPackIds,
   });
   const { activity, forecast } = useProgressActivity(now);
   const today = useTodayModel(now);

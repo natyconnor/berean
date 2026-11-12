@@ -1,8 +1,12 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { DAY_MS } from "@/lib/memory-scheduler";
 
 import { ProgressBody } from "./progress-body";
@@ -11,6 +15,7 @@ const NOW = Date.UTC(2026, 9, 9, 18, 0, 0);
 
 const mocks = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
+  queryArgs: new Map<string, unknown>(),
   navigate: vi.fn(),
 }));
 
@@ -35,8 +40,10 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
-  useQuery: (name: string, args: unknown) =>
-    args === "skip" ? undefined : mocks.queryResults.get(name),
+  useQuery: (name: string, args: unknown) => {
+    mocks.queryArgs.set(name, args);
+    return args === "skip" ? undefined : mocks.queryResults.get(name);
+  },
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -125,6 +132,10 @@ describe("ProgressBody", () => {
     });
   });
 
+  afterEach(() => {
+    localStorage.clear();
+  });
+
   it("shows KPIs, goal rows and chart placeholders when goals exist but there's no practice yet", () => {
     mocks.queryResults.set("memoryHome.today", {
       ...TODAY_BASE,
@@ -173,5 +184,21 @@ describe("ProgressBody", () => {
       "/memory",
     );
     expect(screen.queryByText("Due today")).not.toBeInTheDocument();
+  });
+
+  it("leaves passages set aside today out of due today", () => {
+    mocks.queryResults.set("memoryHome.today", TODAY_BASE);
+    renderBody();
+    expect(mocks.queryArgs.get("verseMemory.memoryStats")).toMatchObject({
+      now: NOW,
+      dismissedPackIds: undefined,
+    });
+
+    act(() => dismissLearnPackForToday("psalm16", learnDismissDayKey(NOW)));
+
+    expect(mocks.queryArgs.get("verseMemory.memoryStats")).toMatchObject({
+      now: NOW,
+      dismissedPackIds: ["psalm16"],
+    });
   });
 });
