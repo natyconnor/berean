@@ -89,6 +89,7 @@ import {
 } from "@/lib/learn-dismissed-packs";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
+import type { PassageGoalCard } from "@/lib/memory-goals";
 import { spanDisplayTitle } from "@/lib/memorize-target";
 import {
   useRefreshReturnFocus,
@@ -359,11 +360,9 @@ function PackDetailContent({
         ) : null}
 
         {passage ? (
-          <PassageVerses
-            passage={passage}
-            now={now}
-            tzOffsetMinutes={tzOffsetMinutes}
-          />
+          passageGoal ? (
+            <PassageVerses passage={passage} goal={passageGoal} now={now} />
+          ) : null
         ) : (
           <PackVerses
             pack={pack}
@@ -1177,23 +1176,23 @@ const CHIP_CLASS: Record<PassageVerseChipKind, string> = {
 
 function PassageVerses({
   passage,
+  goal,
   now,
-  tzOffsetMinutes,
 }: {
   passage: Passage;
+  goal: PassageGoalCard;
   now: number;
-  tzOffsetMinutes: number;
 }) {
   const chapters = useMemo(() => {
     const groups: { key: string; rows: PassageVerseRow[] }[] = [];
-    for (const row of passageVerseRows(passage, now, tzOffsetMinutes)) {
+    for (const row of passageVerseRows(passage, goal, now)) {
       const key = `${row.book}|${row.chapter}`;
       const last = groups[groups.length - 1];
       if (last?.key === key) last.rows.push(row);
       else groups.push({ key, rows: [row] });
     }
     return groups;
-  }, [passage, now, tzOffsetMinutes]);
+  }, [passage, goal, now]);
 
   return (
     <VersesSection

@@ -8,7 +8,6 @@ import {
 } from "./memory-copy";
 import {
   goalLearnPace,
-  passageTodayPieceIndex,
   type GoalCard,
   type PackGoalCard,
   type PassageGoalCard,
@@ -497,24 +496,20 @@ function learningChip(when: "today" | "tomorrow"): PassageVerseRow["chip"] {
 /**
  * One row per verse of a passage: Memorized, Learning today (today's piece,
  * or any piece open today), Learning (its next step is tomorrow), or Up next.
- * A memorized piece the passage kept from before it started says so.
+ * A memorized piece the passage kept from before it started says so. What is
+ * today's comes from the passage's goal, so a passage set aside for today
+ * has nothing "Learning today".
  */
 export function passageVerseRows(
-  passage: Pick<PackDetailPassage, "pieces" | "addsOnDay" | "addDayKey">,
+  passage: Pick<PackDetailPassage, "pieces">,
+  goal: Pick<PassageGoalCard, "hasWorkToday" | "pieceStates">,
   now: number,
-  tzOffsetMinutes: number,
 ): PassageVerseRow[] {
   const pieces = coerceUnstartedLearningPieces(passage.pieces);
-  const todayIndex = passageTodayPieceIndex(
-    passage,
-    pieces,
-    now,
-    tzOffsetMinutes,
-  );
 
   return pieces.flatMap((piece, index) => {
     let chip: PassageVerseRow["chip"];
-    if (index === todayIndex) {
+    if (goal.pieceStates[index]?.today) {
       chip = learningChip("today");
     } else if (
       piece.attachment === "solid" ||
@@ -524,7 +519,9 @@ export function passageVerseRows(
       if (piece.carriedOver) chip.fromBefore = true;
     } else if (piece.attachment === "learning") {
       chip = learningChip(
-        isPassagePieceLocked(piece, now) ? "tomorrow" : "today",
+        goal.hasWorkToday && !isPassagePieceLocked(piece, now)
+          ? "today"
+          : "tomorrow",
       );
     } else {
       chip = { kind: "upNext", label: "Up next" };

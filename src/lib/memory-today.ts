@@ -11,7 +11,7 @@ import {
   estimateSessionMinutes,
   formatShortDate,
 } from "./memorize-plan";
-import { isDueForLearning, isDueForReview } from "./memory-scheduler";
+import { DAY_MS, isDueForLearning, isDueForReview } from "./memory-scheduler";
 
 /**
  * The Today home in one model: what is left today, what was done today, the
@@ -252,14 +252,18 @@ export function buildTodayModel<P extends string, V extends string>(
 
 /**
  * A passage set aside with "That's enough for today" is done for this local
- * day: drop it from Today's work, like a finished item.
+ * day: drop it from Today's work, like a finished item. Its next session is
+ * tomorrow and no piece is today's.
  */
 export function applyTodayDismissals<T extends TodayModel<string, string>>(
   model: T,
   dismissedPackIds: ReadonlySet<string>,
+  now: number,
+  tzOffsetMinutes: number,
 ): T {
   if (dismissedPackIds.size === 0) return model;
 
+  const tomorrowStart = localDayStart(now, tzOffsetMinutes) + DAY_MS;
   let droppedSessions = 0;
   let droppedReviews = 0;
   const goals = model.goals.map((goal) => {
@@ -272,7 +276,16 @@ export function applyTodayDismissals<T extends TodayModel<string, string>>(
     }
     if (goal.status === "building") droppedSessions += 1;
     else droppedReviews += 1;
-    return { ...goal, hasWorkToday: false, todayStep: null };
+    return {
+      ...goal,
+      hasWorkToday: false,
+      todayStep: null,
+      pieceStates: goal.pieceStates.map((piece) => ({
+        ...piece,
+        today: false,
+      })),
+      nextDueAt: tomorrowStart,
+    };
   });
   if (droppedSessions === 0 && droppedReviews === 0) return model;
 

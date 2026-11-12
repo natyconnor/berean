@@ -158,12 +158,15 @@ describe("buildTodayModel: state", () => {
     expect(model.state).toBe("work");
     expect(model.counts.passageSessions).toBe(1);
 
-    const next = applyTodayDismissals(model, new Set(["psalm16"]));
+    const next = applyTodayDismissals(model, new Set(["psalm16"]), NOW, 0);
     expect(next.counts.passageSessions).toBe(0);
     expect(next.state).toBe("caughtUp");
     expect(next.goals[0]).toMatchObject({
       packId: "psalm16",
       hasWorkToday: false,
+      todayStep: null,
+      pieceStates: [{ verses: 1, state: "upNext", today: false }],
+      nextDueAt: TOMORROW,
     });
   });
 

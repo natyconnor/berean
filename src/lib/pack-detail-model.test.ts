@@ -7,7 +7,7 @@ import {
   type PassageGoalCard,
 } from "./memory-goals";
 import { DAY_MS, EASE_START } from "./memory-scheduler";
-import { buildTodayModel } from "./memory-today";
+import { applyTodayDismissals, buildTodayModel } from "./memory-today";
 import { packUpNextAcrossPacks } from "./pack-pacing";
 import { todayGoalCardModel } from "./today-goal-card";
 import {
@@ -445,6 +445,71 @@ describe("matches Today's goal card", () => {
     });
   });
 
+  describe("passage set aside with That's enough for today", () => {
+    // Verse 5 done today, verse 6 is today's next piece until it is set aside.
+    const row = passage({
+      pieces: [
+        piece(0, 1, 4, "solid"),
+        piece(1, 5, 5, "learning", { learnStage: 1, dueAt: TOMORROW }),
+        piece(2, 6, 6, "unreached"),
+        piece(3, 7, 10, "unreached"),
+      ],
+      addsOnDay: 1,
+      addDayKey: localDayIndex(NOV_10, 0),
+      lastSessionAt: NOV_10 - HOUR_MS,
+    });
+
+    function goalFor(dismissed: ReadonlySet<string>): PassageGoalCard {
+      const today = applyTodayDismissals(
+        todayFor(PSALM_16, [], row, NOV_10),
+        dismissed,
+        NOV_10,
+        0,
+      );
+      const goal = packDetailGoal(today.goals, PSALM_16.packId);
+      if (goal?.kind !== "passage") throw new Error("expected a passage goal");
+      return goal;
+    }
+
+    const chipOf = (goal: PassageGoalCard, verse: number) =>
+      passageVerseRows(row, goal, NOV_10).find((r) => r.verse === verse)?.chip
+        .label;
+
+    it("before: verse 6 is Learning today and both offer Continue", () => {
+      const goal = goalFor(new Set());
+      expect(chipOf(goal, 6)).toBe("Learning today");
+      expect(todayGoalCardModel(goal, NOV_10, TZ).action?.label).toMatch(
+        /^Continue · /,
+      );
+      const main = passageDetailActions(goal, NOV_10, TZ).main;
+      expect(main?.kind).toBe("session");
+      expect(main?.label).toMatch(/^Continue · /);
+    });
+
+    it("after: Up next tomorrow on both, no Continue, no Learning today", () => {
+      const goal = goalFor(new Set([PSALM_16.packId]));
+
+      const card = todayGoalCardModel(goal, NOV_10, TZ);
+      expect(card.action).toBeNull();
+      expect(card.chip).toEqual({ tone: "done", label: "Done today" });
+      expect(card.steps).toEqual([
+        { kind: "done", text: "Today's step done. Next step tomorrow." },
+      ]);
+
+      expect(passageDetailActions(goal, NOV_10, TZ).main).toEqual({
+        kind: "waiting",
+        label: "Up next tomorrow",
+      });
+
+      const chips = passageVerseRows(row, goal, NOV_10).map(
+        (r) => r.chip.label,
+      );
+      expect(chips).not.toContain("Learning today");
+      expect(chipOf(goal, 5)).toBe("Learning");
+      expect(chipOf(goal, 6)).toBe("Up next");
+    });
+  });
+
   it("pack with work today: Continue on both", () => {
     const goal = packGoal(MERCED_MEMBERS);
     expect(goal.hasWorkToday).toBe(true);
@@ -658,19 +723,19 @@ describe("packMemberRow", () => {
 });
 
 describe("passageVerseRows", () => {
+  function rowsFor(extra: Partial<PackDetailPassage> = {}) {
+    return passageVerseRows(passage(extra), passageGoal(extra), NOW);
+  }
+
   it("marks the first unreached piece as Learning today when the passage is due", () => {
-    const rows = passageVerseRows(
-      passage({
-        pieces: [
-          piece(0, 1, 1, "unreached"),
-          piece(1, 2, 2, "unreached"),
-          piece(2, 3, 3, "unreached"),
-        ],
-        addsOnDay: 0,
-      }),
-      NOW,
-      0,
-    );
+    const rows = rowsFor({
+      pieces: [
+        piece(0, 1, 1, "unreached"),
+        piece(1, 2, 2, "unreached"),
+        piece(2, 3, 3, "unreached"),
+      ],
+      addsOnDay: 0,
+    });
     expect(rows.map((row) => [row.verse, row.chip.label])).toEqual([
       [1, "Learning today"],
       [2, "Up next"],
@@ -679,7 +744,7 @@ describe("passageVerseRows", () => {
   });
 
   it("chips each verse: Memorized, Learning today, Up next", () => {
-    const rows = passageVerseRows(passage(), NOW, 0);
+    const rows = rowsFor();
     expect(rows).toHaveLength(11);
     expect(rows.map((row) => [row.verse, row.chip.label])).toEqual([
       [1, "Memorized"],
@@ -697,38 +762,30 @@ describe("passageVerseRows", () => {
   });
 
   it("shows a piece done for today as still learning", () => {
-    const rows = passageVerseRows(
-      passage({
-        pieces: [
-          piece(0, 1, 4, "solid"),
-          piece(1, 5, 6, "learning", {
-            learnStage: 2,
-            dueAt: NOW + 12 * HOUR_MS,
-          }),
-          piece(2, 7, 11, "unreached"),
-        ],
-        addsOnDay: 5,
-        addDayKey: TODAY_KEY,
-      }),
-      NOW,
-      0,
-    );
+    const rows = rowsFor({
+      pieces: [
+        piece(0, 1, 4, "solid"),
+        piece(1, 5, 6, "learning", {
+          learnStage: 2,
+          dueAt: NOW + 12 * HOUR_MS,
+        }),
+        piece(2, 7, 11, "unreached"),
+      ],
+      addsOnDay: 5,
+      addDayKey: TODAY_KEY,
+    });
     expect(rows[4]?.chip).toEqual({ kind: "tomorrow", label: "Learning" });
     expect(rows[6]?.chip.kind).toBe("upNext");
   });
 
   it("marks memorized verses the passage kept from before", () => {
-    const rows = passageVerseRows(
-      passage({
-        pieces: [
-          piece(0, 1, 4, "solid"),
-          piece(1, 5, 6, "solid", { carriedOver: true }),
-          piece(2, 7, 11, "unreached"),
-        ],
-      }),
-      NOW,
-      0,
-    );
+    const rows = rowsFor({
+      pieces: [
+        piece(0, 1, 4, "solid"),
+        piece(1, 5, 6, "solid", { carriedOver: true }),
+        piece(2, 7, 11, "unreached"),
+      ],
+    });
     expect(rows[0]?.chip).toEqual({ kind: "memorized", label: "Memorized" });
     expect(rows[4]?.chip).toEqual({
       kind: "memorized",
