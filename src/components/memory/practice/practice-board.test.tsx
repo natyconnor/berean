@@ -42,6 +42,7 @@ import {
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
+import { ReviewResultRows } from "@/components/memory/review-summary";
 
 import {
   PracticeBoard,
@@ -561,6 +562,134 @@ describe("PracticeBoard composite recitation", () => {
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Refresher used/)).not.toBeInTheDocument();
   });
+
+  it("gives a lapsed pack verse one learned percent on its result bar, summary row and learn page (#395)", async () => {
+    // Matthew 6:33 stands in for verse 1: 19 words, so Challenge 0 is 42%.
+    // The pack's 27 words would read 46%, and no word count 40%.
+    const longVerse =
+      "But seek first the kingdom of God and his righteousness, and all these things will be added to you.";
+    const chapter: EsvChapterData = {
+      ...psalm23,
+      verses: [{ number: 1, text: longVerse }, psalm23.verses[1]],
+    };
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: chapter }]);
+    getPassageMock.mockResolvedValue(chapter);
+    const now = getSessionNow();
+    const memberSchedule = {
+      status: "reviewing" as const,
+      learnStage: 3,
+      stageReps: 0,
+      dueAt: now,
+      ease: 2.3,
+      intervalDays: 1,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    };
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    const board = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[
+            {
+              ...compositeVerse,
+              composite: {
+                packId: PACK_ID,
+                members: [span(1, 1), span(2, 2)],
+                memberSchedules: [memberSchedule, memberSchedule],
+              },
+            },
+          ]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          remainingDue={0}
+          onRunStateChange={onRunStateChange}
+        />
+      </TooltipProvider>,
+    );
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+
+    // Result card: verse 1's member bar.
+    const resultRow = screen
+      .getAllByText("Psalm 23:1")
+      .map((label) => label.closest("li"))
+      .find((li) => li?.querySelector("[data-journey-track]"));
+    expect(
+      within(resultRow as HTMLElement).getByLabelText(/^Learning journey: /),
+    ).toHaveAttribute(
+      "aria-label",
+      "Learning journey: Fill in the blanks · 42%",
+    );
+
+    // Summary row, from the attempts the board recorded.
+    const attempts = [...(onRunStateChange.mock.lastCall?.[0].attempts ?? [])];
+    const lapsed = attempts[0]?.schedule;
+    expect(lapsed).toMatchObject({
+      status: "learning",
+      learnStage: REVIEW_LAPSE_LEARN_STAGE,
+      stageReps: 0,
+    });
+    board.unmount();
+    const summary = render(
+      <TooltipProvider delayDuration={0}>
+        <ReviewResultRows
+          attempts={attempts}
+          summary={{
+            kind: "review",
+            attempts,
+            averageAccuracy: null,
+            remaining: 0,
+            doneLabel: "Done",
+            canContinue: false,
+          }}
+        />
+      </TooltipProvider>,
+    );
+    const summaryRow = screen.getByText("Psalm 23:1").closest("li");
+    expect(
+      within(summaryRow as HTMLElement).getByLabelText(/^Learning journey: /),
+    ).toHaveAttribute(
+      "aria-label",
+      "Learning journey: Fill in the blanks · 42%",
+    );
+    summary.unmount();
+
+    // Its own learn page with the same schedule.
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[
+            {
+              verseRefId: "vr_ps23_1" as PracticeVerse["verseRefId"],
+              reference: span(1, 1),
+              ...memberSchedule,
+              ...lapsed,
+            },
+          ]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => {
+      const labels = screen
+        .getAllByLabelText(/^Learning journey: /)
+        .map((bar) => bar.getAttribute("aria-label"));
+      expect(labels).toEqual([
+        "Learning journey: Fill in the blanks · 42%",
+        "Learning journey: Fill in the blanks · 42%",
+      ]);
+    });
+  });
 });
 
 const VERSE_REF_ID = "vr_ps23_1" as Id<"verseRefs">;
@@ -595,6 +724,39 @@ describe("PracticeBoard learning Read prime", () => {
       consecutiveCorrect: 1,
       lapses: 0,
       earlyReviewApplied: false,
+    });
+  });
+
+  it("reads 42% learned for a 19-word verse at Challenge 0 (#395)", async () => {
+    getPassageMock.mockResolvedValue({
+      ...psalm23,
+      verses: [
+        {
+          number: 1,
+          text: "But seek first the kingdom of God and his righteousness, and all these things will be added to you.",
+        },
+        psalm23.verses[1],
+      ],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...learningVerse, learnStage: 2, stageReps: 0 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    // The card and the rail both show the bar.
+    await waitFor(() => {
+      const labels = screen
+        .getAllByLabelText(/^Learning journey: /)
+        .map((bar) => bar.getAttribute("aria-label"));
+      expect(labels).toEqual([
+        "Learning journey: Fill in the blanks · 42%",
+        "Learning journey: Fill in the blanks · 42%",
+      ]);
     });
   });
 
@@ -3047,6 +3209,63 @@ describe("PracticeBoard held first try", () => {
     );
     const recordCalls = record.mock.calls as Array<[Record<string, unknown>]>;
     expect(recordCalls.some((call) => call[0]?.replaceHeldId)).toBe(true);
+  });
+
+  it("gives the result and the summary row one learned percent after a counted miss (#395)", async () => {
+    // Matthew 6:33, 19 words: Challenge 0 is 5 of 12 reps (42%), not the
+    // short-verse 4 of 10 (40%).
+    const longVerse =
+      "But seek first the kingdom of God and his righteousness, and all these things will be added to you.";
+    getPassageMock.mockResolvedValue({
+      ...psalm23,
+      verses: [{ number: 1, text: longVerse }, psalm23.verses[1]],
+    });
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce({
+        ...stillDueSchedule,
+        status: "learning",
+        learnStage: REVIEW_LAPSE_LEARN_STAGE,
+        intervalDays: 0,
+        dueAt: getSessionNow() + DAY_MS,
+      });
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onRunStateChange });
+    await holdColdMiss(BAD_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(longVerse);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    // The result bar on the card.
+    await waitFor(() => {
+      expect(
+        withinCard().getByLabelText(/^Learning journey: /),
+      ).toHaveAttribute(
+        "aria-label",
+        "Learning journey: Fill in the blanks · 42%",
+      );
+    });
+    // The summary row gets the same word count with its schedule.
+    const [state] = onRunStateChange.mock.lastCall ?? [];
+    const [row] = groupReviewSessionAttempts(state?.attempts ?? []);
+    expect(row?.schedule).toMatchObject({
+      status: "learning",
+      learnStage: REVIEW_LAPSE_LEARN_STAGE,
+      stageReps: 0,
+    });
+    expect(row?.wordCount).toBe(19);
   });
 
   it("runs a later round as practice only", async () => {

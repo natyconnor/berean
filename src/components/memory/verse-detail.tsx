@@ -379,6 +379,8 @@ export function VerseDetailBody({
           <LearningJourneyBar
             learnStage={detail.learnStage}
             stageReps={detail.stageReps}
+            // Review phase only, where the word count doesn't change the bar.
+            wordCount={undefined}
             status={detail.status}
             intervalDays={detail.intervalDays}
             ease={detail.ease}

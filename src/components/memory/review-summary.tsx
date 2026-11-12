@@ -343,6 +343,7 @@ export function ReviewResultRows({
                   <LearningJourneyBar
                     learnStage={attempt.schedule.learnStage}
                     stageReps={attempt.schedule.stageReps}
+                    wordCount={attempt.wordCount}
                     status={attempt.schedule.status}
                     intervalDays={attempt.schedule.intervalDays}
                     ease={attempt.schedule.ease}

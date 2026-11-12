@@ -541,6 +541,29 @@ describe("Summary Refresh (S9, R21)", () => {
     expect(refresh.closest("li")).toHaveClass("flex-wrap");
     expect(refresh.parentElement).toHaveClass("flex-wrap");
   });
+
+  it("reads the row's learned percent with the verse's word count (#395)", async () => {
+    // Matthew 6:33, 19 words, at Challenge 0: 5 of 12 reps, not 4 of 10.
+    const matthew: ReviewSessionAttempt = {
+      reference: { book: "Matthew", chapter: 6, startVerse: 33, endVerse: 33 },
+      accuracy: 40,
+      schedule: { ...schedule("learning"), learnStage: 2, stageReps: 0 },
+      wordCount: 19,
+    };
+    renderSummary(
+      <ReviewSummary
+        attempts={[matthew]}
+        averageAccuracy={40}
+        remaining={0}
+        onDone={onDone}
+      />,
+    );
+    expect(
+      await screen.findByLabelText(
+        "Learning journey: Fill in the blanks · 42%",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("Summary row scores (#346 AC14, R23)", () => {

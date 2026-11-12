@@ -429,6 +429,19 @@ function reviewedOutcomeLine(
   return nextReviewLine(progress, now);
 }
 
+/**
+ * A pack member's own word count, from the composite segment for that member
+ * (segments follow the member order). Its bar then reads the same learned
+ * percent as that verse's learn page.
+ */
+function segmentWordCount(
+  segments: readonly CompositePassageSegment[] | undefined,
+  index: number,
+): number | undefined {
+  const segment = segments?.[index];
+  return segment ? countVerseWords(segment.text) : undefined;
+}
+
 function journeyFillFrom(schedule: {
   learnStage: number;
   stageReps?: number;
@@ -1209,7 +1222,7 @@ export function PracticeBoard({
                   return { ok: false as const };
                 }
               }}
-              onApplyHeld={async (heldId, accuracy) => {
+              onApplyHeld={async (heldId, accuracy, wordCount) => {
                 const verseId = currentVerse.id;
                 try {
                   const result = reviewPassage
@@ -1242,7 +1255,7 @@ export function PracticeBoard({
                         // bar and date, like its other counted rows.
                         ...(result.schedule
                           ? reviewPassage
-                            ? { schedule: result.schedule }
+                            ? { schedule: result.schedule, wordCount }
                             : { savedStatus: result.schedule.status }
                           : {}),
                       },
@@ -1341,7 +1354,15 @@ export function PracticeBoard({
                               reference: member,
                               accuracy,
                               offerPractice: false as const,
-                              ...(next ? { schedule: next } : {}),
+                              ...(next
+                                ? {
+                                    schedule: next,
+                                    wordCount: segmentWordCount(
+                                      compositePassage.segments,
+                                      index,
+                                    ),
+                                  }
+                                : {}),
                             },
                           ];
                         })
@@ -1367,7 +1388,7 @@ export function PracticeBoard({
                               ? { refresherUsed: true }
                               : {}),
                             ...(counted.schedule
-                              ? { schedule: counted.schedule }
+                              ? { schedule: counted.schedule, wordCount }
                               : {}),
                           },
                         ];
@@ -1549,6 +1570,7 @@ interface PracticeCardProps {
   onApplyHeld: (
     heldId: HeldAttemptId,
     accuracy: number,
+    wordCount: number,
   ) => Promise<RecordVerseAttemptResult>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
@@ -1678,11 +1700,11 @@ function PracticeCard({
       reference: CardReference;
       from: JourneyBarFill;
       next: MemorySchedule;
+      wordCount: number | undefined;
     }>
   >([]);
   const [hasHeldTry, setHasHeldTry] = useState(false);
   const countedTodayRef = useRef(false);
-  const applyHeldLatest = useEffectEvent(onApplyHeld);
   const checkedAccuracyRef = useRef(0);
   const idPrefix = useId();
   const headerId = `${idPrefix}-refresher-header`;
@@ -1823,6 +1845,10 @@ function PracticeCard({
     refresher.everyWordVerses,
     passageHint,
   ]);
+  const applyHeldLatest = useEffectEvent(
+    (heldId: HeldAttemptId, accuracy: number) =>
+      onApplyHeld(heldId, accuracy, wordCount),
+  );
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
   const liveGoalLabel =
@@ -2022,6 +2048,7 @@ function PracticeCard({
                 reference: memberRef,
                 from: journeyFillFrom(snapshot),
                 next,
+                wordCount: segmentWordCount(composite?.segments, index),
               },
             ];
           }),
@@ -2113,7 +2140,7 @@ function PracticeCard({
     if (!heldId) return { ok: true as const, schedule: null };
     heldIdRef.current = null;
     setHasHeldTry(false);
-    const result = await onApplyHeld(heldId, checkedAccuracy);
+    const result = await onApplyHeld(heldId, checkedAccuracy, wordCount);
     if (result.ok) countedTodayRef.current = true;
     else {
       heldIdRef.current = heldId;
@@ -2428,6 +2455,7 @@ function PracticeCard({
                   <LearningJourneyBar
                     learnStage={row.next.learnStage}
                     stageReps={row.next.stageReps}
+                    wordCount={row.wordCount}
                     status={row.next.status}
                     intervalDays={row.next.intervalDays}
                     ease={row.next.ease}
