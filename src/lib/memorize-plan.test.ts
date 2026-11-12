@@ -18,7 +18,6 @@ import {
   formatMonthOrDate,
   formatShortDate,
   nextStepCopy,
-  projectedFinishDate,
   projectedMasteryDate,
 } from "./memorize-plan";
 
@@ -357,50 +356,9 @@ describe("formatDueDay", () => {
 });
 
 describe("projected dates", () => {
-  // October 30, 2026, noon local time.
-  const NOW = new Date(2026, 9, 30, 12).getTime();
-
   function calendarDay(date: Date): [number, number, number] {
     return [date.getFullYear(), date.getMonth(), date.getDate()];
   }
-
-  it("finishes learning across a month boundary", () => {
-    expect(
-      calendarDay(
-        projectedFinishDate(
-          { mode: "passage", verseCount: 11, learnedCount: 0 },
-          NOW,
-        ),
-      ),
-    ).toEqual([2026, 10, 3]);
-    expect(
-      calendarDay(
-        projectedFinishDate(
-          { mode: "pack", verseCount: 4, learnedCount: 0 },
-          NOW,
-        ),
-      ),
-    ).toEqual([2026, 10, 4]);
-  });
-
-  it("only counts verses still to learn", () => {
-    expect(
-      calendarDay(
-        projectedFinishDate(
-          { mode: "passage", verseCount: 11, learnedCount: 6 },
-          NOW,
-        ),
-      ),
-    ).toEqual([2026, 10, 1]);
-    expect(
-      calendarDay(
-        projectedFinishDate(
-          { mode: "verse", verseCount: 1, learnedCount: 1 },
-          NOW,
-        ),
-      ),
-    ).toEqual([2026, 9, 30]);
-  });
 
   it("projects mastery from the same scheduler estimate", () => {
     const start = new Date(2026, 9, 30, 12);

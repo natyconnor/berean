@@ -69,6 +69,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useStartPassage } from "@/hooks/use-start-passage";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { useTodayModel } from "@/hooks/use-today-model";
 import { asTableId } from "@/lib/convex-id";
 import {
   canStartOver,
@@ -88,6 +89,7 @@ import {
 } from "@/lib/learn-dismissed-packs";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
+import type { PassageGoalCard } from "@/lib/memory-goals";
 import { spanDisplayTitle } from "@/lib/memorize-target";
 import {
   useRefreshReturnFocus,
@@ -115,6 +117,7 @@ import {
   passageVerseRows,
   reviewTogetherOption,
   type PackDetailActions,
+  type PackDetailGoal,
   type PackDetailPack,
   type PackDetailProgress,
   type PackDetailSession,
@@ -163,6 +166,7 @@ export function PackDetail({ packId }: { packId: Id<"packs"> | string }) {
     api.passageMemory.getForPack,
     id ? { packId: id, now, tzOffsetMinutes } : "skip",
   );
+  const today = useTodayModel(now);
 
   const touch = useMutation(api.packs.touch);
   const touched = useRef(false);
@@ -182,7 +186,12 @@ export function PackDetail({ packId }: { packId: Id<"packs"> | string }) {
     );
   }
 
-  if (pack === undefined || members === undefined || passage === undefined) {
+  if (
+    pack === undefined ||
+    members === undefined ||
+    passage === undefined ||
+    today === undefined
+  ) {
     return (
       <MemoryPanelFrame
         title={
@@ -205,6 +214,7 @@ export function PackDetail({ packId }: { packId: Id<"packs"> | string }) {
       pack={pack}
       members={members}
       passage={passage}
+      goal={packDetailGoal(today.goals, pack._id)}
       now={now}
       tzOffsetMinutes={tzOffsetMinutes}
     />
@@ -244,25 +254,20 @@ function PackDetailContent({
   pack,
   members,
   passage,
+  goal,
   now,
   tzOffsetMinutes,
 }: {
   pack: Pack;
   members: Member[];
   passage: Passage | null;
+  goal: PackDetailGoal | null;
   now: number;
   tzOffsetMinutes: number;
 }) {
   const frame = useMemoryPanelFrame();
   const timeZone = getViewerTimeZone() ?? "UTC";
   const detailPack = toDetailPack(pack);
-  const goal = packDetailGoal({
-    pack: detailPack,
-    members,
-    passage,
-    now,
-    tzOffsetMinutes,
-  });
   const passageGoal = goal?.kind === "passage" ? goal : null;
   const packGoal = goal?.kind === "pack" ? goal : null;
 
@@ -355,11 +360,9 @@ function PackDetailContent({
         ) : null}
 
         {passage ? (
-          <PassageVerses
-            passage={passage}
-            now={now}
-            tzOffsetMinutes={tzOffsetMinutes}
-          />
+          passageGoal ? (
+            <PassageVerses passage={passage} goal={passageGoal} now={now} />
+          ) : null
         ) : (
           <PackVerses
             pack={pack}
@@ -1173,23 +1176,23 @@ const CHIP_CLASS: Record<PassageVerseChipKind, string> = {
 
 function PassageVerses({
   passage,
+  goal,
   now,
-  tzOffsetMinutes,
 }: {
   passage: Passage;
+  goal: PassageGoalCard;
   now: number;
-  tzOffsetMinutes: number;
 }) {
   const chapters = useMemo(() => {
     const groups: { key: string; rows: PassageVerseRow[] }[] = [];
-    for (const row of passageVerseRows(passage, now, tzOffsetMinutes)) {
+    for (const row of passageVerseRows(passage, goal, now)) {
       const key = `${row.book}|${row.chapter}`;
       const last = groups[groups.length - 1];
       if (last?.key === key) last.rows.push(row);
       else groups.push({ key, rows: [row] });
     }
     return groups;
-  }, [passage, now, tzOffsetMinutes]);
+  }, [passage, goal, now]);
 
   return (
     <VersesSection

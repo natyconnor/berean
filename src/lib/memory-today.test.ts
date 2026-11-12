@@ -164,12 +164,15 @@ describe("buildTodayModel: state", () => {
     expect(model.state).toBe("work");
     expect(model.counts.passageSessions).toBe(1);
 
-    const next = applyTodayDismissals(model, new Set(["psalm16"]));
+    const next = applyTodayDismissals(model, new Set(["psalm16"]), NOW, 0);
     expect(next.counts.passageSessions).toBe(0);
     expect(next.state).toBe("caughtUp");
     expect(next.goals[0]).toMatchObject({
       packId: "psalm16",
       hasWorkToday: false,
+      todayStep: null,
+      pieceStates: [{ verses: 1, state: "upNext", today: false }],
+      nextDueAt: TOMORROW,
     });
   });
 
@@ -528,7 +531,7 @@ describe("due counts after That's enough for today", () => {
   it.each([["psalm16"], ["psalm1"]])(
     "drops a dismissed %s by exactly what Today drops",
     (packId) => {
-      const today = applyTodayDismissals(model, new Set([packId]));
+      const today = applyTodayDismissals(model, new Set([packId]), NOW, 0);
       const todayDrop =
         todayWorkCount(model.counts) - todayWorkCount(today.counts);
 

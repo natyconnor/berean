@@ -14,14 +14,17 @@ export type TodayGoal = TodayModelResult["goals"][number];
 
 /** `memoryHome.today` for the viewer's local day; `undefined` while loading. */
 export function useTodayModel(now: number): TodayModelResult | undefined {
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const raw = useQuery(api.memoryHome.today, {
     now,
-    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+    tzOffsetMinutes,
     timeZone: getViewerTimeZone() ?? "UTC",
   });
   if (raw === undefined) return undefined;
   return applyTodayDismissals(
     raw,
     readLearnPacksDismissedToday(learnDismissDayKey(now)),
+    now,
+    tzOffsetMinutes,
   );
 }
