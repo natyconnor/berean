@@ -30,6 +30,26 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.21.0](https://github.com/natyconnor/berean/compare/v1.20.0...v1.21.0) (2026-11-12)
+
+
+### Features
+
+* Lighter first-letter hints on Refresh ([#372](https://github.com/natyconnor/berean/issues/372)) ([#374](https://github.com/natyconnor/berean/issues/374)) ([c0da2d4](https://github.com/natyconnor/berean/commit/c0da2d48712c74db9acb4d85f9512712fb25462b))
+
+
+### Bug Fixes
+
+* Count a 100% warm-up refresher as the warm-up ([#404](https://github.com/natyconnor/berean/issues/404)) ([58f61c2](https://github.com/natyconnor/berean/commit/58f61c2e78fa364b2d194605869c839f8c54aaed))
+* Leave set-aside passages out of the due counts ([#399](https://github.com/natyconnor/berean/issues/399)) ([68a811d](https://github.com/natyconnor/berean/commit/68a811d3f92d172fc5fcab746edd5a074e76c125))
+* Restart the warm-up when reloading mid-warm-up ([#387](https://github.com/natyconnor/berean/issues/387)) ([da4bffa](https://github.com/natyconnor/berean/commit/da4bffa8931bed86a8267271c028b44e87a7236e))
+* Reveal step 1 when a refresher opens; start the next verse at the top ([#400](https://github.com/natyconnor/berean/issues/400)) ([277d07b](https://github.com/natyconnor/berean/commit/277d07b161b13afd41ed7e50b277603e153d5706))
+* Say a lapsed summary row will be learned again ([#401](https://github.com/natyconnor/berean/issues/401)) ([de76082](https://github.com/natyconnor/berean/commit/de760825e592bc05d067ea4cd08bdc77e6293ef8))
+* Scroll the next refresher step's label into view on Continue ([#384](https://github.com/natyconnor/berean/issues/384)) ([9dd62c2](https://github.com/natyconnor/berean/commit/9dd62c23919d48673abd779e3282473a75838834))
+* Show the score on clean scheduled verse summary rows ([#376](https://github.com/natyconnor/berean/issues/376)) ([#385](https://github.com/natyconnor/berean/issues/385)) ([13a343e](https://github.com/natyconnor/berean/commit/13a343e7a1fc72b66d6ea9e7b9659ff40f8bb2e2))
+* Use the verse's word count for every learned percent ([#402](https://github.com/natyconnor/berean/issues/402)) ([aae1c49](https://github.com/natyconnor/berean/commit/aae1c49ecdf4050caf6d9608ef970c48fe88a4af))
+* Use Today's goal on the pack page ([#405](https://github.com/natyconnor/berean/issues/405)) ([31337b8](https://github.com/natyconnor/berean/commit/31337b877b01a8185214520aa5353c4c29e05133))
+
 ## [1.20.0](https://github.com/natyconnor/berean/compare/v1.19.1...v1.20.0) (2026-11-09)
 
 
