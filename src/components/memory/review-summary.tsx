@@ -30,6 +30,7 @@ import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  nextReviewLine,
   offersPassageSummaryRefresh,
   offersSummaryRefresh,
   recalledCopy,
@@ -356,7 +357,7 @@ export function ReviewResultRows({
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Next review {formatDueDay(attempt.schedule.dueAt, now)}
+                    {nextReviewLine(attempt.schedule, now)}
                   </p>
                 </div>
               ) : (

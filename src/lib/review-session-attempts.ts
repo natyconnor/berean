@@ -1,4 +1,6 @@
 import type { CardReference } from "@/components/study/study-card-model";
+import { formatDueDay } from "@/lib/memorize-plan";
+import { LAPSED_ROW_LINE } from "@/lib/memory-copy";
 import {
   isReviewPhase,
   LEARN_PROGRESS_ACCURACY,
@@ -122,6 +124,18 @@ export function offersPassageSummaryRefresh(
     last.accuracy < LEARN_PROGRESS_ACCURACY &&
     (status === "reviewing" || status === "mastered")
   );
+}
+
+/**
+ * A review result's next-review line. A review that left the verse in
+ * Learning lapsed, so it says the verse will be learned again instead.
+ */
+export function nextReviewLine(
+  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  now: number,
+): string {
+  if (schedule.status === "learning") return LAPSED_ROW_LINE;
+  return `Next review ${formatDueDay(schedule.dueAt, now)}`;
 }
 
 export function recalledCopy(accuracies: readonly number[]): string {
