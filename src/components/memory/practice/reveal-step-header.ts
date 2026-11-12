@@ -1,8 +1,9 @@
 /**
- * After Continue to a refresher's next step, bring its label to the top of the
- * session's scroll area (which starts under the top bar), unless it is already
- * fully in view there. Call once the card has settled: measured while it is
- * still easing in, the label sits low and would end up under the top bar.
+ * When a refresher opens, or Continue reaches its next step, bring the step's
+ * label to the top of the session's scroll area (which starts under the top
+ * bar), unless it is already fully in view there. Call once the card has
+ * settled: measured while it is still easing in, the label sits low and would
+ * end up under the top bar.
  */
 export function revealStepHeader(headerId: string): void {
   const header = document.getElementById(headerId);

@@ -2017,6 +2017,69 @@ describe("PracticeBoard pre-try refresher", () => {
     },
   );
 
+  it.each([
+    ["fully in view stays put", 159, 159],
+    ["above the scroll area scrolls to the top", -40, 105],
+  ])(
+    "opening a refresher, the step 1 label %s (#397)",
+    async (_, labelTop, settledTop) => {
+      const layout = mockStepLabelLayout(labelTop);
+      try {
+        renderReview();
+        const link = await screen.findByRole("button", {
+          name: NEED_A_REFRESHER_LABEL,
+        });
+        layout.scrollToTop();
+        await userEvent.click(link);
+        expect(screen.getByText(refresherHeader(1, 2))).toBeInTheDocument();
+        await waitFor(() =>
+          expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
+        );
+        expect(layout.labelTop()).toBe(settledTop);
+        expect(layout.labelScrolls).toHaveLength(
+          labelTop === settledTop ? 0 : 1,
+        );
+      } finally {
+        layout.restore();
+      }
+    },
+  );
+
+  it("opens the next verse at the top after a refresher (#397)", async () => {
+    renderReview();
+    await openRefresher();
+    await userEvent.click(await screen.findByLabelText("Your recalled verse"));
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    await userEvent.click(await screen.findByLabelText("Your recalled verse"));
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
+
+    // The learner scrolled down to the result's Continue.
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    )!;
+    let scrollTop = 0;
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+    viewport.scrollTop = 320;
+
+    await userEvent.click(continueButton);
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    expect(viewport.scrollTop).toBe(0);
+  });
+
   it("keeps S1 pass copy on a pre-try From memory pass", async () => {
     renderReview();
     await openRefresher();

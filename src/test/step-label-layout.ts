@@ -73,9 +73,14 @@ export function mockStepLabelLayout(labelTop: number) {
   });
 
   return {
-    /** Scroll back to the top, e.g. just before Continue. */
+    /**
+     * Scroll back to the top and forget earlier label measures and scrolls
+     * (opening the refresher reveals step 1), e.g. just before Continue.
+     */
     scrollToTop: () => {
       scrollTop = 0;
+      labelMeasures.length = 0;
+      labelScrolls.length = 0;
     },
     /** The label's top now: 105 is flush with the top bar. */
     labelTop: () => labelTop - scrollTop,

@@ -3,10 +3,12 @@ import {
   type KeyboardEvent,
   type MutableRefObject,
   type ReactNode,
+  type Ref,
   useCallback,
   useEffect,
   useEffectEvent,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -917,6 +919,14 @@ export function PracticeBoard({
     if (currentVerseId) reportCurrentVerseId(currentVerseId);
   }, [currentVerseId]);
 
+  // The session's scroll area outlives each verse's card, so a new verse
+  // would open wherever the last one left the page. Start it at the top,
+  // before it paints and before its answer box takes focus.
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (scrollViewportRef.current) scrollViewportRef.current.scrollTop = 0;
+  }, [currentVerseId]);
+
   const reportRunState = useEffectEvent(
     (state: PracticeRunState, result: PracticeSessionResult) => {
       onRunStateChange?.(state, result);
@@ -1100,7 +1110,7 @@ export function PracticeBoard({
   }
 
   return (
-    <PracticeShell {...shellProps}>
+    <PracticeShell {...shellProps} viewportRef={scrollViewportRef}>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="order-2 md:order-1">
           <div className="relative">
@@ -1657,7 +1667,7 @@ function PracticeCard({
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
-  /** Continue reached a new step whose label is not yet revealed. */
+  /** A refresher step opened (or reached by Continue), label not yet revealed. */
   const revealPendingRef = useRef(false);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const refresherOfferRef = useRef<HTMLButtonElement>(null);
@@ -2142,13 +2152,24 @@ function PracticeCard({
     if (!options?.keepJourneyPreview) onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     setStaleCue("off");
-    revealPendingRef.current = Boolean(options?.revealHeader);
+    if (options?.revealHeader) {
+      revealStep();
+      return;
+    }
+    revealPendingRef.current = false;
+    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+  }
+
+  /**
+   * Once the new refresher step has rendered, bring its label into view. The
+   * answer box is focused without scrolling, so it cannot push the label off
+   * the top first.
+   */
+  function revealStep() {
+    revealPendingRef.current = true;
     window.requestAnimationFrame(() => {
-      if (!options?.revealHeader) {
-        answerInputRef.current?.focus();
-        return;
-      }
       revealPendingRef.current = false;
+      answerInputRef.current?.focus({ preventScroll: true });
       revealStepHeader(headerId);
     });
   }
@@ -2165,7 +2186,7 @@ function PracticeCard({
     if (kind === "practice") onJourneyPreview?.(null);
     setStaleCue("off");
     refresher.open(kind);
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    revealStep();
   }
 
   function continueAttempt() {
@@ -2284,9 +2305,9 @@ function PracticeCard({
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
   // document is left unfocused until the learner clicks.
-  // After Continue to a refresher's next step, focus must not scroll until
-  // the label is revealed: bringing the answer box in first would push a
-  // visible label off the top and force the reveal to scroll.
+  // When a refresher opens or Continue reaches its next step, focus must not
+  // scroll until the label is revealed: bringing the answer box in first
+  // would push a visible label off the top and force the reveal to scroll.
   useEffect(() => {
     if (showDone || checked || isReadPrime) return;
     answerInputRef.current?.focus({ preventScroll: revealPendingRef.current });
@@ -2890,6 +2911,7 @@ export function PracticeShell({
   exitHref,
   backDisabled = false,
   progress,
+  viewportRef,
   children,
 }: {
   sessionLabel: MemorySessionLabel;
@@ -2900,6 +2922,7 @@ export function PracticeShell({
   exitHref?: string;
   backDisabled?: boolean;
   progress?: SessionProgress;
+  viewportRef?: Ref<HTMLDivElement>;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -2925,7 +2948,7 @@ export function PracticeShell({
           {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>
       </header>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1" viewportRef={viewportRef}>
         <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">{children}</div>
       </ScrollArea>
     </div>
