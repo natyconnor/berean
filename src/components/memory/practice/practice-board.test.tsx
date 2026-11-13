@@ -2395,6 +2395,9 @@ describe("PracticeBoard pre-try refresher", () => {
 const HELD_ID = "held_1" as Id<"heldVerseAttempts">;
 const CLOSE_MISS = "The Lord is my shepherd I shall";
 const BAD_MISS = "nope";
+/** The verse result box's line after a lapse (summary rows keep LAPSED_ROW_LINE). */
+const LEARN_AGAIN_RESULT =
+  "We'll learn it again, starting with fill in the blanks.";
 
 describe("PracticeBoard held first try", () => {
   beforeEach(() => {
@@ -2804,7 +2807,9 @@ describe("PracticeBoard held first try", () => {
     expect(
       withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
     ).toBeInTheDocument();
-    expect(screen.getByText(LAPSED_ROW_LINE)).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(LEARN_AGAIN_RESULT);
+    expect(screen.getByText(LEARN_AGAIN_RESULT)).toBeVisible();
+    expect(screen.queryByText(LAPSED_ROW_LINE)).toBeNull();
     expect(screen.queryByText(/^Next review /)).toBeNull();
   });
 
@@ -3113,7 +3118,8 @@ describe("PracticeBoard held first try", () => {
         miss,
         fromMemory,
       );
-      expect(result).toHaveTextContent(LAPSED_ROW_LINE);
+      expect(within(result).getByText(LEARN_AGAIN_RESULT)).toBeVisible();
+      expect(result).not.toHaveTextContent(LAPSED_ROW_LINE);
       expect(result).not.toHaveTextContent(/Next review/);
       const row = await continueToSummaryRow();
       expect(within(row).getByText(LAPSED_ROW_LINE)).toBeVisible();

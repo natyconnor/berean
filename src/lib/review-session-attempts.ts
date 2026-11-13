@@ -1,9 +1,10 @@
 import type { CardReference } from "@/components/study/study-card-model";
 import { formatDueDay } from "@/lib/memorize-plan";
-import { LAPSED_ROW_LINE } from "@/lib/memory-copy";
+import { LAPSED_ROW_LINE, learnAgainLine } from "@/lib/memory-copy";
 import {
   isReviewPhase,
   LEARN_PROGRESS_ACCURACY,
+  REVIEW_LAPSE_LEARN_STAGE,
   type MemorySchedule,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
@@ -153,12 +154,17 @@ export function nextReviewSentence(dueAt: number, now: number): string {
   return `Next review ${formatDueDay(dueAt, now)}.`;
 }
 
-/** {@link nextReviewLine} for the result box, where each line is a sentence. */
+/**
+ * {@link nextReviewLine} for the verse result box, where each line is a
+ * sentence. A lapse says where learning restarts, like the banner's own line.
+ */
 export function nextReviewResultLine(
   schedule: Pick<MemorySchedule, "status" | "dueAt">,
   now: number,
 ): string {
-  if (schedule.status === "learning") return LAPSED_ROW_LINE;
+  if (schedule.status === "learning") {
+    return learnAgainLine(REVIEW_LAPSE_LEARN_STAGE);
+  }
   return nextReviewSentence(schedule.dueAt, now);
 }
 

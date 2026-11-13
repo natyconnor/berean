@@ -130,10 +130,19 @@ describe("next review lines", () => {
     );
   });
 
-  it("says a lapsed verse will be learned again in both", () => {
+  it("says where learning restarts in the result box after a lapse", () => {
     const lapsed = { status: "learning" as const, dueAt: now };
-    expect(nextReviewResultLine(lapsed, now)).toBe(LAPSED_ROW_LINE);
+    expect(nextReviewResultLine(lapsed, now)).toBe(
+      "We'll learn it again, starting with fill in the blanks.",
+    );
+  });
+
+  it("keeps the struggling line on a lapsed summary row", () => {
+    const lapsed = { status: "learning" as const, dueAt: now };
     expect(nextReviewLine(lapsed, now)).toBe(LAPSED_ROW_LINE);
+    expect(LAPSED_ROW_LINE).toBe(
+      "Looks like you're struggling with this one. Let's learn it again.",
+    );
   });
 });
 
