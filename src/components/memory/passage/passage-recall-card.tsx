@@ -421,9 +421,11 @@ export function PassageRecallCard({
                   }}
                   onKeyDown={handleAnswerKeyDown}
                   placeholder={
-                    compositeField
-                      ? "Type the passage from memory"
-                      : "Type what you remember"
+                    mode === "repair"
+                      ? "Type the missing words"
+                      : compositeField
+                        ? "Type the passage from memory"
+                        : "Type what you remember"
                   }
                   className={cn(
                     "mx-auto bg-background/80 px-4 py-3",

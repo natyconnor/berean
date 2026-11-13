@@ -3587,8 +3587,15 @@ describe("PassageSession", () => {
 
       it("F1: keeps the card and the missed window, blanking only the spot and its lead-in", async () => {
         renderSession(longWarmup());
+        expect(
+          await screen.findByLabelText("Your recited passage"),
+        ).toHaveAttribute("placeholder", "Type the passage from memory");
         await missWarmup();
         expect(screen.getByText("Psalm 23:1–3")).toBeInTheDocument();
+        expect(answerBox()).toHaveAttribute(
+          "placeholder",
+          "Type the missing words",
+        );
         expect(screen.getByText("Try this part again")).toBeInTheDocument();
         expect(
           screen.getByText("Type this part from memory"),
