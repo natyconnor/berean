@@ -45,7 +45,7 @@ export function SearchWorkspaceResultsPane({
         </div>
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Matching Notes</h2>
+            <h2 className="text-sm font-semibold">Matching notes</h2>
             <span className="text-xs text-muted-foreground">
               {effectiveResultCount}
             </span>
@@ -65,7 +65,7 @@ export function SearchWorkspaceResultsPane({
             <div className="px-4 py-6 text-sm text-muted-foreground">
               {searchResultsReady
                 ? "No notes matched your search and filters."
-                : "Searching..."}
+                : "Searching…"}
             </div>
           ) : (
             <div className="space-y-3 p-3">

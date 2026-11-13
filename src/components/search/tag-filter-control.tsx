@@ -56,7 +56,7 @@ export function TagFilterControl({
         }}
         onRemoveTag={onToggleTag}
         resolveTagStyle={resolveTagStyle}
-        inputPlaceholder="Filter tags..."
+        inputPlaceholder="Filter tags…"
         popoverDropdown={popoverDropdown}
         clearInputOnEscape
       />

@@ -77,16 +77,15 @@ describe("PassageRecallCard result banner", () => {
     const user = userEvent.setup();
     renderTypingCard();
 
-    await user.click(screen.getByLabelText("Your recalled verse"));
+    await user.click(screen.getByLabelText("Your verse"));
     await user.paste(VERSE);
     await user.click(screen.getByRole("button", { name: /Check answer/ }));
 
     const banner = await screen.findByRole("status");
     expect(banner).toHaveAttribute("data-tone", "exact");
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
-    expect(screen.getByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("Nailed it!")).toBeVisible();
-    expect(screen.getByText("100% recalled")).toBeVisible();
+    expect(screen.getByText("Perfect!")).toBeVisible();
+    expect(screen.getByText("100% correct")).toBeVisible();
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
@@ -94,13 +93,13 @@ describe("PassageRecallCard result banner", () => {
     const user = userEvent.setup();
     renderTypingCard();
 
-    await user.click(screen.getByLabelText("Your recalled verse"));
+    await user.click(screen.getByLabelText("Your verse"));
     await user.paste("Preserve me, O God, for in you I hide.");
     await user.click(screen.getByRole("button", { name: /Check answer/ }));
 
     const banner = await screen.findByRole("status");
     expect(banner).not.toHaveAttribute("data-tone", "exact");
-    expect(banner).toHaveTextContent(/\d+% recalled · Pass at 85%/);
+    expect(banner).toHaveTextContent(/\d+% correct · you need 85% to pass/);
     expect(screen.getByTestId("result-emoji")).not.toHaveTextContent("🎉");
   });
 });
@@ -193,7 +192,7 @@ describe("PassageRecallCard step label and focus", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+      expect(screen.getByLabelText("Your verse")).toHaveFocus();
     });
   });
 
@@ -225,12 +224,12 @@ describe("PassageRecallCard step label and focus", () => {
       />,
     );
 
-    const answer = screen.getByLabelText("Your recalled verse");
+    const answer = screen.getByLabelText("Your verse");
     await user.click(answer);
     await user.paste("not the verse");
     await user.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    const saving = await screen.findByRole("button", { name: "Saving..." });
+    const saving = await screen.findByRole("button", { name: "Saving…" });
     expect(saving).toBeDisabled();
     expect(saving).toHaveAttribute("aria-busy", "true");
     expect(saving.querySelector("[data-icon=spinner]")).not.toBeNull();
@@ -246,7 +245,7 @@ describe("PassageRecallCard step label and focus", () => {
       expect(tryAgain).not.toHaveAttribute("aria-busy");
     });
     expect(
-      screen.queryByRole("button", { name: "Saving..." }),
+      screen.queryByRole("button", { name: "Saving…" }),
     ).not.toBeInTheDocument();
   });
 });

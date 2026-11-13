@@ -113,7 +113,7 @@ const VERSE_SPECS: readonly VerseSpec[] = [
     id: "philippians-4-13",
     role: "learningMemory",
     label: "Learning · From Memory (1 of 2)",
-    howToTry: "Open Learn — one exact recall away from graduating.",
+    howToTry: "Open Learn — one perfect try away from graduating.",
     reference: {
       book: "Philippians",
       chapter: 4,

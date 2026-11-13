@@ -340,7 +340,7 @@ async function checkPassage(text: string) {
 }
 
 async function reciteVerse(text: string) {
-  await type(await screen.findByLabelText("Your recalled verse"), text);
+  await type(await screen.findByLabelText("Your verse"), text);
   await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
   await userEvent.click(
     await screen.findByRole("button", { name: /Continue/ }),
@@ -434,7 +434,7 @@ describe("Today passage card: held cold miss", () => {
 
       const button = await offer();
       await waitFor(() => expect(button).toHaveFocus());
-      expect(screen.getByText(`${accuracy}% recalled`)).toBeInTheDocument();
+      expect(screen.getByText(`${accuracy}% correct`)).toBeInTheDocument();
       // Never to Learning: a bad miss with too few banked reviews floors at
       // the start of Memorized, due tomorrow; a close miss stays Memorized.
       const preview = previewNextSchedule(PASSAGE_SCHEDULE, {
@@ -447,7 +447,7 @@ describe("Today passage card: held cold miss", () => {
       expect(preview?.status).toBe("reviewing");
       expect(
         screen.getByText(
-          `Next review ${formatDueDay(preview!.dueAt, Date.now())}`,
+          `Next review ${formatDueDay(preview!.dueAt, Date.now())}.`,
         ),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Continue/ })).toBeEnabled();
@@ -496,7 +496,7 @@ describe("Today passage card: held cold miss", () => {
     expect(
       previewNextSchedule(daily, { ...input, item: "passage" }),
     ).toMatchObject({ status: "reviewing", intervalDays: 1, stageReps: 0 });
-    expect(screen.getByText("Next review tomorrow")).toBeInTheDocument();
+    expect(screen.getByText("Next review tomorrow.")).toBeInTheDocument();
   });
 
   it.each([
@@ -534,9 +534,7 @@ describe("Today passage card: held cold miss", () => {
       );
 
       if (order === "between") {
-        expect(
-          await screen.findByLabelText("Your recalled verse"),
-        ).toBeInTheDocument();
+        expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
         expect(screen.getByText("Verse 3 of 3")).toBeInTheDocument();
         await reciteVerse(AFTER_TEXT);
       }
@@ -987,7 +985,7 @@ describe("Today end summary", () => {
     expect(headline()).toBe("60%");
     expect(passageRows()).toHaveLength(1);
     const row = passageRows()[0];
-    expect(row).toHaveTextContent("60% recalled");
+    expect(row).toHaveTextContent("60% correct");
     expect(
       within(row).getByLabelText(/^Progress to mastered: /),
     ).toBeInTheDocument();
@@ -1021,17 +1019,17 @@ describe("Today end summary", () => {
 
     // Verse: a held 50% miss, First letters, From memory 100%.
     await type(
-      await screen.findByLabelText("Your recalled verse"),
+      await screen.findByLabelText("Your verse"),
       "Rejoice in the Lord always",
     );
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));
-    await type(await screen.findByLabelText("Your recalled verse"), AFTER_TEXT);
+    await type(await screen.findByLabelText("Your verse"), AFTER_TEXT);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await clickContinue();
     await screen.findByText(refresherHeader(2));
-    await type(await screen.findByLabelText("Your recalled verse"), AFTER_TEXT);
+    await type(await screen.findByLabelText("Your verse"), AFTER_TEXT);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await clickContinue();
 
@@ -1166,7 +1164,7 @@ describe("Regressions", () => {
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).toBeNull();
     await checkPassage(answer(50, 30));
-    await screen.findByText("60% recalled");
+    await screen.findByText("60% correct");
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).toBeNull();
@@ -1199,7 +1197,7 @@ describe("Regressions", () => {
       </TooltipProvider>,
     );
     await checkPassage(answer(50, 30));
-    await screen.findByText("60% recalled");
+    await screen.findByText("60% correct");
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).toBeNull();
@@ -1209,10 +1207,7 @@ describe("Regressions", () => {
 
   it("keeps a verse card's own First letters hint and held miss", async () => {
     renderRun("between");
-    await type(
-      await screen.findByLabelText("Your recalled verse"),
-      "Grace and peace",
-    );
+    await type(await screen.findByLabelText("Your verse"), "Grace and peace");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(await offer());
     await screen.findByText(refresherHeader(1));

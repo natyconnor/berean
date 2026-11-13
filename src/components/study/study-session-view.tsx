@@ -111,7 +111,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
   if (session === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading session...</p>
+        <p className="text-sm text-muted-foreground">Loading session…</p>
       </div>
     );
   }
@@ -136,7 +136,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Study Sessions
+            Back to study sessions
           </Link>
         </div>
       </div>
@@ -165,7 +165,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Study Sessions
+          Back to study sessions
         </Link>
         <h1 className="text-lg font-semibold tracking-tight">{summaryText}</h1>
         <p className="text-xs text-muted-foreground mt-0.5">

@@ -238,7 +238,7 @@ describe("VerseDetailBody", () => {
       screen.queryByRole("link", { name: /learn/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Nice. Tomorrow you'll try it with blanks."),
+      screen.getByText("Tomorrow you'll fill in the blanks."),
     ).toBeInTheDocument();
   });
 
@@ -259,7 +259,7 @@ describe("VerseDetailBody", () => {
     );
 
     expect(
-      screen.getByText("Nice. Later today you'll try it with blanks."),
+      screen.getByText("Later today you'll fill in the blanks."),
     ).toBeInTheDocument();
     expect(screen.getByText("Later today")).toBeInTheDocument();
     const visible = screen.getByText("Learning · Later today");
@@ -477,7 +477,7 @@ describe("VerseMemoryMenu", () => {
     await openStartOverConfirm();
     await userEvent.click(screen.getByRole("button", { name: "Start over" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't start over. Try again.",
+      "Couldn't start over. Please try again.",
     );
     expect(
       screen.getByRole("heading", { name: "Start Romans 8:28 over?" }),

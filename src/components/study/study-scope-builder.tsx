@@ -60,10 +60,10 @@ export function StudyScopeBuilder() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Study Sessions
+          Back to study sessions
         </Link>
         <h1 className="text-lg font-semibold tracking-tight">
-          New Study Session
+          New study session
         </h1>
       </header>
 
@@ -102,7 +102,7 @@ export function StudyScopeBuilder() {
             )}
           </div>
           <Button onClick={handleCreate} disabled={isCreating}>
-            {isCreating ? "Creating\u2026" : "Start Session"}
+            {isCreating ? "Creating\u2026" : "Start session"}
           </Button>
         </div>
       </footer>

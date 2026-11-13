@@ -265,7 +265,7 @@ function refreshButtons() {
 }
 
 async function recite(text: string) {
-  const answer = await screen.findByLabelText("Your recalled verse");
+  const answer = await screen.findByLabelText("Your verse");
   await userEvent.click(answer);
   await userEvent.paste(text);
   await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -511,7 +511,7 @@ describe("Summary Refresh (S9, R21)", () => {
       />,
     );
     expect(
-      await screen.findByText("No verses were graded in this session."),
+      await screen.findByText("You didn't review any verses this time."),
     ).toBeInTheDocument();
     expect(refreshButtons()).toHaveLength(0);
   });
@@ -628,7 +628,7 @@ describe("Summary row scores (#346 AC14, R23)", () => {
     await screen.findByText("Psalm 23:1");
 
     const clean = row("Psalm 23:1");
-    expect(within(clean).getByText("100% recalled")).toBeInTheDocument();
+    expect(within(clean).getByText("100% correct")).toBeInTheDocument();
     expect(journeyBar("Psalm 23:1")).not.toBeNull();
     expect(within(clean).getByText(/^Next review /)).toBeInTheDocument();
 
@@ -636,15 +636,15 @@ describe("Summary row scores (#346 AC14, R23)", () => {
     expect(
       within(refreshed).getByText("78% → 100% · Refresher used"),
     ).toBeInTheDocument();
-    expect(within(refreshed).queryByText(/recalled$/)).toBeNull();
+    expect(within(refreshed).queryByText(/% correct$/)).toBeNull();
 
     const passage = row("Shepherd Psalm");
-    expect(within(passage).getByText("90% recalled")).toBeInTheDocument();
+    expect(within(passage).getByText("90% correct")).toBeInTheDocument();
     expect(journeyBar("Shepherd Psalm")).not.toBeNull();
     expect(within(passage).getByText(/^Next review /)).toBeInTheDocument();
 
     const unscheduled = row("Psalm 23:3");
-    expect(within(unscheduled).getByText("70% recalled")).toBeInTheDocument();
+    expect(within(unscheduled).getByText("70% correct")).toBeInTheDocument();
     expect(journeyBar("Psalm 23:3")).toBeNull();
     expect(within(unscheduled).queryByText(/^Next review /)).toBeNull();
   });

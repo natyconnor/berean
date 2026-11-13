@@ -224,15 +224,15 @@ export function nextStepCopy(
         ? "Later today"
         : "Tomorrow";
     return schedule.learnStage >= MAX_LEARN_STAGE
-      ? `Great. ${when} you'll say it from memory.`
-      : `Nice. ${when} you'll try it with blanks.`;
+      ? `${when} you'll say it from memory.`
+      : `${when} you'll fill in the blanks.`;
   }
 
   const daysAway = calendarDaysBetween(now, schedule.dueAt, timeZone);
   if (schedule.dueAt <= now || daysAway <= 0) return "Review due today";
   if (daysAway === 1) {
     return schedule.status === "reviewing"
-      ? "Memorized. We'll bring it back tomorrow to keep it fresh."
+      ? "Memorized. We'll review it tomorrow to keep it fresh."
       : "Next review tomorrow";
   }
   const due = new Date(schedule.dueAt);

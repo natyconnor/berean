@@ -173,7 +173,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
           onClick={() => setDialogOpen(true, "button")}
         >
           <Search className="h-3.5 w-3.5" />
-          <span>Search notes...</span>
+          <span>Search notes…</span>
           <kbd className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded">
             {searchShortcutLabel}
           </kbd>
@@ -191,7 +191,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
           <div className="flex items-center border-b px-3">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <Input
-              placeholder="Search notes..."
+              placeholder="Search notes…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(event) => {
@@ -273,7 +273,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
               </div>
             ) : searchResults === undefined ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                Searching...
+                Searching…
               </div>
             ) : searchResults.length === 0 ? (
               <div className="p-6 text-center text-sm text-muted-foreground">

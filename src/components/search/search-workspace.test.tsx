@@ -154,7 +154,7 @@ describe("SearchWorkspace", () => {
 
     render(<SearchWorkspace search={{ q: "beloved", mode: "any" }} />);
 
-    expect(screen.getByText("Matching Notes")).toBeInTheDocument();
+    expect(screen.getByText("Matching notes")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("John 3:16-17")).toBeInTheDocument();
     expect(

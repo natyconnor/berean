@@ -15,7 +15,7 @@ describe("milestone copy", () => {
   it("names the verse that was memorized", () => {
     const copy = firstMemorizedCopy("Psalm 23:1");
     expect(`${copy.lead} ${copy.rest}`).toBe(
-      "Psalm 23:1 is memorized. We'll bring it back tomorrow to keep it fresh.",
+      "Psalm 23:1 is memorized. We'll review it tomorrow to keep it fresh.",
     );
   });
 

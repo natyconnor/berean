@@ -233,7 +233,7 @@ export function ChapterNotesChrome({
 
                 {!drafting && notes.length === 0 && (
                   <p className="px-1 py-2 text-sm text-muted-foreground">
-                    Capture something that spans the whole chapter.
+                    Write a note about the whole chapter.
                   </p>
                 )}
               </div>

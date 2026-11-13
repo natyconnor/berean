@@ -109,7 +109,7 @@ function StarterStrip() {
         href: memorizeStartHref(result.destination, TODAY_RETURN),
       });
     } catch {
-      toast.error("Couldn't start memorizing. Try again.");
+      toast.error("Couldn't start memorizing. Please try again.");
     }
   };
 

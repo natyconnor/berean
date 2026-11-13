@@ -51,7 +51,7 @@ export function TagPicker({
   onAddTag,
   onRemoveTag,
   resolveTagStyle,
-  inputPlaceholder = "Add tag...",
+  inputPlaceholder = "Add tag…",
   allowCreate = false,
   popoverDropdown = false,
   clearInputOnEscape = false,

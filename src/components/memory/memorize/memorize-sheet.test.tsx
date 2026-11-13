@@ -241,7 +241,7 @@ describe("MemorizeSheet", () => {
     expect(view.getByText("About 3 min a day")).toBeInTheDocument();
     expect(
       view.getByText(
-        "Three short daily steps, then we'll bring it back right before you'd forget it.",
+        "Three short daily steps, then we'll review it right before you'd forget it.",
       ),
     ).toBeInTheDocument();
     const mastery = formatMasteryDuration(
@@ -379,7 +379,7 @@ describe("MemorizeSheet", () => {
     expect(view.getByText("About 6 min a day")).toBeInTheDocument();
     expect(
       view.getByText(
-        "Each verse takes three short daily steps. We'll keep them all fresh for you.",
+        "Each verse takes three short daily steps, then we'll review them to keep them fresh.",
       ),
     ).toBeInTheDocument();
 
@@ -593,7 +593,7 @@ describe("MemorizeSheet", () => {
     );
     expect(mocks.navigate).toHaveBeenCalledTimes(1);
     expect(mocks.toastError).not.toHaveBeenCalledWith(
-      "Couldn't start memorizing. Try again.",
+      "Couldn't start memorizing. Please try again.",
     );
   });
 
@@ -661,7 +661,7 @@ describe("MemorizeSheet", () => {
 
     await waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(
-        "Couldn't start memorizing. Try again.",
+        "Couldn't start memorizing. Please try again.",
       ),
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();

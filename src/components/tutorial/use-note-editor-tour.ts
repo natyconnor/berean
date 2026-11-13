@@ -25,7 +25,7 @@ export function useNoteEditorTour(): NoteEditorTourState {
     bodyTourId: isNoteBody ? "note-editor-body" : undefined,
     tagsTourId: undefined,
     tutorialPreviewText: isNoteBody
-      ? "The original Greek is Logos, literally meaning 'word' but also carrying with it cosmic meaning, ringing in echoes of..."
+      ? "The original Greek is Logos, literally meaning 'word' but also carrying with it cosmic meaning, ringing in echoes of…"
       : undefined,
     tutorialAnimateText: isNoteBody,
     tutorialPreviewTags: [],

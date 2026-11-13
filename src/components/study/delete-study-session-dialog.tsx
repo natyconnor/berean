@@ -31,8 +31,8 @@ export function DeleteStudySessionDialog({
           <DialogTitle>Delete study session?</DialogTitle>
           <DialogDescription>
             {candidate
-              ? `"${candidate.title}" will be removed from your study sessions. Your hearted verses and notes are not affected. This action cannot be undone.`
-              : "This action cannot be undone."}
+              ? `"${candidate.title}" will be removed from your study sessions. Your hearted verses and notes are not affected. This can't be undone.`
+              : "This can't be undone."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

@@ -3,7 +3,7 @@ import {
   type AttemptErrorCounts,
 } from "@/components/study/study-attempt-quality";
 import { formatNextReviewPhrase } from "@/lib/memory-due-label";
-import { stepShortLabel } from "@/lib/memory-copy";
+import { learnAgainLine } from "@/lib/memory-copy";
 import {
   REVIEW_LAPSE_LEARN_STAGE,
   type MemorySchedule,
@@ -11,8 +11,8 @@ import {
 } from "@/lib/memory-scheduler";
 
 /**
- * Input for a graded-attempt lead. `errors` unlocks one-word-off and
- * typo-only copy; without it, only accuracy bands apply.
+ * Input for a graded attempt's line. `errors` unlocks the one-word-off and
+ * typo lines; without it, only the score lines apply.
  */
 export interface AttemptFeedbackInput {
   accuracy: number;
@@ -20,119 +20,73 @@ export interface AttemptFeedbackInput {
   errors?: AttemptErrorCounts;
 }
 
-type AccuracyLead = {
+type ScoreLine = {
   min: number;
-  lead: string;
+  line: string;
 };
 
 /**
- * Fine-grained 85–99 pass copy. First matching `min` wins.
- * Specials (one word off, typos-only) take priority over these.
+ * The line for a score when nothing more specific applies. First matching
+ * `min` wins. Each one looks forward; the percentage under it says how much.
  */
-export const PASS_ACCURACY_LEADS: readonly AccuracyLead[] = [
-  { min: 98, lead: "One breath away from perfect" },
-  { min: 96, lead: "So close to perfect" },
-  { min: 93, lead: "You've pretty much got this" },
-  { min: 90, lead: "Tiny slip — the verse is in there" },
-  { min: 87, lead: "That was pretty good" },
-  { min: 85, lead: "A good, steady recall" },
+export const SCORE_LINES: readonly ScoreLine[] = [
+  { min: 96, line: "Almost perfect!" },
+  { min: 93, line: "You've pretty much got this." },
+  { min: 90, line: "A few slips, but you know it." },
+  { min: 87, line: "That was pretty good." },
+  { min: 85, line: "Good work, just a few words to fix." },
+  { min: 80, line: "Almost there." },
+  { min: 73, line: "Mostly right, with a few gaps." },
+  { min: 70, line: "Mostly there, but it needs some work." },
+  { min: 60, line: "Getting there, but this one needs another round." },
+  { min: 0, line: "You still need some work on this one." },
 ];
 
-/** Fine-grained 60–84 close-miss copy. Specials still win when they apply. */
-export const CLOSE_ACCURACY_LEADS: readonly AccuracyLead[] = [
-  { min: 84, lead: "You're getting there" },
-  { min: 80, lead: "Almost there" },
-  { min: 77, lead: "Solid recall, with a few holes" },
-  { min: 73, lead: "The shape of the verse is there" },
-  { min: 70, lead: "Mostly there, but it needs some work" },
-  { min: 66, lead: "More right than wrong" },
-  { min: 63, lead: "You remembered a good bit" },
-  { min: 60, lead: "More than half is there" },
-];
-
-/** Fine-grained lapse copy (below 60). */
-export const LAPSE_ACCURACY_LEADS: readonly AccuracyLead[] = [
-  { min: 55, lead: "Getting there — this one needs another round" },
-  { min: 50, lead: "Halfway home" },
-  { min: 45, lead: "Some of it stuck" },
-  { min: 40, lead: "A handful of words came back" },
-  { min: 30, lead: "A few fragments this time" },
-  { min: 20, lead: "Mostly slipped away" },
-  { min: 10, lead: "This one got away" },
-  { min: 0, lead: "Blank slate this round — we'll rebuild it" },
-];
-
-function leadForAccuracy(
-  bands: readonly AccuracyLead[],
-  accuracy: number,
-): string {
-  for (const band of bands) {
-    if (accuracy >= band.min) return band.lead;
+function lineForScore(accuracy: number): string {
+  for (const band of SCORE_LINES) {
+    if (accuracy >= band.min) return band.line;
   }
-  return bands[bands.length - 1]?.lead ?? "";
+  return SCORE_LINES[SCORE_LINES.length - 1]?.line ?? "";
 }
 
 /**
- * Copy that names the miss when the diff is simple enough to celebrate.
- * Returns null when the miss is too mixed to call out specifically.
+ * Names the miss when the comparison is simple enough to count. Returns null
+ * when the miss is too mixed to call out.
  */
-export function specialMissLead(errors: AttemptErrorCounts): string | null {
+export function specialMissLine(errors: AttemptErrorCounts): string | null {
   const words = wordErrorCount(errors);
-  if (words === 1 && errors.missing === 1) {
-    return "Oh so close! Just one word missing";
-  }
-  if (words === 1 && errors.extra === 1) {
-    return "Oh so close! Just one extra word";
-  }
-  if (words === 1) {
-    return "Oh so close! Just one word off";
-  }
-  if (words === 2) {
-    return "So close — just two words off";
-  }
-  if (words === 3) {
-    return "Almost — just three words off";
-  }
+  if (words === 1) return "So close! Just one word off.";
+  if (words === 2) return "So close! Just two words off.";
+  if (words === 3) return "Almost! Just three words off.";
   if (words === 0 && errors.typos >= 3) {
-    return "The words are right — just a few spellings to tidy up";
+    return "Basically perfect, just a few typos!";
   }
   return null;
 }
 
-function exactLead(errors: AttemptErrorCounts | undefined): string {
+/** A perfect attempt; up to two typos still count as perfect. */
+function exactLine(errors: AttemptErrorCounts | undefined): string {
   const typos = errors?.typos ?? 0;
-  if (typos === 1) return "Nailed it — just a tiny spelling slip";
-  if (typos >= 2) return "Nailed it — a couple of spelling slips";
-  return "Nailed it";
+  if (typos === 1) return "Basically perfect, just one typo!";
+  if (typos >= 2) return "Basically perfect, just a couple of typos!";
+  return "Perfect!";
 }
 
 /**
- * Outcome-agnostic lead for a graded attempt: the specific encouragement
- * under the result banner's headline.
+ * The result banner's one bold line for a graded attempt: perfect, then a
+ * countable miss, then the line for the score.
  */
-export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
+export function attemptFeedbackLine(input: AttemptFeedbackInput): string {
   if (input.outcome === "exact") {
-    return exactLead(input.errors);
+    return exactLine(input.errors);
   }
 
   if (input.errors && (input.outcome === "pass" || input.outcome === "close")) {
-    const special = specialMissLead(input.errors);
+    const special = specialMissLine(input.errors);
     if (special) return special;
   }
 
-  if (input.outcome === "pass") {
-    return leadForAccuracy(PASS_ACCURACY_LEADS, input.accuracy);
-  }
-  if (input.outcome === "close") {
-    return leadForAccuracy(CLOSE_ACCURACY_LEADS, input.accuracy);
-  }
-  return leadForAccuracy(LAPSE_ACCURACY_LEADS, input.accuracy);
-}
-
-/** The lead as a sentence, exclaimed when the recall was exact. */
-export function attemptPraiseLine(input: AttemptFeedbackInput): string {
-  const lead = attemptFeedbackLead(input);
-  return `${lead}${input.outcome === "exact" ? "!" : "."}`;
+  return lineForScore(input.accuracy);
 }
 
 interface ReviewOutcomeInput {
@@ -140,26 +94,22 @@ interface ReviewOutcomeInput {
   nextSchedule?: MemorySchedule | null;
   now: number;
   lapsedToLearning: boolean;
+  /** A practice-only try: nothing reschedules, so a miss promises nothing. */
+  unscheduled?: boolean;
 }
 
 /**
- * What the grade does to the schedule, lowercase, or null when the next
- * review isn't known yet.
- */
-function reviewOutcomeClause(input: ReviewOutcomeInput): string | null {
-  if (input.outcome === "lapse" && input.lapsedToLearning) {
-    return `back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}`;
-  }
-  const phrase = formatNextReviewPhrase(input.nextSchedule, input.now);
-  return phrase ? `next review ${phrase}` : null;
-}
-
-/**
- * The schedule consequence as a sentence ("Next review in 3 days."), the
- * result banner's closing line in Review.
+ * What the grade does to the schedule, as a sentence ("Next review in 3
+ * days."): the result banner's closing line in Review. Null when nothing is
+ * known to change.
  */
 export function reviewOutcomeMessage(input: ReviewOutcomeInput): string | null {
-  const clause = reviewOutcomeClause(input);
-  if (!clause) return null;
-  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
+  if (input.outcome === "lapse" && input.lapsedToLearning) {
+    return learnAgainLine(REVIEW_LAPSE_LEARN_STAGE);
+  }
+  const phrase = formatNextReviewPhrase(input.nextSchedule, input.now);
+  if (phrase) return `Next review ${phrase}.`;
+  return input.outcome === "lapse" && !input.unscheduled
+    ? "We'll review it again sooner."
+    : null;
 }

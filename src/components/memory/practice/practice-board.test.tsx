@@ -10,14 +10,12 @@ import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
   COUNTED_TODAY_CLOSING,
-  LAPSED_ROW_LINE,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
   PRACTICE_PASS_EMOJI,
-  PRACTICE_PASS_LEAD,
-  PRACTICE_PASS_REST,
+  PRACTICE_PASS_LINE,
   REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
@@ -134,6 +132,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
 const PACK_ID = "pack_1" as Id<"packs">;
 const PASSAGE_ONE = "The Lord is my shepherd; I shall not want.";
 const PASSAGE_TWO = "He makes me lie down in green pastures.";
+/** A verse back in Learning: its result box, summary row and pack row. */
+const LEARN_AGAIN_LINE =
+  "We'll learn it again, starting with fill in the blanks.";
 
 const psalm23: EsvChapterData = {
   canonical: "Psalm 23",
@@ -261,9 +262,9 @@ describe("PracticeBoard composite recitation", () => {
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
 
     // The headline leads; the percentage is quiet text under it.
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("100% recalled")).toBeVisible();
-    expect(screen.queryByText("100% recalled.")).not.toBeInTheDocument();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    expect(screen.getByText("100% correct")).toBeVisible();
+    expect(screen.queryByText("100% correct.")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     // One summary, one accuracy, labeled with the pack — and no per-verse
@@ -292,13 +293,12 @@ describe("PracticeBoard composite recitation", () => {
     });
     await userEvent.click(check);
 
-    expect(await screen.findByText("Nailed it!")).toBeVisible();
-    const banner = screen
-      .getByText("Word for word.")
-      .closest('[role="status"]');
+    const banner = (await screen.findByText("Perfect!")).closest(
+      '[role="status"]',
+    );
     expect(banner).toHaveAttribute("data-tone", "exact");
     expect(banner).toHaveTextContent("🎉");
-    expect(banner).toHaveTextContent("100% recalled");
+    expect(banner).toHaveTextContent("100% correct");
     expect(banner).toHaveTextContent(/Next review in \d+ days\./);
     expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
   });
@@ -406,9 +406,7 @@ describe("PracticeBoard composite recitation", () => {
       const onComplete = vi.fn();
       await reciteAndContinue(onComplete, [secondReviewingVerse]);
 
-      expect(
-        await screen.findByLabelText("Your recalled verse"),
-      ).toBeInTheDocument();
+      expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
       expect(screen.queryByLabelText("Your recited passage")).toBeNull();
       expect(
         screen.queryByRole("heading", { name: "Review complete" }),
@@ -480,7 +478,7 @@ describe("PracticeBoard composite recitation", () => {
     renderComposite();
 
     expect(
-      await screen.findByText("Could not load verse text."),
+      await screen.findByText("Couldn't load verse text."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
@@ -540,7 +538,7 @@ describe("PracticeBoard composite recitation", () => {
     await userEvent.paste("nope");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
@@ -557,8 +555,9 @@ describe("PracticeBoard composite recitation", () => {
         .getAllByText(text)
         .map((line) => line.closest("li")?.querySelector("p")?.textContent)
         .filter(Boolean);
-    expect(members(LAPSED_ROW_LINE)).toEqual(["Psalm 23:1"]);
+    expect(members(LEARN_AGAIN_LINE)).toEqual(["Psalm 23:1"]);
     expect(members(/^Next review /)).toEqual(["Psalm 23:2"]);
+    expect(screen.queryByText(/struggling/)).toBeNull();
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Refresher used/)).not.toBeInTheDocument();
   });
@@ -614,7 +613,7 @@ describe("PracticeBoard composite recitation", () => {
     await userEvent.paste("nope");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
 
     // Result card: verse 1's member bar.
@@ -805,7 +804,7 @@ describe("PracticeBoard learning Read prime", () => {
       screen.queryByText("Read it through, then continue"),
     ).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+      expect(screen.getByLabelText("Your verse")).toHaveFocus();
     });
   });
 
@@ -916,12 +915,12 @@ describe("PracticeBoard learning step label", () => {
         ),
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       const pctAfter = Math.max(
         ...screen
@@ -970,24 +969,20 @@ describe("PracticeBoard learning step label", () => {
       </TooltipProvider>,
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
     expect(
       screen.getByText("Tomorrow: Fill in the blanks"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Each day builds on the last\. See you tomorrow\./),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Your recalled verse"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText(/See you tomorrow!/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your verse")).not.toBeInTheDocument();
   });
 
   async function finishLastStep() {
@@ -1002,11 +997,11 @@ describe("PracticeBoard learning step label", () => {
       lapses: 0,
       earlyReviewApplied: false,
     });
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
   }
 
@@ -1128,7 +1123,7 @@ describe("PracticeBoard recall submit loading", () => {
       </TooltipProvider>,
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
 
@@ -1139,8 +1134,8 @@ describe("PracticeBoard recall submit loading", () => {
 
     await userEvent.click(check);
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    const savingButton = screen.getByRole("button", { name: "Saving..." });
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    const savingButton = screen.getByRole("button", { name: "Saving…" });
     expect(savingButton).toBeDisabled();
     expect(savingButton).toHaveAttribute("aria-busy", "true");
     expect(savingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
@@ -1169,7 +1164,7 @@ describe("PracticeBoard recall submit loading", () => {
     });
     expect(continueButton.querySelector("[data-icon=spinner]")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Saving..." }),
+      screen.queryByRole("button", { name: "Saving…" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1191,14 +1186,14 @@ describe("PracticeBoard recall submit loading", () => {
       </TooltipProvider>,
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste("not the verse");
 
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
     const savingButton = await screen.findByRole("button", {
-      name: "Saving...",
+      name: "Saving…",
     });
     expect(savingButton).toBeDisabled();
     expect(savingButton).toHaveAttribute("aria-busy", "true");
@@ -1225,7 +1220,7 @@ describe("PracticeBoard recall submit loading", () => {
       expect(tryAgain).not.toHaveAttribute("aria-busy");
     });
     expect(
-      screen.queryByRole("button", { name: "Saving..." }),
+      screen.queryByRole("button", { name: "Saving…" }),
     ).not.toBeInTheDocument();
   });
 });
@@ -1468,7 +1463,7 @@ describe("PracticeBoard spent reviews", () => {
   }
 
   async function recite(text: string) {
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(text);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -1485,7 +1480,7 @@ describe("PracticeBoard spent reviews", () => {
     renderBoard("review");
 
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
 
@@ -1494,7 +1489,7 @@ describe("PracticeBoard spent reviews", () => {
     expect(await screen.findByText("Reviewed")).toBeInTheDocument();
     expect(screen.getByText(/^Next review /)).toBeInTheDocument();
     expect(screen.getByText("Done for today")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    expect(screen.queryByLabelText("Your verse")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /Check answer/ }),
     ).not.toBeInTheDocument();
@@ -1520,7 +1515,7 @@ describe("PracticeBoard spent reviews", () => {
     await userEvent.click(railButton("Psalm 23:1"));
 
     expect(await screen.findByText("Reviewed")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    expect(screen.queryByLabelText("Your verse")).toBeNull();
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
@@ -1529,7 +1524,7 @@ describe("PracticeBoard spent reviews", () => {
 
     // Due: the first Practice try is the review.
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
         1,
@@ -1541,7 +1536,7 @@ describe("PracticeBoard spent reviews", () => {
     // Now not due: another try is practice only and records nothing (R44).
     expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
@@ -1566,7 +1561,7 @@ describe("PracticeBoard spent reviews", () => {
 
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
     await recite(PASSAGE_TWO);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       const [state] = onRunStateChange.mock.lastCall ?? [];
       expect(state?.graded).toEqual([SECOND_ID]);
@@ -1578,11 +1573,9 @@ describe("PracticeBoard spent reviews", () => {
 
     renderBoard("review", { initialVerseId: SECOND_ID, runState: state });
     expect(await screen.findByText("Reviewed")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    expect(screen.queryByLabelText("Your verse")).toBeNull();
     await userEvent.click(railButton("Psalm 23:1"));
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
@@ -1634,9 +1627,7 @@ describe("PracticeBoard spent reviews", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
@@ -1649,7 +1640,7 @@ describe("PracticeBoard spent reviews", () => {
     });
 
     await recite(PASSAGE_TWO);
-    expect(await screen.findByText("Word for word.")).toBeInTheDocument();
+    expect(await screen.findByText("Perfect!")).toBeInTheDocument();
     // Leave before dismissing the last result: every card is spent now.
     await userEvent.click(railButton("Psalm 23:1"));
     expect(await screen.findByText("Reviewed")).toBeInTheDocument();
@@ -1697,9 +1688,7 @@ describe("PracticeBoard spent reviews", () => {
     expect(await screen.findByText("Done for today")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
   });
 });
 
@@ -1964,9 +1953,7 @@ describe("PracticeBoard pre-try refresher", () => {
         />
       </TooltipProvider>,
     );
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     hideLink();
     learning.unmount();
 
@@ -1980,9 +1967,7 @@ describe("PracticeBoard pre-try refresher", () => {
         />
       </TooltipProvider>,
     );
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     hideLink();
     learnFlow.unmount();
 
@@ -2018,7 +2003,7 @@ describe("PracticeBoard pre-try refresher", () => {
     getPassageMock.mockRejectedValue(new Error("ESV is down"));
     renderReview({ verses: [reviewingVerse] });
     expect(
-      await screen.findByText("Could not load verse text."),
+      await screen.findByText("Couldn't load verse text."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
@@ -2029,9 +2014,7 @@ describe("PracticeBoard pre-try refresher", () => {
     getPassageMock.mockReset();
     getPassageMock.mockReturnValue(new Promise(() => {}));
     renderReview({ verses: [reviewingVerse] });
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
@@ -2052,11 +2035,11 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       verseHint("T__ L___ i_ m_ s_______; _ _____ ___ ____."),
     ).toBeInTheDocument();
-    const box = await screen.findByLabelText("Your recalled verse");
+    const box = await screen.findByLabelText("Your verse");
     await userEvent.click(box);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.getByText(refresherHeader(1))).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /Try again/ }),
@@ -2078,16 +2061,19 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
-    const step1Box = await screen.findByLabelText("Your recalled verse");
+    const step1Box = await screen.findByLabelText("Your verse");
     expect(step1Box).toHaveValue("");
     expect(step1Box).toHaveFocus();
 
     await userEvent.paste("nope");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(
-      await screen.findByText("Another look will help it stick."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/review it again sooner/),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(refresherHeader(1, 3))).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /Try again/ }),
@@ -2097,7 +2083,7 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
     ).toBeInTheDocument();
-    const everyWordBox = screen.getByLabelText("Your recalled verse");
+    const everyWordBox = screen.getByLabelText("Your verse");
     expect(everyWordBox).toHaveValue("");
     await waitFor(() => expect(everyWordBox).toHaveFocus());
 
@@ -2110,13 +2096,13 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       verseHint("T__ L___ i_ m_ s_______; I s____ n__ w___."),
     ).toBeInTheDocument();
-    const retried = screen.getByLabelText("Your recalled verse");
+    const retried = screen.getByLabelText("Your verse");
     expect(retried).toHaveValue("");
     expect(retried).toHaveFocus();
 
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
@@ -2125,7 +2111,7 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
-    const step2Box = screen.getByLabelText("Your recalled verse");
+    const step2Box = screen.getByLabelText("Your verse");
     expect(step2Box).toHaveValue("");
     expect(step2Box).toHaveFocus();
 
@@ -2154,7 +2140,7 @@ describe("PracticeBoard pre-try refresher", () => {
       try {
         renderReview();
         await openRefresher();
-        const step1Box = await screen.findByLabelText("Your recalled verse");
+        const step1Box = await screen.findByLabelText("Your verse");
         await waitFor(() => expect(step1Box).toHaveFocus());
         await userEvent.paste("nope");
         await userEvent.click(
@@ -2170,7 +2156,7 @@ describe("PracticeBoard pre-try refresher", () => {
         expect(layout.labelTop()).toBe(settledTop);
         const scrolls = layout.labelScrolls.length;
         expect(scrolls).toBe(labelTop === settledTop ? 0 : 1);
-        const everyWordBox = screen.getByLabelText("Your recalled verse");
+        const everyWordBox = screen.getByLabelText("Your verse");
         await waitFor(() => expect(everyWordBox).toHaveFocus());
 
         await userEvent.paste("nope");
@@ -2181,7 +2167,7 @@ describe("PracticeBoard pre-try refresher", () => {
           await screen.findByRole("button", { name: /Try again/ }),
         );
         await waitFor(() =>
-          expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
+          expect(screen.getByLabelText("Your verse")).toHaveFocus(),
         );
         expect(layout.labelScrolls).toHaveLength(scrolls);
       } finally {
@@ -2206,7 +2192,7 @@ describe("PracticeBoard pre-try refresher", () => {
         await userEvent.click(link);
         expect(screen.getByText(refresherHeader(1, 2))).toBeInTheDocument();
         await waitFor(() =>
-          expect(screen.getByLabelText("Your recalled verse")).toHaveFocus(),
+          expect(screen.getByLabelText("Your verse")).toHaveFocus(),
         );
         expect(layout.labelTop()).toBe(settledTop);
         expect(layout.labelScrolls).toHaveLength(
@@ -2221,13 +2207,13 @@ describe("PracticeBoard pre-try refresher", () => {
   it("opens the next verse at the top after a refresher (#397)", async () => {
     renderReview();
     await openRefresher();
-    await userEvent.click(await screen.findByLabelText("Your recalled verse"));
+    await userEvent.click(await screen.findByLabelText("Your verse"));
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    await userEvent.click(await screen.findByLabelText("Your recalled verse"));
+    await userEvent.click(await screen.findByLabelText("Your verse"));
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     const continueButton = await screen.findByRole("button", {
@@ -2256,26 +2242,25 @@ describe("PracticeBoard pre-try refresher", () => {
   it("keeps S1 pass copy on a pre-try From memory pass", async () => {
     renderReview();
     await openRefresher();
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("Nailed it!")).toBeVisible();
-    expect(screen.queryByText(PRACTICE_PASS_LEAD)).not.toBeInTheDocument();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_PASS_LINE)).not.toBeInTheDocument();
   });
 
   it("offers Try another refresher after a counted From memory miss", async () => {
     renderReview();
     await openRefresher();
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2283,12 +2268,12 @@ describe("PracticeBoard pre-try refresher", () => {
       await screen.findByRole("button", { name: /Continue/ }),
     );
 
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste("nope");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
     expect(
@@ -2326,7 +2311,7 @@ describe("PracticeBoard pre-try refresher", () => {
 
     renderReview();
     await openRefresher();
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2334,7 +2319,7 @@ describe("PracticeBoard pre-try refresher", () => {
       await screen.findByRole("button", { name: /Continue/ }),
     );
 
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2352,7 +2337,7 @@ describe("PracticeBoard pre-try refresher", () => {
     ).toBeVisible();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText(refresherHeader(2))).toBeVisible();
-    expect(screen.getByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("Perfect!")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
@@ -2367,13 +2352,13 @@ describe("PracticeBoard pre-try refresher", () => {
 
   it("saves a counted From memory try once even if Check is activated twice", async () => {
     renderReview();
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     const check = screen.getByRole("button", { name: /Check answer/ });
     check.click();
     check.click();
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
         1,
@@ -2388,7 +2373,7 @@ describe("PracticeBoard pre-try refresher", () => {
       .mockResolvedValueOnce(heldSchedule);
 
     renderReview();
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2453,7 +2438,7 @@ describe("PracticeBoard held first try", () => {
   }
 
   async function holdColdMiss(answer: string) {
-    const box = await screen.findByLabelText("Your recalled verse");
+    const box = await screen.findByLabelText("Your verse");
     await userEvent.click(box);
     await userEvent.paste(answer);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2483,10 +2468,10 @@ describe("PracticeBoard held first try", () => {
       before.getAttribute("aria-label")?.match(/(\d+)%/)?.[1],
     );
     const offer = await holdColdMiss(CLOSE_MISS);
-    expect(screen.getByText("So close.")).toBeVisible();
+    expect(screen.getByText("So close! Just two words off.")).toBeVisible();
     const dateLine = screen.getByText(/^Next review /);
     expect(dateLine).toBeVisible();
-    expect(dateLine.textContent).toMatch(/^Next review \S+$/);
+    expect(dateLine.textContent).toMatch(/^Next review \S+\.$/);
     expect(screen.queryByText(/if you/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/held/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/not saved/i)).not.toBeInTheDocument();
@@ -2504,12 +2489,14 @@ describe("PracticeBoard held first try", () => {
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
   });
 
-  it("uses We'll bring it back sooner on a held miss under 60%", async () => {
+  it("gives a held miss under 60% its date, not a promise to come back sooner", async () => {
     renderReview();
     await holdColdMiss(BAD_MISS);
-    expect(screen.getByText("We'll bring it back sooner.")).toBeVisible();
     expect(
-      screen.queryByText("Another look will help it stick."),
+      screen.getByText("You still need some work on this one."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/review it again sooner/),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/^Next review /)).toBeVisible();
     expect(
@@ -2564,18 +2551,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       expect(
         withinCard().getByLabelText(/Progress to mastered: Mastered · 100%/),
@@ -2628,18 +2615,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       expect(
         withinCard()
@@ -2711,7 +2698,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2730,11 +2717,11 @@ describe("PracticeBoard held first try", () => {
     });
     const droppedWidth = fillWidth(sideJourney());
 
-    const step2 = screen.getByLabelText("Your recalled verse");
+    const step2 = screen.getByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(fillWidth(sideJourney())).toBeGreaterThanOrEqual(droppedWidth);
     await waitFor(() => {
       const sideLabel = sideJourney().getAttribute("aria-label");
@@ -2753,21 +2740,21 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
     );
-    const practice1 = await screen.findByLabelText("Your recalled verse");
+    const practice1 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2778,7 +2765,7 @@ describe("PracticeBoard held first try", () => {
     const saved = sideJourney().getAttribute("aria-label");
     expect(saved).toBeTruthy();
 
-    const practiceMiss = screen.getByLabelText("Your recalled verse");
+    const practiceMiss = screen.getByLabelText("Your verse");
     await userEvent.click(practiceMiss);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2788,7 +2775,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
     );
-    const again1 = await screen.findByLabelText("Your recalled verse");
+    const again1 = await screen.findByLabelText("Your verse");
     await userEvent.click(again1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2796,7 +2783,7 @@ describe("PracticeBoard held first try", () => {
       await screen.findByRole("button", { name: /Continue/ }),
     );
     expect(sideJourney()).toHaveAttribute("aria-label", saved);
-    const practicePass = await screen.findByLabelText("Your recalled verse");
+    const practicePass = await screen.findByLabelText("Your verse");
     await userEvent.click(practicePass);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -2820,7 +2807,9 @@ describe("PracticeBoard held first try", () => {
     expect(
       withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
     ).toBeInTheDocument();
-    expect(screen.getByText(LAPSED_ROW_LINE)).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(LEARN_AGAIN_LINE);
+    expect(screen.getByText(LEARN_AGAIN_LINE)).toBeVisible();
+    expect(screen.queryByText(/struggling/)).toBeNull();
     expect(screen.queryByText(/^Next review /)).toBeNull();
   });
 
@@ -2920,7 +2909,7 @@ describe("PracticeBoard held first try", () => {
     expect(
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
-    const step1 = screen.getByLabelText("Your recalled verse");
+    const step1 = screen.getByLabelText("Your verse");
     expect(step1).toHaveFocus();
     expect(step1.getAttribute("aria-describedby") ?? "").not.toMatch(/leave/);
 
@@ -2956,20 +2945,19 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("Nailed it!")).toBeVisible();
-    expect(screen.queryByText(PRACTICE_PASS_LEAD)).not.toBeInTheDocument();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_PASS_LINE)).not.toBeInTheDocument();
     expect(
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
@@ -2997,18 +2985,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     const line = await screen.findByText(
       `${missAccuracy}% → 100% · Refresher used`,
@@ -3063,14 +3051,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(fromMemory);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3114,7 +3102,7 @@ describe("PracticeBoard held first try", () => {
       ),
     ).toBeVisible();
     expect(within(row).queryByText("Next review today")).toBeNull();
-    expect(within(row).queryByText(LAPSED_ROW_LINE)).toBeNull();
+    expect(within(row).queryByText(LEARN_AGAIN_LINE)).toBeNull();
   });
 
   it.each([
@@ -3130,10 +3118,12 @@ describe("PracticeBoard held first try", () => {
         miss,
         fromMemory,
       );
-      expect(result).toHaveTextContent(LAPSED_ROW_LINE);
+      expect(within(result).getByText(LEARN_AGAIN_LINE)).toBeVisible();
+      expect(result).not.toHaveTextContent(/struggling/);
       expect(result).not.toHaveTextContent(/Next review/);
       const row = await continueToSummaryRow();
-      expect(within(row).getByText(LAPSED_ROW_LINE)).toBeVisible();
+      expect(within(row).getByText(LEARN_AGAIN_LINE)).toBeVisible();
+      expect(within(row).queryByText(/struggling/)).toBeNull();
       expect(within(row).queryByText(/Next review/)).toBeNull();
     },
   );
@@ -3144,19 +3134,19 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     expect(
       screen.queryByText("If you leave now, your first try counts."),
@@ -3184,14 +3174,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3236,14 +3226,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(longVerse);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3276,14 +3266,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3294,18 +3284,18 @@ describe("PracticeBoard held first try", () => {
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
-    const practice1 = await screen.findByLabelText("Your recalled verse");
+    const practice1 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice1);
     await userEvent.paste(PASSAGE_ONE);
     await waitFor(() => {
       expect(practice1).toHaveValue(PASSAGE_ONE);
     });
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const practice2 = await screen.findByLabelText("Your recalled verse");
+    const practice2 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice2);
     await userEvent.paste(PASSAGE_ONE);
     await waitFor(() => {
@@ -3313,14 +3303,10 @@ describe("PracticeBoard held first try", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     const practicePassBanner = await screen.findByRole("status");
-    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_LEAD);
-    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_LINE);
     expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_EMOJI);
-    expect(practicePassBanner).toHaveTextContent("100% recalled");
-    expect(practicePassBanner).not.toHaveTextContent("Nailed it!");
-    expect(practicePassBanner).not.toHaveTextContent("Word for word.");
-    expect(practicePassBanner).not.toHaveTextContent("Well remembered");
-    expect(practicePassBanner).not.toHaveTextContent("see if it comes back");
+    expect(practicePassBanner).toHaveTextContent("100% correct");
+    expect(practicePassBanner).not.toHaveTextContent("Perfect!");
     expect(screen.queryByText("🎉")).not.toBeInTheDocument();
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
@@ -3357,21 +3343,21 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
     );
-    const practice1 = await screen.findByLabelText("Your recalled verse");
+    const practice1 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice1);
     await userEvent.paste(PASSAGE_ONE);
     await waitFor(() => {
@@ -3381,7 +3367,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    return screen.getByLabelText("Your recalled verse");
+    return screen.getByLabelText("Your verse");
   }
 
   async function tryAnotherFromMemory() {
@@ -3390,14 +3376,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3409,7 +3395,7 @@ describe("PracticeBoard held first try", () => {
     expect(counted.at(-1)?.[0]).toMatchObject({ refresherUsed: true });
     record.mockClear();
     await userEvent.click(tryAnother);
-    const practice1 = await screen.findByLabelText("Your recalled verse");
+    const practice1 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice1);
     await userEvent.paste(PASSAGE_ONE);
     await waitFor(() => {
@@ -3419,7 +3405,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const practice2 = await screen.findByLabelText("Your recalled verse");
+    const practice2 = await screen.findByLabelText("Your verse");
     await userEvent.click(practice2);
     await userEvent.paste(PASSAGE_ONE);
     await waitFor(() => {
@@ -3464,19 +3450,17 @@ describe("PracticeBoard held first try", () => {
     });
   });
 
-  it("shows practice pass copy at 90% with no Well remembered line", async () => {
+  it("shows practice pass copy at 90% instead of the score line", async () => {
     renderReview();
     const practice2 = await reachPracticeFromMemory();
     await userEvent.click(practice2);
     await userEvent.paste("The Lord is my shepherd I shall not eat");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     const banner = await screen.findByRole("status");
-    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
-    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(banner).toHaveTextContent(PRACTICE_PASS_LINE);
     expect(banner).toHaveTextContent(PRACTICE_PASS_EMOJI);
-    expect(banner).not.toHaveTextContent("Well remembered");
-    expect(banner).not.toHaveTextContent("Nailed it!");
-    expect(banner).not.toHaveTextContent("see if it comes back");
+    expect(banner).not.toHaveTextContent("Almost perfect!");
+    expect(banner).not.toHaveTextContent("So close!");
     expect(screen.queryByText("🙌")).not.toBeInTheDocument();
     expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     // Under 100%, practice still offers another refresher.
@@ -3485,18 +3469,15 @@ describe("PracticeBoard held first try", () => {
     ).toBeVisible();
   });
 
-  it("keeps S1 miss copy plus the practice-only line at 70%", async () => {
+  it("keeps the miss line plus the practice-only line at 70%", async () => {
     renderReview();
     const practice2 = await reachPracticeFromMemory();
     await userEvent.click(practice2);
     await userEvent.paste(CLOSE_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     const banner = await screen.findByRole("status");
-    expect(banner).toHaveTextContent("So close.");
-    expect(banner).toHaveTextContent(
-      "A few words slipped. The highlighted ones are worth another look.",
-    );
-    expect(banner).not.toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(banner).toHaveTextContent("So close! Just two words off.");
+    expect(banner).not.toHaveTextContent(PRACTICE_PASS_LINE);
     expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     expect(
       screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
@@ -3513,7 +3494,7 @@ describe("PracticeBoard held first try", () => {
     expect(
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3527,12 +3508,12 @@ describe("PracticeBoard held first try", () => {
     expect(
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
-    const step2 = screen.getByLabelText("Your recalled verse");
+    const step2 = screen.getByLabelText("Your verse");
     expect(step2.getAttribute("aria-describedby") ?? "").not.toMatch(/leave/);
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(
       screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
@@ -3564,7 +3545,7 @@ describe("PracticeBoard held first try", () => {
     );
     expect(preview).not.toBeNull();
     expect(
-      screen.getByText(`Next review ${formatDueDay(preview!.dueAt, now)}`),
+      screen.getByText(`Next review ${formatDueDay(preview!.dueAt, now)}.`),
     ).toBeVisible();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
@@ -3615,19 +3596,19 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("Next review tomorrow")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    expect(screen.getByText("Next review tomorrow.")).toBeVisible();
     await waitFor(() => {
       expect(
         withinCard().getByLabelText(/Progress to mastered: Memorized/),
@@ -3693,14 +3674,14 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3791,18 +3772,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     const bar = withinCard().getByLabelText(
       /Progress to mastered: Memorized · 0%/,
     );
@@ -3836,18 +3817,18 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    const step1 = await screen.findByLabelText("Your recalled verse");
+    const step1 = await screen.findByLabelText("Your verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
-    const step2 = await screen.findByLabelText("Your recalled verse");
+    const step2 = await screen.findByLabelText("Your verse");
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(
       withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
     ).toBeInTheDocument();
@@ -3864,7 +3845,7 @@ describe("PracticeBoard held first try", () => {
         />
       </TooltipProvider>,
     );
-    const box = await screen.findByLabelText("Your recalled verse");
+    const box = await screen.findByLabelText("Your verse");
     await userEvent.click(box);
     await userEvent.paste(BAD_MISS);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3921,7 +3902,7 @@ describe("PracticeBoard not-due Practice", () => {
   }
 
   async function recite(text: string) {
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(text);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -3953,7 +3934,7 @@ describe("PracticeBoard not-due Practice", () => {
   }
 
   it.each([
-    ["pass", PASSAGE_ONE, "Word for word."],
+    ["pass", PASSAGE_ONE, "Perfect!"],
     ["miss", BAD_MISS, /Try again/],
   ] as const)(
     "a %s changes nothing: no write, no credit, no summary row",
@@ -3978,7 +3959,7 @@ describe("PracticeBoard not-due Practice", () => {
       expectNoProgressWrite();
       expect(sideJourneyLabel()).toBe(before);
       expect(
-        screen.queryByText(/bring it back sooner/),
+        screen.queryByText(/review it again sooner/),
       ).not.toBeInTheDocument();
       // No post-miss offer, and no next-review line: nothing was scheduled.
       expect(
@@ -4022,7 +4003,7 @@ describe("PracticeBoard not-due Practice", () => {
     );
     await recite(PASSAGE_ONE);
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
-    expect(screen.getByText(PRACTICE_PASS_LEAD)).toBeVisible();
+    expect(screen.getByText(PRACTICE_PASS_LINE)).toBeVisible();
     // A 100% practice pass leaves only Continue.
     expect(
       screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
@@ -4032,16 +4013,20 @@ describe("PracticeBoard not-due Practice", () => {
     expectNoProgressWrite();
   });
 
-  it("drops the miss line on a not-due practice miss, keeping the lead", async () => {
+  it("promises no sooner review on a not-due practice miss", async () => {
     renderPractice();
     await findVisibleRefresherLink();
     await recite(BAD_MISS);
-    expect(await screen.findByText("This one needs more time.")).toBeVisible();
-    expect(screen.queryByText(/bring it back sooner/)).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("You still need some work on this one."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/review it again sooner/),
+    ).not.toBeInTheDocument();
     expectNoProgressWrite();
   });
 
-  it("keeps the miss line on a due review miss", async () => {
+  it("shows the miss result on a due review miss", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -4056,25 +4041,27 @@ describe("PracticeBoard not-due Practice", () => {
     await findVisibleRefresherLink();
     await recite(BAD_MISS);
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
   });
 
-  it("keeps the miss line on a due Practice miss that counts", async () => {
+  it("keeps the miss result on a due Practice miss that counts", async () => {
     // The counted miss reschedules the verse past now; the result keeps the
     // line it was graded with.
     renderPractice({ verses: [reviewingVerse] });
     await findVisibleRefresherLink();
     await recite(BAD_MISS);
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     await waitFor(() => {
       expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
         1,
       );
     });
-    expect(screen.getByText("We'll bring it back sooner.")).toBeVisible();
+    expect(
+      screen.getByText("You still need some work on this one."),
+    ).toBeVisible();
   });
 
   // The saved result's due date, far from anything a preview would compute.
@@ -4146,7 +4133,7 @@ describe("PracticeBoard not-due Practice", () => {
     await findVisibleRefresherLink();
     await recite(PASSAGE_ONE);
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(
       await screen.findByRole("button", { name: /Try again|Continue/ }),
     ).toBeEnabled();
@@ -4170,7 +4157,7 @@ describe("PracticeBoard not-due Practice", () => {
     );
     expect(await screen.findByText(refresherHeader(2))).toBeVisible();
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
 
     await waitFor(() => {
@@ -4238,7 +4225,7 @@ describe("PracticeBoard ••• Refresh", () => {
   }
 
   async function recite(text: string) {
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(text);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -4292,7 +4279,7 @@ describe("PracticeBoard ••• Refresh", () => {
       await passStep1();
       await recite(answer);
       expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
-      expect(screen.getByText(/% recalled/)).toBeVisible();
+      expect(screen.getByText(/% correct/)).toBeVisible();
       expect(screen.queryByText(COUNTED_TODAY_CLOSING)).not.toBeInTheDocument();
       expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
       // Try another shows under 100% only.
@@ -4523,7 +4510,7 @@ describe("PracticeBoard stale Refresh it first", () => {
   }
 
   async function recite(text: string) {
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(text);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -4568,7 +4555,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     ).toBeTruthy();
     // No reason line: nothing new besides the button.
     expect(screen.queryByText(/stale|been a while/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    expect(screen.getByLabelText("Your verse")).toHaveFocus();
     expect(queryCalls).toContainEqual([
       "verseMemory.verseDetail",
       { verseRefId: VERSE_REF_ID, now: NOW },
@@ -4643,16 +4630,12 @@ describe("PracticeBoard stale Refresh it first", () => {
     const learning = renderBoard({
       verses: [{ ...reviewingVerse, status: "learning", learnStage: 3 }],
     });
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     noCueOrLink();
     learning.unmount();
 
     const learnFlow = renderBoard({ kind: "learning" });
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     noCueOrLink();
     learnFlow.unmount();
 
@@ -4686,9 +4669,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     getPassageMock.mockReset();
     getPassageMock.mockReturnValue(new Promise(() => {}));
     const loading = renderBoard();
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     expect(cue()).not.toBeInTheDocument();
     loading.unmount();
 
@@ -4696,7 +4677,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     getPassageMock.mockRejectedValue(new Error("ESV is down"));
     renderBoard();
     expect(
-      await screen.findByText("Could not load verse text."),
+      await screen.findByText("Couldn't load verse text."),
     ).toBeInTheDocument();
     expect(cue()).not.toBeInTheDocument();
   });
@@ -4706,7 +4687,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     renderBoard();
     await findVisibleLink();
     expect(cue()).not.toBeInTheDocument();
-    const answer = screen.getByLabelText("Your recalled verse");
+    const answer = screen.getByLabelText("Your verse");
     await userEvent.type(answer, "The");
 
     queryResults.set("verseMemory.verseDetail", overdueDetail);
@@ -4738,12 +4719,12 @@ describe("PracticeBoard stale Refresh it first", () => {
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    expect(screen.getByLabelText("Your verse")).toHaveFocus();
 
-    await userEvent.type(screen.getByLabelText("Your recalled verse"), "The");
+    await userEvent.type(screen.getByLabelText("Your verse"), "The");
     // Even if the history changes under it, the shown button holds.
     queryResults.set("verseMemory.verseDetail", verseDetail());
-    await userEvent.type(screen.getByLabelText("Your recalled verse"), " L");
+    await userEvent.type(screen.getByLabelText("Your verse"), " L");
     expect(cue()).toBeVisible();
   });
 
@@ -4751,7 +4732,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     queryResults.set("verseMemory.verseDetail", overdueDetail);
     renderBoard();
     const button = await findVisibleCue();
-    const answer = screen.getByLabelText("Your recalled verse");
+    const answer = screen.getByLabelText("Your verse");
     expect(answer).toHaveFocus();
 
     // Natural order: the button, then the answer box.
@@ -4763,7 +4744,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     button.focus();
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
-    const step1 = screen.getByLabelText("Your recalled verse");
+    const step1 = screen.getByLabelText("Your verse");
     expect(step1).toHaveValue("");
     await waitFor(() => {
       expect(step1).toHaveFocus();
@@ -4781,7 +4762,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     await userEvent.keyboard(" ");
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
     await waitFor(() => {
-      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+      expect(screen.getByLabelText("Your verse")).toHaveFocus();
     });
     expect(cue()).not.toBeInTheDocument();
   });
@@ -4802,7 +4783,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     await passStep1();
     expect(cue()).not.toBeInTheDocument();
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
     expect(cue()).not.toBeInTheDocument();
 
@@ -4828,7 +4809,7 @@ describe("PracticeBoard stale Refresh it first", () => {
 
     // Continue moves on as S4 does; the next card starts clean.
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
-    const next = await screen.findByLabelText("Your recalled verse");
+    const next = await screen.findByLabelText("Your verse");
     await waitFor(() => {
       expect(next).toHaveFocus();
     });
@@ -4843,7 +4824,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     await passStep1();
     await recite(BAD_MISS);
     expect(
-      await screen.findByText("We'll bring it back sooner."),
+      await screen.findByText("You still need some work on this one."),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
@@ -4861,7 +4842,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     await userEvent.click(await findVisibleCue());
     await passStep1();
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(record).toHaveBeenCalledTimes(2);
@@ -4915,7 +4896,7 @@ describe("PracticeBoard stale Refresh it first", () => {
         const link = await findVisibleLink();
         expect(link).toBeEnabled();
         expect(cue()).not.toBeInTheDocument();
-        const cold = screen.getByLabelText("Your recalled verse");
+        const cold = screen.getByLabelText("Your verse");
         expect(cold).toHaveValue("");
         await waitFor(() => {
           expect(cold).toHaveFocus();
@@ -4937,7 +4918,7 @@ describe("PracticeBoard stale Refresh it first", () => {
     expect(link).toBeEnabled();
     expect(cue()).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+      expect(screen.getByLabelText("Your verse")).toHaveFocus();
     });
     expectNoProgressWrite();
   });

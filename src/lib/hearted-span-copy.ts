@@ -22,9 +22,9 @@ export function alreadyHeartedLeadIn(status?: MemoryStatus): string {
     case "learning":
       return "You've already started learning";
     case "reviewing":
-      return "You're already reviewing";
-    case "mastered":
       return "You've already memorized";
+    case "mastered":
+      return "You've already mastered";
     case "new":
     default:
       return "You've already hearted";
@@ -70,7 +70,7 @@ export function heartedSpanConfirmAction(
         disabled: true,
       };
     }
-    return { label: "Continue Learning", disabled: false };
+    return { label: "Continue learning", disabled: false };
   }
   if (memory.status === "reviewing" || memory.status === "mastered") {
     const label =

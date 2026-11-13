@@ -110,7 +110,7 @@ export function StudyTeachCard({
             exit={{ opacity: 0 }}
             transition={{ duration: ESV_FADE_S, ease: "easeOut" }}
           >
-            Could not load verse text.
+            Couldn&apos;t load verse text.
           </motion.p>
         ) : data ? (
           // Plain div (not motion) so touch/trackpad scrolling works inside the
@@ -226,7 +226,7 @@ export function StudyTeachCard({
       </div>
       {mergedNotes.length === 0 ? (
         <p className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
-          No saved notes for this passage yet — capture your first one below.
+          No notes for this passage yet. Add your first one below.
         </p>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card/40 shadow-sm">

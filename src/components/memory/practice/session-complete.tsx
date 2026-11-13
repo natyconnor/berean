@@ -64,7 +64,7 @@ export function SessionComplete({
             ? "You finished this verse's session for today."
             : `You finished today's session for all ${verses.length} verses.`}{" "}
           {graduated.length > 0
-            ? `${graduated.length} moved into review.`
+            ? `${graduated.length} ${graduated.length === 1 ? "is" : "are"} now memorized.`
             : SESSION_COMPLETE_FOOTER}
         </p>
       </div>

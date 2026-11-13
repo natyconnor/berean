@@ -499,7 +499,7 @@ describe("PassageSession", () => {
     expect(
       await screen.findByText("Type what you remember"),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Your recalled verse")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your verse")).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Your recited passage"),
     ).not.toBeInTheDocument();
@@ -593,9 +593,7 @@ describe("PassageSession", () => {
     expect(
       screen.queryByLabelText("Your recited passage"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Your recalled verse"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Your verse")).not.toBeInTheDocument();
     expect(screen.queryByText(/rope/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/frontier/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mixed-support/i)).not.toBeInTheDocument();
@@ -623,9 +621,7 @@ describe("PassageSession", () => {
     expect(
       screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Your recalled verse"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Your verse")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Your recited passage"),
     ).not.toBeInTheDocument();
@@ -667,7 +663,7 @@ describe("PassageSession", () => {
     );
 
     expect(
-      await screen.findByText("Recall the verse from memory"),
+      await screen.findByText("Type the verse from memory"),
     ).toBeInTheDocument();
     const cue = await screen.findByLabelText("Pick up after");
     expect(cue).toHaveTextContent("my shepherd; I shall not want.");
@@ -763,13 +759,13 @@ describe("PassageSession", () => {
       screen.getByText(/First letters · 1 of \d+ today/),
     ).toBeInTheDocument();
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
-    expect(screen.getByText("100% recalled")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
+    expect(screen.getByText("100% correct")).toBeVisible();
     await waitFor(() => {
       const journeyAfter = screen.getByLabelText(/Learning journey:/);
       const pctAfter = Number(
@@ -801,12 +797,12 @@ describe("PassageSession", () => {
 
     renderSession(passageView([almostDone]));
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     await waitFor(() => {
       expect(
         screen.getByLabelText(/Progress to mastered: Memorized/),
@@ -830,12 +826,12 @@ describe("PassageSession", () => {
       onExit,
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     // The result that finished it stays up first.
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(await screen.findByText("Perfect!")).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
 
@@ -872,11 +868,11 @@ describe("PassageSession", () => {
       passageView([piece(0, "learning", { learnStage: 3, stageReps: 1 })]),
     );
 
-    const answer = await screen.findByLabelText("Your recalled verse");
+    const answer = await screen.findByLabelText("Your verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    await screen.findByText("Word for word.");
+    await screen.findByText("Perfect!");
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1236,7 +1232,7 @@ describe("PassageSession", () => {
       fetchChaptersBatchMock.mockRejectedValue(new Error("offline"));
       const { unmount } = renderReview();
       expect(
-        await screen.findByText("Could not load verse text."),
+        await screen.findByText("Couldn't load verse text."),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
       expect(
@@ -1266,7 +1262,7 @@ describe("PassageSession", () => {
 
       // Step 1 under 85% only continues, and the count grows to 3 (F9).
       await check("The Lord");
-      expect(await screen.findByText(/recalled/)).toBeInTheDocument();
+      expect(await screen.findByText(/% correct/)).toBeInTheDocument();
       expect(
         screen.getByText("Refresh · First letters · 1 of 3"),
       ).toBeInTheDocument();
@@ -1311,7 +1307,7 @@ describe("PassageSession", () => {
       );
       expect(
         await screen.findByText(
-          `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+          `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}.`,
         ),
       ).toBeInTheDocument();
       await clickButton(/Continue/);
@@ -1431,7 +1427,7 @@ describe("PassageSession", () => {
       });
       await waitFor(() => expect(offer).toHaveFocus());
       expect(screen.getByText(PASSAGE_TOOLTIP)).toBeInTheDocument();
-      expect(screen.getByText(/65% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/65% correct/)).toBeInTheDocument();
       expect(screen.getByText(/^Next review /)).toBeInTheDocument();
       expect(hold()).toHaveBeenCalledTimes(1);
       expect(hold()).toHaveBeenCalledWith(
@@ -1457,7 +1453,7 @@ describe("PassageSession", () => {
       renderReview();
       await check(WEAK_TWO);
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "Couldn't save your result. Try again.",
+        "Couldn't save your result. Please try again.",
       );
       expect(
         screen.queryByRole("button", { name: "Need a refresher?" }),
@@ -1489,7 +1485,7 @@ describe("PassageSession", () => {
       // Seven exact words, two small typos, three more exact, five missing:
       // (10 + 2 × 0.8) / 17 = 68%.
       await check("The Lorf is my shepherf; I shall not want. He makes me");
-      expect(await screen.findByText(/68% recalled/)).toBeInTheDocument();
+      expect(await screen.findByText(/68% correct/)).toBeInTheDocument();
       await clickButton("Need a refresher?");
       // First letters misses and a pass never reach the summary.
       await check("The Lord");
@@ -1597,7 +1593,9 @@ describe("PassageSession", () => {
       // After the reload the passage is no longer due: a miss is practice.
       renderReview(reviewView({ dueAt: SAVED_DUE() }));
       await check(WEAK_TWO);
-      await screen.findByText("Practice only, your progress didn't change.");
+      await screen.findByText(
+        "This was just practice, so your progress didn't change.",
+      );
       expect(hold()).toHaveBeenCalledTimes(1);
       expect(record()).not.toHaveBeenCalled();
     });
@@ -1633,14 +1631,14 @@ describe("PassageSession", () => {
       await check(FULL);
 
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "Couldn't save your result. Try again.",
+        "Couldn't save your result. Please try again.",
       );
       expect(screen.queryByText(/^Next review /)).toBeNull();
       const retry = screen.getByRole("button", { name: /Try again/ });
       await waitFor(() => expect(retry).toHaveFocus());
       await userEvent.dblClick(retry);
       expect(
-        await screen.findByRole("button", { name: "Saving..." }),
+        await screen.findByRole("button", { name: "Saving…" }),
       ).toBeDisabled();
       expect(record()).toHaveBeenCalledTimes(2);
       const [first, second] = record().mock.calls as unknown[][];
@@ -1662,7 +1660,7 @@ describe("PassageSession", () => {
       await check(WEAK_TWO);
       await clickButton(/Continue/);
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "Couldn't save your result. Try again.",
+        "Couldn't save your result. Please try again.",
       );
       await clickButton(/Try again/);
       await screen.findByRole("heading", { name: "Review complete" });
@@ -1690,7 +1688,9 @@ describe("PassageSession", () => {
       await check(FULL);
 
       expect(
-        await screen.findByText("Practice only, your progress didn't change."),
+        await screen.findByText(
+          "This was just practice, so your progress didn't change.",
+        ),
       ).toBeInTheDocument();
       expect(mutationMock("passageMemory.notePracticeRecital")).toBeCalledWith(
         expect.objectContaining({ verseScores: scores(100, 100) }),
@@ -1707,8 +1707,9 @@ describe("PassageSession", () => {
 
     describe("••• and summary Refresh (S13)", () => {
       const BACK = "Back to Psalm 23";
-      const COUNTED = "Counted as today's review";
-      const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+      const COUNTED = "This counted as today's review.";
+      const PRACTICE_ONLY =
+        "This was just practice, so your progress didn't change.";
       const practice = () => mutationMock("passageMemory.notePracticeRecital");
 
       beforeEach(() => {
@@ -1855,7 +1856,7 @@ describe("PassageSession", () => {
           await expectFreshStep("Refresh · First letters · 2 of 3");
           expect(hintText()).toBe(`${ONE_EVERY} ${TWO_EVERY}`);
           await check("The Lord");
-          expect(await screen.findByText(/recalled/)).toBeInTheDocument();
+          expect(await screen.findByText(/% correct/)).toBeInTheDocument();
           expect(screen.queryByText(COUNTED)).toBeNull();
           await clickButton(/Try again/);
         }
@@ -1881,7 +1882,7 @@ describe("PassageSession", () => {
 
           expect(
             await screen.findByText(
-              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}.`,
             ),
           ).toBeInTheDocument();
           expect(screen.getByText(COUNTED)).toBeInTheDocument();
@@ -1926,7 +1927,7 @@ describe("PassageSession", () => {
         await check(WEAK_TWO);
 
         expect(await screen.findByRole("alert")).toHaveTextContent(
-          "Couldn't save your result. Try again.",
+          "Couldn't save your result. Please try again.",
         );
         expect(screen.queryByText(COUNTED)).toBeNull();
         expect(screen.queryByText(/^Next review /)).toBeNull();
@@ -1934,7 +1935,7 @@ describe("PassageSession", () => {
           screen.getByRole("button", { name: /Try again/ }),
         );
         expect(
-          await screen.findByRole("button", { name: "Saving..." }),
+          await screen.findByRole("button", { name: "Saving…" }),
         ).toBeDisabled();
         expect(screen.queryByText(COUNTED)).toBeNull();
         expect(record()).toHaveBeenCalledTimes(2);
@@ -2208,7 +2209,7 @@ describe("PassageSession", () => {
 
           const alert = await screen.findByRole("alert");
           expect(alert).toHaveTextContent(
-            /^Couldn't start the refresher\. Try again\.$/,
+            /^Couldn't start the refresher\. Please try again\.$/,
           );
           expect(screen.getAllByRole("alert")).toHaveLength(1);
           expect(alert.closest("li")).toContainElement(button);
@@ -2411,23 +2412,25 @@ describe("PassageSession", () => {
         expect(onExit).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/No hint text/)).toBeNull();
         expect(
-          screen.getByText("Practice only, your progress didn't change."),
+          screen.getByText(
+            "This was just practice, so your progress didn't change.",
+          ),
         ).toBeInTheDocument();
         expectNothingCounted();
       }
 
       it.each([
-        ["Memorized", "a pass", "reviewing", FULL, /100% recalled/, [100, 100]],
+        ["Memorized", "a pass", "reviewing", FULL, /100% correct/, [100, 100]],
         [
           "Memorized",
           "a miss",
           "reviewing",
           WEAK_TWO,
-          /65% recalled/,
+          /65% correct/,
           [100, 25],
         ],
-        ["Mastered", "a pass", "mastered", FULL, /100% recalled/, [100, 100]],
-        ["Mastered", "a miss", "mastered", WEAK_TWO, /65% recalled/, [100, 25]],
+        ["Mastered", "a pass", "mastered", FULL, /100% correct/, [100, 100]],
+        ["Mastered", "a miss", "mastered", WEAK_TWO, /65% correct/, [100, 25]],
       ] as const)(
         "R40: a not-due %s passage's plain Practice is practice only on %s, then Continue returns",
         async (_label, _score, status, answer, recalled, [first, second]) => {
@@ -2446,7 +2449,9 @@ describe("PassageSession", () => {
           await check(answer);
           expect(await screen.findByText(recalled)).toBeInTheDocument();
           expect(
-            screen.getByText("Practice only, your progress didn't change."),
+            screen.getByText(
+              "This was just practice, so your progress didn't change.",
+            ),
           ).toBeInTheDocument();
           // No post-miss offer, held miss or early review.
           expect(
@@ -2470,8 +2475,8 @@ describe("PassageSession", () => {
       );
 
       it.each([
-        ["a pass", FULL, /100% recalled/, [100, 100], false],
-        ["a miss", WEAK_TWO, /65% recalled/, [100, 25], true],
+        ["a pass", FULL, /100% correct/, [100, 100], false],
+        ["a miss", WEAK_TWO, /65% correct/, [100, 25], true],
       ] as const)(
         "R40: its refresher is practice only at both steps, ending on %s, then Continue returns",
         async (_label, answer, recalled, [first, second], offersTryAnother) => {
@@ -2499,7 +2504,9 @@ describe("PassageSession", () => {
           await check(answer);
           expect(await screen.findByText(recalled)).toBeInTheDocument();
           expect(
-            screen.getByText("Practice only, your progress didn't change."),
+            screen.getByText(
+              "This was just practice, so your progress didn't change.",
+            ),
           ).toBeInTheDocument();
           expect(notePractice()).toHaveBeenCalledTimes(1);
           expect(notePractice()).toHaveBeenCalledWith(
@@ -2527,7 +2534,9 @@ describe("PassageSession", () => {
         await clickButton(/Continue/);
         await screen.findByText("Refresh · From memory · 2 of 2");
         await check(FULL);
-        await screen.findByText("Practice only, your progress didn't change.");
+        await screen.findByText(
+          "This was just practice, so your progress didn't change.",
+        );
         expect(notePractice()).toHaveBeenCalledTimes(2);
         expect(
           screen.queryByRole("button", { name: "Try another refresher" }),
@@ -2553,9 +2562,11 @@ describe("PassageSession", () => {
         notePractice().mockRejectedValue(new Error("offline"));
         const onExit = renderPractice(notDueView({ shakyVerses: [verse(2)] }));
         await check(FULL);
-        expect(await screen.findByText(/100% recalled/)).toBeInTheDocument();
+        expect(await screen.findByText(/100% correct/)).toBeInTheDocument();
         expect(
-          screen.getByText("Practice only, your progress didn't change."),
+          screen.getByText(
+            "This was just practice, so your progress didn't change.",
+          ),
         ).toBeInTheDocument();
         expect(screen.queryByRole("alert")).toBeNull();
         expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
@@ -2697,7 +2708,7 @@ describe("PassageSession", () => {
         await check(FULL);
         expect(
           await screen.findByText(
-            "Practice only, your progress didn't change.",
+            "This was just practice, so your progress didn't change.",
           ),
         ).toBeInTheDocument();
         expect(notePractice()).toHaveBeenCalledTimes(1);
@@ -2813,7 +2824,7 @@ describe("PassageSession", () => {
         fetchChaptersBatchMock.mockRejectedValue(new Error("offline"));
         renderReview(staleDue());
         expect(
-          await screen.findByText("Could not load verse text."),
+          await screen.findByText("Couldn't load verse text."),
         ).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
         expect(
@@ -2877,7 +2888,8 @@ describe("PassageSession", () => {
   describe("Learning passage refresher (S15)", () => {
     const LINK = "Need a refresher?";
     const TOOLTIP = "Do a refresher on this passage for some more practice.";
-    const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+    const PRACTICE_ONLY =
+      "This was just practice, so your progress didn't change.";
     const STEP_ONE = "Refresh · First letters · 1 of 2";
     const STEP_TWO = "Refresh · From memory · 2 of 2";
     const VERSE_THREE =
@@ -3040,7 +3052,7 @@ describe("PassageSession", () => {
       const button = screen.getByRole("button", { name: /Check answer/ });
       await waitFor(() => expect(button).toBeEnabled());
       await userEvent.click(button);
-      await screen.findByText(/recalled/);
+      await screen.findByText(/% correct/);
     }
 
     async function clickButton(name: RegExp | string) {
@@ -3166,7 +3178,7 @@ describe("PassageSession", () => {
         warmup(["solid", "solid"], [...LONG.slice(0, 2), VERSE_THREE]),
       );
       await check(typedAt(LONG_PAIR, 84));
-      expect(screen.getByText(/84% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/84% correct/)).toBeInTheDocument();
       const offer = screen.getByRole("button", { name: LINK });
       expect(screen.getByText(TOOLTIP)).toBeInTheDocument();
       await waitFor(() =>
@@ -3181,7 +3193,7 @@ describe("PassageSession", () => {
         );
         await check(typedAt(LONG_PAIR, percent));
         expect(
-          screen.getByText(new RegExp(`^${percent}% recalled`)),
+          screen.getByText(new RegExp(`^${percent}% correct`)),
         ).toBeInTheDocument();
         expect(queryLink()).toBeNull();
         run.unmount();
@@ -3192,7 +3204,7 @@ describe("PassageSession", () => {
       renderSession(warmup(["solid", "solid"]));
       await clickButton(LINK);
       await runRefresher(WARMUP, allButLast(WARMUP));
-      expect(screen.getByText(/^9\d% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/^9\d% correct/)).toBeInTheDocument();
       expectOnlyLoggedTries(0);
 
       await clickButton(/Continue/);
@@ -3224,7 +3236,7 @@ describe("PassageSession", () => {
       renderSession(warmup(["solid", "solid"]));
       await clickButton(LINK);
       await runRefresher(WARMUP);
-      expect(screen.getByText(/^100% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/^100% correct/)).toBeInTheDocument();
       // A 100% practice refresher offers only Continue (#381).
       expect(screen.queryByRole("button", { name: /Try another/ })).toBeNull();
 
@@ -3277,7 +3289,7 @@ describe("PassageSession", () => {
       // Without the refresher: the miss, then Continue.
       const control = renderSession(longWarmup());
       await check(LONG_PAIR);
-      expect(screen.getByText(/67% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/67% correct/)).toBeInTheDocument();
       await clickButton(/Continue/);
       expect(header("Fix a tricky spot")).toBeInTheDocument();
       expect(screen.getByText("Try this part again")).toBeInTheDocument();
@@ -3347,7 +3359,7 @@ describe("PassageSession", () => {
       await check(LONG_PAIR);
       await clickButton(LINK);
       await runRefresher(LONG_WARMUP);
-      expect(screen.getByText(/^100% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/^100% correct/)).toBeInTheDocument();
 
       await clickButton(/Continue/);
       expect(header("Read")).toBeInTheDocument();
@@ -3382,7 +3394,7 @@ describe("PassageSession", () => {
       await check(LONG_PAIR);
       await clickButton(LINK);
       await runRefresher(LONG_WARMUP, allButLast(LONG_WARMUP));
-      expect(screen.getByText(/^9\d% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/^9\d% correct/)).toBeInTheDocument();
 
       await clickButton(/Continue/);
       expect(header("Fix a tricky spot")).toBeInTheDocument();
@@ -3392,7 +3404,7 @@ describe("PassageSession", () => {
 
     it("R37: offers the section recital a link and an under-85% offer over that section's verses", async () => {
       renderSession(sectionView());
-      await check(LONG[1] ?? "", "Your recalled verse");
+      await check(LONG[1] ?? "", "Your verse");
       await clickButton(/Continue/);
       await clickButton(SECTION_RECITE_LABEL);
       expect(await screen.findByText("This section")).toBeInTheDocument();
@@ -3408,7 +3420,7 @@ describe("PassageSession", () => {
     it("R37: a section recital at 84% gets the offer, at 85% none, and the refresher keeps its next step", async () => {
       async function reciteSection(percent: number) {
         const run = renderSession(sectionView());
-        await check(LONG[1] ?? "", "Your recalled verse");
+        await check(LONG[1] ?? "", "Your verse");
         await clickButton(/Continue/);
         await clickButton(SECTION_RECITE_LABEL);
         await check(typedAt(LONG_PAIR, percent));
@@ -3505,7 +3517,7 @@ describe("PassageSession", () => {
         await screen.findByText("Type what you remember"),
       ).toBeInTheDocument();
       expect(queryLink()).toBeNull();
-      await check("The", "Your recalled verse");
+      await check("The", "Your verse");
       expect(queryLink()).toBeNull();
     });
 
@@ -3536,14 +3548,14 @@ describe("PassageSession", () => {
     it("R38: the Connect verses recital shows no link, and no offer at 30% or 84%", async () => {
       for (const percent of [30, 84]) {
         const run = renderSession(connectView());
-        await check(LONG[0] ?? "", "Your recalled verse");
+        await check(LONG[0] ?? "", "Your verse");
         await clickButton(/Continue/);
         await clickButton(CONNECT_RECITE_LABEL);
         expect(await screen.findByText("Together")).toBeInTheDocument();
         expect(queryLink()).toBeNull();
         await check(typedAt(LONG_PAIR, percent));
         expect(
-          screen.getByText(new RegExp(`^${percent}% recalled`)),
+          screen.getByText(new RegExp(`^${percent}% correct`)),
         ).toBeInTheDocument();
         expect(queryLink()).toBeNull();
         run.unmount();
@@ -3575,7 +3587,7 @@ describe("PassageSession", () => {
       fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
       renderSession(view);
       expect(
-        await screen.findByText("Could not load verse text."),
+        await screen.findByText("Couldn't load verse text."),
       ).toBeInTheDocument();
       expect(queryLink()).toBeNull();
       serveChapter([PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE]);
@@ -3638,7 +3650,7 @@ describe("PassageSession", () => {
 
       // Skip warm-up, type the due verse from memory, Check answer, Continue.
       await clickButton(WARMUP_SKIP_LABEL);
-      await check(versesOf(due), "Your recalled verse");
+      await check(versesOf(due), "Your verse");
       await clickButton(/Continue/);
       // Section complete → Recite this section, with the link before a try.
       expect(await screen.findByText("Section complete")).toBeInTheDocument();
@@ -3771,11 +3783,11 @@ describe("PassageSession", () => {
       // Shift+Enter adds a line; Enter checks.
       await user.keyboard("The{Shift>}{Enter}{/Shift}Lord");
       expect(answerBox()).toHaveValue("The\nLord");
-      expect(screen.queryByText(/recalled/)).toBeNull();
+      expect(screen.queryByText(/% correct/)).toBeNull();
       await user.clear(answerBox());
       await user.paste(WARMUP);
       await user.keyboard("{Enter}");
-      await screen.findByText(/recalled/);
+      await screen.findByText(/% correct/);
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
       );
@@ -3796,7 +3808,8 @@ describe("PassageSession", () => {
 
   describe("Learning passage ••• Refresh (S14)", () => {
     const BACK = "Back to Psalm 23";
-    const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+    const PRACTICE_ONLY =
+      "This was just practice, so your progress didn't change.";
     const STEP_ONE = "Refresh · First letters · 1 of 2";
     const STEP_TWO = "Refresh · From memory · 2 of 2";
     const VERSE_THREE =
@@ -3876,7 +3889,7 @@ describe("PassageSession", () => {
       const button = screen.getByRole("button", { name: /Check answer/ });
       await waitFor(() => expect(button).toBeEnabled());
       await userEvent.click(button);
-      await screen.findByText(/recalled/);
+      await screen.findByText(/% correct/);
     }
 
     async function clickButton(name: RegExp | string) {
@@ -3924,7 +3937,7 @@ describe("PassageSession", () => {
 
       // The answer is the learned verses: typing them is 100%.
       await check(LEARNED);
-      expect(screen.getByText("100% recalled")).toBeInTheDocument();
+      expect(screen.getByText("100% correct")).toBeInTheDocument();
     });
 
     it("covers a single learned verse alone", async () => {
@@ -3940,7 +3953,7 @@ describe("PassageSession", () => {
       expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
       expect(hintText()).toBe(ONE_HALF);
       await check(PASSAGE_ONE);
-      expect(screen.getByText("100% recalled")).toBeInTheDocument();
+      expect(screen.getByText("100% correct")).toBeInTheDocument();
     });
 
     it("hints only the shaky learned verses, every other learned word blank", async () => {
@@ -4016,7 +4029,7 @@ describe("PassageSession", () => {
       ]) {
         expect(screen.queryByRole("button", { name })).toBeNull();
       }
-      expect(screen.queryByText("Counted as today's review")).toBeNull();
+      expect(screen.queryByText("This counted as today's review.")).toBeNull();
       expect(screen.queryByText(/^Next review /)).toBeNull();
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
@@ -4098,9 +4111,9 @@ describe("PassageSession", () => {
       fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
       renderRefresh(view);
       expect(
-        await screen.findByText("Could not load verse text."),
+        await screen.findByText("Couldn't load verse text."),
       ).toBeInTheDocument();
-      expect(screen.queryByText(/recalled/)).toBeNull();
+      expect(screen.queryByText(/% correct/)).toBeNull();
       expect(
         screen.getByRole("button", { name: /Check answer/ }),
       ).toBeDisabled();

@@ -1,12 +1,12 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { JSX } from "react";
 
-import { accuracyFeedback, type AccuracyBand } from "@/lib/accuracy-feedback";
 import {
-  PRACTICE_PASS_EMOJI,
-  PRACTICE_PASS_LEAD,
-  PRACTICE_PASS_REST,
-} from "@/lib/memory-copy";
+  accuracyBand,
+  BAND_EMOJI,
+  type AccuracyBand,
+} from "@/lib/accuracy-feedback";
+import { PRACTICE_PASS_EMOJI, PRACTICE_PASS_LINE } from "@/lib/memory-copy";
 import {
   isLearningPhase,
   reviewGradeOutcome,
@@ -21,7 +21,7 @@ import type {
   VerseAttemptQuality,
 } from "./study-attempt-quality";
 import {
-  attemptPraiseLine,
+  attemptFeedbackLine,
   reviewOutcomeMessage,
 } from "./verse-attempt-feedback";
 
@@ -44,15 +44,15 @@ interface VerseMemoryFeedbackProps {
   nextSchedule?: MemorySchedule | null;
   /** Clock used for due labels. Defaults to `Date.now()`. */
   now?: number;
-  /** Percent recalled; required to band pass vs close on Review. */
+  /** Percent correct; required to band pass vs close on Review. */
   accuracy?: number;
   /** Diff error tallies — unlocks one-word-off and typo-only copy. */
   errors?: AttemptErrorCounts;
-  /** Trails the percentage, e.g. "Pass at 85%". */
+  /** Trails the percentage, e.g. "you need 85% to pass". */
   note?: string;
-  /** First letters refresher: swap the miss line and hide "Next review". */
+  /** First letters refresher: nothing reschedules, so hide "Next review". */
   scheduleHeld?: boolean;
-  /** Practice-only try: drop the miss line's "bring it back sooner". */
+  /** Practice-only try: nothing reschedules, so a miss promises nothing. */
   unscheduled?: boolean;
   /** Skip the 100% celebration pop (step 1 of a refresher). */
   skipCelebrate?: boolean;
@@ -60,7 +60,7 @@ interface VerseMemoryFeedbackProps {
   bannerId?: string;
   /** Replaces the Next review line, e.g. a practice-only close. */
   closingLine?: string | null;
-  /** Shown after the closing line, e.g. "Counted as today's review". */
+  /** Shown after the closing line, e.g. "This counted as today's review." */
   countedLine?: string | null;
   practiceOnly?: boolean;
 }
@@ -93,9 +93,9 @@ const CONFETTI_COLORS = [
 ] as const;
 
 /**
- * "How you did" in one banner: an emoji, the honest headline, a specific
- * word of encouragement, the percentage, and (in Review) what happens next.
- * A word-for-word recall bursts confetti unless motion is reduced.
+ * "How you did" in one banner, each line said once: an emoji, one bold line,
+ * the percentage, and what happens next when something changes. A perfect
+ * attempt bursts confetti unless motion is reduced.
  */
 export function VerseMemoryFeedback({
   quality,
@@ -119,28 +119,21 @@ export function VerseMemoryFeedback({
   const scored =
     accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
   const outcome = reviewGradeOutcome(quality, scored);
-  const feedback = accuracyFeedback(scored, {
-    exact: quality === "exact",
-    scheduleHeld,
-    unscheduled,
-  });
-  const { band } = feedback;
+  const band = accuracyBand(scored, quality === "exact");
   const practicePass = practiceOnly && (band === "exact" || band === "pass");
   const tone = practicePass ? "pass" : band;
-  const lead = practicePass ? PRACTICE_PASS_LEAD : feedback.lead;
-  const rest = practicePass ? PRACTICE_PASS_REST : feedback.rest;
-  const emoji = practicePass ? PRACTICE_PASS_EMOJI : feedback.emoji;
+  const emoji = practicePass ? PRACTICE_PASS_EMOJI : BAND_EMOJI[band];
   const celebrate = band === "exact" && !skipCelebrate && !practicePass;
-  const praise = practicePass
-    ? null
+  const line = practicePass
+    ? PRACTICE_PASS_LINE
     : !showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
-      : attemptPraiseLine({ accuracy: scored, outcome, errors });
+      : attemptFeedbackLine({ accuracy: scored, outcome, errors });
   const consequence =
     closingLine !== null
       ? closingLine
       : showScheduleOutcome && !scheduleHeld
-        ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+        ? scheduleConsequence(outcome, nextSchedule, now ?? 0, unscheduled)
         : null;
 
   return (
@@ -168,17 +161,16 @@ export function VerseMemoryFeedback({
         celebrate={celebrate}
         reduceMotion={reduceMotion}
       />
-      <p className="mt-1 text-lg leading-snug text-balance">
-        <span className={cn("font-semibold", LEAD_TONE[tone])}>{lead}</span>
-        {rest ? <span className="text-foreground/80"> {rest}</span> : null}
+      <p
+        className={cn(
+          "mt-1 text-lg font-semibold leading-snug text-balance",
+          LEAD_TONE[tone],
+        )}
+      >
+        {line}
       </p>
-      {praise ? (
-        <p className="text-sm font-medium leading-snug text-balance text-foreground/90">
-          {praise}
-        </p>
-      ) : null}
       <p className="text-xs tabular-nums text-muted-foreground">
-        {`${scored}% recalled`}
+        {`${scored}% correct`}
         {note ? ` · ${note}` : null}
       </p>
       {consequence ? (
@@ -199,6 +191,7 @@ function scheduleConsequence(
   outcome: ReviewGradeOutcome,
   nextSchedule: MemorySchedule | null,
   now: number,
+  unscheduled: boolean,
 ): string | null {
   const lapsedToLearning =
     nextSchedule !== null && isLearningPhase(nextSchedule.status);
@@ -207,6 +200,7 @@ function scheduleConsequence(
     nextSchedule,
     now,
     lapsedToLearning,
+    unscheduled,
   });
 }
 

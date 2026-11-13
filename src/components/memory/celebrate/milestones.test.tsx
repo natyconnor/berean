@@ -65,7 +65,7 @@ const milestones: OnboardingMilestones = {
 };
 
 const MEMORIZED_LINE =
-  "Psalm 23:1 is memorized. We'll bring it back tomorrow to keep it fresh.";
+  "Psalm 23:1 is memorized. We'll review it tomorrow to keep it fresh.";
 
 function verse(
   startVerse: number,

@@ -169,8 +169,8 @@ export function MemoryReviewPage() {
             Not ready to review
           </h1>
           <p className="text-sm text-muted-foreground">
-            {formatVerseRef(search)} isn&apos;t in review yet. Learn it first,
-            then come back for a one-off review anytime.
+            You haven&apos;t memorized {formatVerseRef(search)} yet. Once you
+            have, you can review it here anytime.
           </p>
         </div>
         <Button variant="outline" onClick={onExit}>

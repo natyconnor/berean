@@ -50,8 +50,8 @@ import {
   REFRESH_SAVE_ERROR,
   SESSION_COMPLETE_FOOTER,
   TRY_ANOTHER_REFRESHER_LABEL,
+  learnAgainLine,
   refresherHeader,
-  stepShortLabel,
 } from "@/lib/memory-copy";
 import { isHoldableColdMiss } from "@/lib/held-verse-attempt";
 import { isStaleVerse } from "@/lib/memory-stale";
@@ -92,6 +92,7 @@ import {
 import {
   averageReviewAccuracy,
   nextReviewLine,
+  nextReviewResultLine,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -424,7 +425,7 @@ function reviewedOutcomeLine(
   now: number,
 ): string {
   if (!isReviewPhase(progress.status)) {
-    return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
+    return learnAgainLine(progress.learnStage);
   }
   return nextReviewLine(progress, now);
 }
@@ -1718,7 +1719,7 @@ function PracticeCard({
   // check so those actions can't overlap.
   const { submit, pending: submitPending } = useSubmitLock();
   // Which submit owns the spinner. The result button mounts as soon as the
-  // answer is checked, while the save is still running — "Saving..." holds
+  // answer is checked, while the save is still running — "Saving…" holds
   // that label until the record settles so it doesn't offer Try again or
   // Continue early. Set in the same turn as the lock, so it batches with
   // `submitPending` and both clear on the render that ends the save.
@@ -1878,7 +1879,7 @@ function PracticeCard({
           : hintStage === "hidden"
             ? composite
               ? "Recite the whole passage from memory"
-              : "Recall the verse from memory"
+              : "Type the verse from memory"
             : "Type what you remember";
 
   const canCheckAnswer =
@@ -2293,7 +2294,7 @@ function PracticeCard({
       : null;
   const dateOnlyClosing =
     (showHeldOffer || afterMissCountedResult) && nextSchedule
-      ? nextReviewLine(nextSchedule, outcomeNow)
+      ? nextReviewResultLine(nextSchedule, outcomeNow)
       : null;
   const defaultFocusRef =
     showHeldOffer && !saveError ? refresherOfferRef : reviewActionRef;
@@ -2377,7 +2378,7 @@ function PracticeCard({
     </>
   );
   const resultActionLabel =
-    gradePending && !saveError ? "Saving..." : settledResultAction;
+    gradePending && !saveError ? "Saving…" : settledResultAction;
 
   return (
     <motion.div
@@ -2525,7 +2526,7 @@ function PracticeCard({
                     ) : error ? (
                       <div className="space-y-3 font-sans">
                         <p className="text-sm text-destructive">
-                          Could not load verse text.
+                          Couldn&apos;t load verse text.
                         </p>
                         <Button size="sm" variant="outline" onClick={retryLoad}>
                           Retry
@@ -2580,9 +2581,7 @@ function PracticeCard({
                           : "min-h-[170px] resize-none",
                       )}
                       aria-label={
-                        composite
-                          ? "Your recited passage"
-                          : "Your recalled verse"
+                        composite ? "Your recited passage" : "Your verse"
                       }
                       aria-describedby={
                         [
@@ -2761,7 +2760,7 @@ function PracticeCard({
                 loading={submitPending}
               >
                 {gradePending ? (
-                  "Saving..."
+                  "Saving…"
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" aria-hidden />

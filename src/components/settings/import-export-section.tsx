@@ -271,7 +271,7 @@ export function ImportExportSection() {
       setImportParseError(
         error instanceof Error
           ? error.message
-          : "Failed to parse import files.",
+          : "Couldn't read the import files.",
       );
     } finally {
       clearImportInput();
@@ -396,7 +396,7 @@ export function ImportExportSection() {
         message: error instanceof Error ? error.message : "unknown-error",
       });
       setImportParseError(
-        error instanceof Error ? error.message : "Failed to import notes.",
+        error instanceof Error ? error.message : "Couldn't import notes.",
       );
     } finally {
       setImportProgress(null);
@@ -490,7 +490,7 @@ export function ImportExportSection() {
         scope: exportScope,
       });
       setExportError(
-        error instanceof Error ? error.message : "Failed to export notes.",
+        error instanceof Error ? error.message : "Couldn't export notes.",
       );
     } finally {
       setExportProgress(null);
@@ -587,7 +587,7 @@ export function ImportExportSection() {
             {importParseState === "parsing" && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Parsing selected files...
+                Reading selected files…
               </p>
             )}
 

@@ -160,7 +160,7 @@ export function parseImportWorkbook(
         {
           severity: "error",
           code: "unknown-book",
-          message: "Could not determine the Bible book from the file name.",
+          message: "Couldn't tell which Bible book this is from the file name.",
         },
         fileName,
       ),

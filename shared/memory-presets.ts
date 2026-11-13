@@ -1115,7 +1115,7 @@ const hundredVerses: CollectionPreset = {
   id: HUNDRED_VERSES_PRESET_ID,
   title: "Over 100 Verses Every Christian Should Know",
   description:
-    "An ordered set of passages to memorize one span at a time. Start the whole list, or pick the ones you want.",
+    "Passages to memorize one at a time, in order. Start the whole list, or pick the ones you want.",
   passages: HUNDRED_VERSES_PASSAGES,
 };
 

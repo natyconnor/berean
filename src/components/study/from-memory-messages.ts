@@ -9,7 +9,7 @@ import {
 export const FROM_MEMORY_CLOSE_MESSAGE =
   "Good job, but let's get 100% to lock this verse in.";
 
-export const FROM_MEMORY_FIRST_ROUND_PROMPT = "Recall the verse from memory";
+export const FROM_MEMORY_FIRST_ROUND_PROMPT = "Type the verse from memory";
 
 export const FROM_MEMORY_SECOND_ROUND_PROMPT =
   "Let's do it one more time to really show you've got this one down!";

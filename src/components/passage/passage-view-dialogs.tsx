@@ -30,8 +30,7 @@ export function PassageViewDialogs({
         <DialogHeader>
           <DialogTitle>Discard unsaved notes?</DialogTitle>
           <DialogDescription>
-            You have unsaved content in one or more note editors. Are you sure
-            you want to discard your changes?
+            You have unsaved changes in your notes. Do you want to discard them?
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

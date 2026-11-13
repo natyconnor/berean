@@ -139,7 +139,7 @@ function HeartedVersesColumn({
     <section className="space-y-3">
       <ColumnHeader
         icon={<BookHeart className="h-3.5 w-3.5" />}
-        label="Hearted Verses"
+        label="Hearted verses"
         count={savedVerses.length}
       />
       {savedVerses.length === 0 ? (
@@ -219,7 +219,7 @@ function SavedVerseText({
   if (error) {
     return (
       <p className="text-xs italic text-muted-foreground">
-        Could not load verse text.
+        Couldn&apos;t load verse text.
       </p>
     );
   }

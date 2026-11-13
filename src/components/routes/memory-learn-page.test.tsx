@@ -448,7 +448,7 @@ describe("MemoryLearnPage", () => {
       await screen.findByRole("heading", { name: "Nothing new today" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Nice. Tomorrow you'll try it with blanks."),
+      screen.getByText("Tomorrow you'll fill in the blanks."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Start something new" }),

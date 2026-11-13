@@ -120,7 +120,7 @@ export function useCachedEsvQuery(
           query,
           data: null,
           error:
-            error instanceof Error ? error.message : "Failed to load passage",
+            error instanceof Error ? error.message : "Couldn't load passage",
         });
       });
   }, [enabled, fetchPassage, query, retryNonce]);

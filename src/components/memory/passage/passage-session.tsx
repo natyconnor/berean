@@ -115,7 +115,7 @@ import {
   markPassageStepInProgress,
   releasePassageStepInProgress,
 } from "@/lib/passage-step-resume";
-import { formatDueDay } from "@/lib/memorize-plan";
+import { nextReviewSentence } from "@/lib/review-session-attempts";
 import {
   COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
@@ -652,7 +652,7 @@ export function PassageSession({
     }
     retrySaveRef.current = null;
     setResultView({
-      closingLine: nextReviewLine(dueAt, save.now),
+      closingLine: nextReviewSentence(dueAt, save.now),
       countedLine: refresh ? COUNTED_TODAY_CLOSING : null,
       offer:
         save.accuracy < PASSAGE_PASS_ACCURACY
@@ -771,7 +771,9 @@ export function PassageSession({
         },
       );
       await holdReviewMiss(save, {
-        closingLine: preview ? nextReviewLine(preview.dueAt, save.now) : null,
+        closingLine: preview
+          ? nextReviewSentence(preview.dueAt, save.now)
+          : null,
         offer: needARefresher(() => openRefresher("after-miss")),
         focusOffer: true,
       });
@@ -1429,10 +1431,6 @@ function heldRecallWithJourneyProgress(
   };
 }
 
-function nextReviewLine(dueAt: number, now: number): string {
-  return `Next review ${formatDueDay(dueAt, now)}`;
-}
-
 function needARefresher(
   onClick: () => void,
 ): NonNullable<PassageRecallResultView["offer"]> {
@@ -1729,7 +1727,7 @@ function buildingRecall(args: {
         masked.stage === "full"
           ? "Read it through, then continue"
           : masked.stage === "hidden"
-            ? "Recall the verse from memory"
+            ? "Type the verse from memory"
             : "Type what you remember",
       versePlainText: text,
       loading: compositeLoading,

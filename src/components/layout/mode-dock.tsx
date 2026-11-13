@@ -246,7 +246,7 @@ export function ModeDock() {
           <FeatureCallout
             state={studyHint}
             title="Study lives here now"
-            description="You've written enough notes to start studying. Jump into Study to review and teach what you've captured."
+            description="You've written enough notes to start studying. Head to Study to review and teach what you've written."
             primaryActionLabel="Open Study"
             onPrimaryAction={() => {
               logInteraction("mode-dock", "study-opened", {

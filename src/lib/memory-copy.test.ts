@@ -10,8 +10,7 @@ import {
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
   PRACTICE_PASS_EMOJI,
-  PRACTICE_PASS_LEAD,
-  PRACTICE_PASS_REST,
+  PRACTICE_PASS_LINE,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   canStartOver,
@@ -232,16 +231,16 @@ describe("refresher copy", () => {
       "Do a refresher on this verse for some more practice.",
     );
     expect(PRACTICE_ONLY_CLOSING).toBe(
-      "Practice only, your progress didn't change.",
+      "This was just practice, so your progress didn't change.",
     );
-    expect(PRACTICE_PASS_LEAD).toBe("Good work getting back on track.");
-    expect(PRACTICE_PASS_REST).toBe(
-      "Next time, see if you can do it on the first try.",
+    expect(PRACTICE_PASS_LINE).toBe(
+      "Good work getting back on track. Next time see if you can get it on the first try.",
     );
-    expect(PRACTICE_PASS_REST).not.toContain("see if it comes back");
     expect(PRACTICE_PASS_EMOJI).toBe("👍");
     expect(NOW_TRY_WITHOUT_HINTS).toBe("Now try it without the hints.");
-    expect(REFRESH_SAVE_ERROR).toBe("Couldn't save your result. Try again.");
+    expect(REFRESH_SAVE_ERROR).toBe(
+      "Couldn't save your result. Please try again.",
+    );
     expect(refresherHeader(1)).toBe("Refresh · First letters · 1 of 2");
     expect(refresherHeader(2)).toBe("Refresh · From memory · 2 of 2");
   });

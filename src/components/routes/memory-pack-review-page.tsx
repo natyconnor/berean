@@ -169,7 +169,7 @@ export function MemoryPackReviewPage() {
               </h1>
               <p className="text-sm text-muted-foreground">
                 {learningCount > 0
-                  ? `${pack.name} recites as one passage, so every unit has to graduate before it comes back. ${learningCount} ${learningCount === 1 ? "unit is" : "units are"} still learning.`
+                  ? `${pack.name} is reviewed as one passage, so every verse needs to be memorized first. ${learningCount} ${learningCount === 1 ? "is" : "are"} still in progress.`
                   : `${pack.name} has no verses being memorized right now.`}
               </p>
             </div>

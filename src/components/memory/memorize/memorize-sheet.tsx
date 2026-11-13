@@ -95,11 +95,11 @@ const HOW_IT_WORKS: Record<MemorizeMode, string> = {
   passage:
     "You'll learn it in order, a few verses a day, then say it all the way through.",
   verse:
-    "Three short daily steps, then we'll bring it back right before you'd forget it.",
-  pack: "Each verse takes three short daily steps. We'll keep them all fresh for you.",
+    "Three short daily steps, then we'll review it right before you'd forget it.",
+  pack: "Each verse takes three short daily steps, then we'll review them to keep them fresh.",
 };
 
-const START_FAILED = "Couldn't start memorizing. Try again.";
+const START_FAILED = "Couldn't start memorizing. Please try again.";
 const AS_ONE_CARD = "It's short, so you'll learn it all together.";
 const TOO_MANY_CHAPTERS = "Pick up to 20 chapters to memorize as one passage.";
 const TOO_MANY_VERSES = `Pick up to ${MEMORIZE_MAX_PACK_SPANS} verses to memorize together.`;

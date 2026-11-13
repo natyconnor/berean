@@ -69,7 +69,7 @@ export function TutorialActionsSection({
           onClick={handleResetHints}
           disabled={disabled}
         >
-          {isResettingHints ? "Resetting..." : "Reset feature hints"}
+          {isResettingHints ? "Resetting…" : "Reset feature hints"}
         </Button>
       </div>
     </section>

@@ -47,8 +47,8 @@ export function EnableUnifiedReviewDialog({
         <DialogHeader>
           <DialogTitle>Review {packName} together?</DialogTitle>
           <DialogDescription>
-            Reviews stop arriving a verse at a time. From now on this pack comes
-            back as one recitation on one schedule.
+            Instead of reviewing each verse separately, you&apos;ll recite this
+            pack as one passage, on one schedule.
           </DialogDescription>
         </DialogHeader>
 
@@ -59,10 +59,10 @@ export function EnableUnifiedReviewDialog({
               className="mt-0.5 h-4 w-4 shrink-0 text-primary"
             />
             <span>
-              <span className="font-medium">Everything moves to today.</span>{" "}
+              <span className="font-medium">All the verses move to today.</span>{" "}
               {notDueCount > 0
-                ? `${notDueCount} of ${verseCount} verse${verseCount === 1 ? "" : "s"} ${notDueCount === 1 ? "isn't" : "aren't"} due yet — ${notDueCount === 1 ? "it joins" : "they join"} this review so the whole passage stays in step.`
-                : `All ${verseCount} verse${verseCount === 1 ? "" : "s"} are already due, so nothing is left half-scheduled.`}
+                ? `${notDueCount} of ${verseCount} verse${verseCount === 1 ? "" : "s"} ${notDueCount === 1 ? "isn't" : "aren't"} due yet, but ${notDueCount === 1 ? "it'll join" : "they'll join"} this review so the whole passage stays together.`
+                : `All ${verseCount} verse${verseCount === 1 ? " is" : "s are"} already due.`}
             </span>
           </li>
           <li className="flex gap-3">
@@ -72,15 +72,15 @@ export function EnableUnifiedReviewDialog({
             />
             <span>
               <span className="font-medium">One recitation, one grade.</span>{" "}
-              Type it all the way through — no verse numbers — and that grade
-              sets the next review for every verse at once.
+              Type the whole passage from memory (no verse numbers needed). Your
+              grade sets the next review for every verse.
             </span>
           </li>
         </ul>
 
         <p className="text-xs text-muted-foreground">
-          You can switch back to reviewing verse by verse any time from the ⋯
-          menu. Nothing you have learned is reset.
+          You can switch back to reviewing verse by verse anytime from the ⋯
+          menu. You won&apos;t lose any progress.
         </p>
 
         {error ? (

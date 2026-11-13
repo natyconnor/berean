@@ -242,9 +242,7 @@ describe("TutorialProvider", () => {
       "section",
     );
     expect(card).toHaveStyle({ top: "50%", left: "50%" });
-    expect(
-      screen.queryByText("Preparing this step..."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Preparing this step…")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByText("Write what stood out")).toBeInTheDocument();
@@ -256,9 +254,7 @@ describe("TutorialProvider", () => {
     await waitFor(() => {
       expect(screen.queryByText("Welcome to Berean")).not.toBeInTheDocument();
     });
-    expect(
-      screen.queryByText("Preparing this step..."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Preparing this step…")).not.toBeInTheDocument();
   });
 
   it("clears persisted search params after the search tutorial finishes", async () => {
