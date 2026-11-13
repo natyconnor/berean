@@ -43,6 +43,11 @@ export const BANNED_MEMORY_COPY: readonly {
   { word: "Review verses to master", pattern: /\breview verses to master\b/i },
   { word: "build packs", pattern: /\bbuild packs\b/i },
   { word: "Day N of 3", pattern: /\bday \d of 3\b/i },
+  // Say, type or recite instead; nobody says "recall" out loud.
+  {
+    word: "recall",
+    pattern: /\bRecall(s|ed|ing)?\b|^(?=.*\s).*\brecall(s|ed|ing)?\b/,
+  },
 ];
 
 /**
@@ -82,6 +87,14 @@ const ONBOARDING_FILES = [
   "src/components/tutorial/tutorial-provider.tsx",
 ];
 
+/** The result banner Memory shows after each try, which lives under Study. */
+const RESULT_FILES = [
+  "src/components/study/from-memory-messages.ts",
+  "src/components/study/verse-attempt-feedback.ts",
+  "src/components/study/verse-attempt-result.tsx",
+  "src/components/study/verse-memory-feedback.tsx",
+];
+
 function guardedFiles(): string[] {
   const memoryDir = path.join(ROOT, "src/components/memory");
   const routesDir = path.join(ROOT, "src/components/routes");
@@ -89,8 +102,10 @@ function guardedFiles(): string[] {
     .readdirSync(routesDir)
     .filter((name) => /^memory-.*\.tsx$/.test(name) && isGuardedSource(name))
     .map((name) => path.join(routesDir, name));
-  const onboardingFiles = ONBOARDING_FILES.map((file) => path.join(ROOT, file));
-  return [...walk(memoryDir), ...routeFiles, ...onboardingFiles].sort();
+  const extraFiles = [...ONBOARDING_FILES, ...RESULT_FILES].map((file) =>
+    path.join(ROOT, file),
+  );
+  return [...walk(memoryDir), ...routeFiles, ...extraFiles].sort();
 }
 
 /**
@@ -238,6 +253,22 @@ describe("Memory copy guard", () => {
       '"Day N of 3" in "Day 2 of 3: fill in the blanks"',
       '"Day N of 3" in "Today: day 1 of 3"',
       '"Day N of 3" in "Learning, day 3 of 3"',
+    ]);
+  });
+
+  it("catches recall in copy but not in file names", () => {
+    const sample = [
+      'const a = "Recall the verse from memory";',
+      'const b = "87% recalled";',
+      "const c = <p>A good, steady recall</p>;",
+      'import { PassageRecallCard } from "./passage-recall-card";',
+      'const ok = "Type the verse from memory";',
+    ].join("\n");
+
+    expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
+      '"recall" in "Recall the verse from memory"',
+      '"recall" in "87% recalled"',
+      '"recall" in "A good, steady recall"',
     ]);
   });
 

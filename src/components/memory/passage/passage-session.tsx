@@ -1729,7 +1729,7 @@ function buildingRecall(args: {
         masked.stage === "full"
           ? "Read it through, then continue"
           : masked.stage === "hidden"
-            ? "Recall the verse from memory"
+            ? "Type the verse from memory"
             : "Type what you remember",
       versePlainText: text,
       loading: compositeLoading,

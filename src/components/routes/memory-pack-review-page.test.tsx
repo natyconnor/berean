@@ -246,7 +246,7 @@ describe("MemoryPackReviewPage", () => {
         name: "Finish learning this pack first",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/1 unit is still learning/)).toBeInTheDocument();
+    expect(screen.getByText(/1 is still in progress/)).toBeInTheDocument();
 
     // No recitation card, and — critically — no per-span cards that would grade
     // through verseMemory.recordAttempt while the pack is flagged as one item.
@@ -255,9 +255,7 @@ describe("MemoryPackReviewPage", () => {
     expect(
       screen.queryByRole("button", { name: /^Psalm 23:1–3 \(/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Your recalled verse"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Your verse")).not.toBeInTheDocument();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
 
     await userEvent.click(
@@ -401,7 +399,7 @@ describe("MemoryPackReviewPage", () => {
         await userEvent.click(
           screen.getByRole("button", { name: /Check answer/ }),
         );
-        await screen.findByText(/recalled/);
+        await screen.findByText(/% correct/);
       }
 
       function expectNothingSaved() {
@@ -431,7 +429,9 @@ describe("MemoryPackReviewPage", () => {
         ).toBeInTheDocument();
         await check(LEARNED);
         expect(
-          screen.getByText("Practice only, your progress didn't change."),
+          screen.getByText(
+            "This was just practice, so your progress didn't change.",
+          ),
         ).toBeInTheDocument();
         await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
         expect(navigateMock).toHaveBeenCalledTimes(1);

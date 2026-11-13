@@ -241,8 +241,8 @@ export function MemoryPackSessionPage({
             </h1>
             <p className="text-sm text-muted-foreground">
               {isLearning
-                ? "No in-progress verses in this pack are ready for Learning."
-                : "Verses in this pack become available after they finish Learning."}
+                ? "None of this pack's verses are ready for their next step yet."
+                : "Practice opens once you've memorized a verse in this pack."}
             </p>
             <button
               type="button"

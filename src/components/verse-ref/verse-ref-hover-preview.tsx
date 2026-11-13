@@ -43,7 +43,7 @@ export function VerseRefPreviewContent({
       {loading ? (
         <div className="flex items-center gap-2 text-xs opacity-80">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Loading verse...
+          Loading verse…
         </div>
       ) : error ? (
         <p className="max-w-sm text-xs leading-relaxed">{error}</p>

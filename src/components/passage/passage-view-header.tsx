@@ -232,7 +232,7 @@ export function PassageViewHeader({
                 <FeatureCallout
                   state={readingHint}
                   title="Try Reading Mode"
-                  description="This chapter has enough notes that Reading Mode can help you review them alongside the passage. Switch any time."
+                  description="This chapter has a lot of notes. Reading Mode lays them out next to the passage so they're easier to read. Switch anytime."
                   primaryActionLabel="Switch to Read"
                   onPrimaryAction={() => setViewModeWithNotesReset("read")}
                   side="bottom"

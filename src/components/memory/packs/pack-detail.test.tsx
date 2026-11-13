@@ -1348,7 +1348,7 @@ describe("PackDetail Start over", () => {
     await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
     await userEvent.click(screen.getByRole("button", { name: "Start over" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't start over. Try again.",
+      "Couldn't start over. Please try again.",
     );
     expect(
       screen.getByRole("heading", { name: "Start Psalm 16 over?" }),
@@ -1369,7 +1369,7 @@ describe("PackDetail Start over", () => {
     await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
     await userEvent.click(screen.getByRole("button", { name: "Start over" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't start over. Try again.",
+      "Couldn't start over. Please try again.",
     );
     expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(true);
   });
@@ -1772,7 +1772,7 @@ describe("PackDetail passage Refresh (S13)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(REFRESH_START_ERROR);
     expect(alert).toHaveTextContent(
-      /^Couldn't start the refresher\. Try again\.$/,
+      /^Couldn't start the refresher\. Please try again\.$/,
     );
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     await waitFor(() => expect(trigger).toHaveFocus());
@@ -2037,7 +2037,7 @@ describe("PackDetail Learning passage Refresh (S14)", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      /^Couldn't start the refresher\. Try again\.$/,
+      /^Couldn't start the refresher\. Please try again\.$/,
     );
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     await waitFor(() => expect(trigger).toHaveFocus());

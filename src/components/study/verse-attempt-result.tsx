@@ -27,17 +27,17 @@ interface VerseAttemptResultProps {
   requireExactToAdvance?: boolean;
   nextSchedule?: MemorySchedule | null;
   now?: number;
-  /** Trails the banner's percentage, e.g. "Pass at 85%". */
+  /** Trails the banner's percentage, e.g. "you need 85% to pass". */
   note?: string;
   scheduleHeld?: boolean;
-  /** Practice-only try: drop the miss line's "bring it back sooner". */
+  /** Practice-only try: nothing reschedules, so a miss promises nothing. */
   unscheduled?: boolean;
   skipCelebrate?: boolean;
   saveError?: string | null;
   bannerId?: string;
   errorId?: string;
   closingLine?: string | null;
-  /** Shown after the closing line, e.g. "Counted as today's review". */
+  /** Shown after the closing line, e.g. "This counted as today's review." */
   countedLine?: string | null;
   practiceOnly?: boolean;
 }

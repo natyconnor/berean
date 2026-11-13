@@ -7,7 +7,7 @@ export function firstMemorizedCopy(reference: string): {
 } {
   return {
     lead: `${reference} is memorized.`,
-    rest: "We'll bring it back tomorrow to keep it fresh.",
+    rest: "We'll review it tomorrow to keep it fresh.",
   };
 }
 

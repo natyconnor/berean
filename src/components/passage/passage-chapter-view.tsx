@@ -250,7 +250,7 @@ export function PassageChapterView({
     if (highlightBannerTimeoutRef.current) {
       clearTimeout(highlightBannerTimeoutRef.current);
     }
-    setHighlightMutationBanner("Couldn't update highlight. Try again.");
+    setHighlightMutationBanner("Couldn't update highlight. Please try again.");
     highlightBannerTimeoutRef.current = setTimeout(() => {
       setHighlightMutationBanner(null);
       highlightBannerTimeoutRef.current = null;

@@ -222,7 +222,7 @@ export function TabBar() {
           <FeatureCallout
             state={searchHint}
             title="Search your notes"
-            description="Your library is big enough to make searching useful. Open the search workspace to filter by tags or query text."
+            description="You have enough notes now that search will come in handy. Open search to find notes by tag or by text."
             primaryActionLabel="Open search"
             onPrimaryAction={() => {
               logInteraction("toolbar", "search-workspace-opened", {

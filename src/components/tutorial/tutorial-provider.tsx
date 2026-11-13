@@ -76,7 +76,7 @@ const MAIN_TOUR_STEPS: TourStep[] = [
     id: "welcome",
     title: "Welcome to Berean",
     description:
-      "Berean helps you slow down with Scripture, capture what you notice, and build a searchable study library over time. Let's start with a simple note.",
+      "Berean helps you slow down with Scripture, write down what you notice, and find it again later. Let's start with a simple note.",
     targetIds: [],
   },
   {
@@ -98,7 +98,7 @@ const MAIN_TOUR_STEPS: TourStep[] = [
     id: "note-body",
     title: "Write what stood out",
     description:
-      "Capture observations, questions, or study ideas. We'll point out the rest of the app as it becomes useful.",
+      "Write down observations, questions, or study ideas. We'll point out the rest of the app as you go.",
     targetIds: ["note-editor-body"],
   },
 ];
@@ -660,7 +660,7 @@ export function TutorialProvider({
 
               {activeStepRequiresTarget && currentTargetRect === null ? (
                 <p className="text-xs text-muted-foreground">
-                  Preparing this step...
+                  Preparing this step…
                 </p>
               ) : null}
 

@@ -95,7 +95,7 @@ describe("empty copy", () => {
       ),
     ).toEqual({
       title: "Nothing new today",
-      body: "Nice. Tomorrow you'll try it with blanks.",
+      body: "Tomorrow you'll fill in the blanks.",
       startSomethingNew: false,
     });
     expect(learnEmptyCopy(null, NOW, TZ)).toEqual({

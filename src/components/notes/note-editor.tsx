@@ -174,7 +174,7 @@ export function NoteEditor({
       await onSave(body, tags);
     } catch (error) {
       setSaveError(
-        error instanceof Error ? error.message : "Failed to save note",
+        error instanceof Error ? error.message : "Couldn't save note",
       );
     } finally {
       setIsSaving(false);
@@ -333,19 +333,19 @@ export function NoteEditor({
                   !canSave
                     ? "Enter content to save"
                     : isSaving
-                      ? "Saving note..."
+                      ? "Saving note…"
                       : `Save note (${formatCommandOrControlShortcut("Enter")})`
                 }
               >
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving ? "Saving…" : "Save"}
               </TooltipButton>
             </>
           }
         />
         <InlineFeatureCallout
           state={starterTagsHint}
-          title="Want a head start organizing themes?"
-          description="A curated starter tag library is available in Settings — you can pick categories that match how you study."
+          title="Want a head start on tags?"
+          description="There's a set of starter tags in Settings. Pick the categories that match how you study."
           primaryActionLabel="Browse starter tags"
           onPrimaryAction={() => {
             void navigate({ to: "/settings" });

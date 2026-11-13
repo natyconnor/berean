@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PRACTICE_ONLY_CLOSING,
   PRACTICE_PASS_EMOJI,
-  PRACTICE_PASS_LEAD,
-  PRACTICE_PASS_REST,
+  PRACTICE_PASS_LINE,
 } from "@/lib/memory-copy";
 
 import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
@@ -34,12 +33,19 @@ const reviewingSchedule = {
   earlyReviewApplied: false,
 };
 
+/** The banner's lines, in order. */
+function bannerLines(): string[] {
+  return Array.from(screen.getByRole("status").querySelectorAll("p")).map(
+    (line) => line.textContent ?? "",
+  );
+}
+
 describe("VerseMemoryFeedback", () => {
   beforeEach(() => {
     useReducedMotion.mockReturnValue(true);
   });
 
-  it("celebrates an exact recall in one banner: emoji, headline, praise, percentage, and schedule", () => {
+  it("celebrates a perfect attempt in one banner: emoji, one line, percentage, and schedule", () => {
     useReducedMotion.mockReturnValue(false);
     render(
       <VerseMemoryFeedback
@@ -54,10 +60,11 @@ describe("VerseMemoryFeedback", () => {
     const banner = screen.getByRole("status");
     expect(banner).toHaveAttribute("data-tone", "exact");
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
-    expect(screen.getByText("Word for word.")).toBeInTheDocument();
-    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
-    expect(screen.getByText("100% recalled")).toBeInTheDocument();
-    expect(screen.getByText("Next review in 3 days.")).toBeInTheDocument();
+    expect(bannerLines()).toEqual([
+      "Perfect!",
+      "100% correct",
+      "Next review in 3 days.",
+    ]);
     expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
   });
 
@@ -72,12 +79,12 @@ describe("VerseMemoryFeedback", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Word for word.");
+    expect(screen.getByRole("status")).toHaveTextContent("Perfect!");
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
-  it("celebrates an exact learning recall too", () => {
+  it("celebrates a perfect learning attempt too", () => {
     useReducedMotion.mockReturnValue(false);
     render(
       <VerseMemoryFeedback
@@ -87,13 +94,26 @@ describe("VerseMemoryFeedback", () => {
         requireExactToAdvance
       />,
     );
-    expect(screen.getByText("Word for word.")).toBeInTheDocument();
-    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
-    expect(screen.getByText("100% recalled")).toBeInTheDocument();
+    expect(bannerLines()).toEqual(["Perfect!", "100% correct"]);
     expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
   });
 
-  it("saves the confetti for word-for-word recalls", () => {
+  it("says a perfect attempt with a typo is basically perfect, once", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={97}
+        errors={{ matches: 9, typos: 1, mismatches: 0, missing: 0, extra: 0 }}
+        attemptKey="learn-typo"
+      />,
+    );
+    expect(bannerLines()).toEqual([
+      "Basically perfect, just one typo!",
+      "97% correct",
+    ]);
+  });
+
+  it("saves the confetti for perfect attempts", () => {
     useReducedMotion.mockReturnValue(false);
     render(
       <VerseMemoryFeedback
@@ -111,35 +131,32 @@ describe("VerseMemoryFeedback", () => {
     );
     const banner = screen.getByRole("status");
     expect(banner).toHaveAttribute("data-tone", "pass");
-    expect(banner).toHaveTextContent("Well remembered.");
-    expect(banner).toHaveTextContent("Oh so close! Just one word off.");
-    expect(banner).toHaveTextContent("91% recalled");
+    expect(bannerLines()).toEqual([
+      "So close! Just one word off.",
+      "91% correct",
+    ]);
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🙌");
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
-  it("stays encouraging, with calmer emoji, on lower recalls", () => {
+  it("stays encouraging, with calmer emoji, on lower scores", () => {
     const { unmount } = render(
       <VerseMemoryFeedback quality="close" accuracy={70} attemptKey="mid" />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "So close. A few words slipped. The highlighted ones are worth another look.",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(bannerLines()).toEqual([
       "Mostly there, but it needs some work.",
-    );
+      "70% correct",
+    ]);
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🌱");
     unmount();
 
     render(
       <VerseMemoryFeedback quality="off" accuracy={40} attemptKey="low" />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "This one needs more time.",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "A handful of words came back.",
-    );
+    expect(bannerLines()).toEqual([
+      "You still need some work on this one.",
+      "40% correct",
+    ]);
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("📖");
   });
 
@@ -149,13 +166,15 @@ describe("VerseMemoryFeedback", () => {
         quality="close"
         accuracy={72}
         attemptKey="passage-miss"
-        note="Pass at 85%"
+        note="you need 85% to pass"
       />,
     );
-    expect(screen.getByText("72% recalled · Pass at 85%")).toBeInTheDocument();
+    expect(
+      screen.getByText("72% correct · you need 85% to pass"),
+    ).toBeInTheDocument();
   });
 
-  it("explains that the last From Memory recall needs 100% to graduate", () => {
+  it("explains that the last From Memory step needs 100% to graduate", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -163,12 +182,10 @@ describe("VerseMemoryFeedback", () => {
         requireExactToAdvance
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      FROM_MEMORY_CLOSE_MESSAGE,
-    );
+    expect(bannerLines()).toEqual([FROM_MEMORY_CLOSE_MESSAGE, "70% correct"]);
   });
 
-  it("shows a spent 85–99% Review pass with the next-review line", () => {
+  it("shows an 85–99% Review pass with the next-review line", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -184,8 +201,11 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveAttribute("data-tone", "pass");
-    expect(screen.getByRole("status")).toHaveTextContent("Well remembered.");
-    expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
+    expect(bannerLines()).toEqual([
+      "A few slips, but you know it.",
+      "90% correct",
+      "Next review tomorrow.",
+    ]);
   });
 
   it("calls out a single wrong word on an 85–99% Review pass", () => {
@@ -212,12 +232,12 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Oh so close! Just one word off.",
+      "So close! Just one word off.",
     );
     expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
   });
 
-  it("steps a 60–84% Review recall back with a next-review line", () => {
+  it("steps a 60–84% Review attempt back with a next-review line", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -239,7 +259,7 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/Next review in/);
   });
 
-  it("explains a daily-review lapse back to the blanks step", () => {
+  it("says a daily-review lapse will be learned again from the blanks step", () => {
     render(
       <VerseMemoryFeedback
         quality="off"
@@ -260,12 +280,11 @@ describe("VerseMemoryFeedback", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "A handful of words came back.",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Back to fill in the blanks.",
-    );
+    expect(bannerLines()).toEqual([
+      "You still need some work on this one.",
+      "40% correct",
+      "We'll learn it again, starting with fill in the blanks.",
+    ]);
   });
 
   it("explains a one-step review lapse that stays in the queue", () => {
@@ -290,6 +309,33 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
   });
 
+  it("says a Review miss comes back sooner until its date is known", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={40}
+        attemptKey="review-miss-pending"
+        showScheduleOutcome
+      />,
+    );
+    expect(bannerLines()).toEqual([
+      "You still need some work on this one.",
+      "40% correct",
+      "We'll review it again sooner.",
+    ]);
+  });
+
+  it("promises nothing about the schedule on a learning miss", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={40}
+        attemptKey="learn-miss"
+      />,
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
+  });
+
   it("leaves the schedule line off until the next review is known", () => {
     render(
       <VerseMemoryFeedback
@@ -299,7 +345,7 @@ describe("VerseMemoryFeedback", () => {
         showScheduleOutcome
       />,
     );
-    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
+    expect(screen.getByText("Perfect!")).toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
   });
 
@@ -317,13 +363,10 @@ describe("VerseMemoryFeedback", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Another look will help it stick.",
-    );
-    expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
-    expect(screen.getByRole("status")).not.toHaveTextContent(
-      "We'll bring it back sooner.",
-    );
+    expect(bannerLines()).toEqual([
+      "You still need some work on this one.",
+      "40% correct",
+    ]);
   });
 
   it("skips the celebration pop on a held 100%", () => {
@@ -340,12 +383,12 @@ describe("VerseMemoryFeedback", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByText("Word for word.")).toBeInTheDocument();
+    expect(screen.getByText("Perfect!")).toBeInTheDocument();
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
   });
 
-  it("uses practice pass copy at 100% and hides Nailed it", () => {
+  it("uses the practice pass line at 100% instead of Perfect", () => {
     useReducedMotion.mockReturnValue(false);
     render(
       <VerseMemoryFeedback
@@ -365,18 +408,15 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByTestId("result-emoji")).toHaveTextContent(
       PRACTICE_PASS_EMOJI,
     );
-    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
-    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
-    expect(banner).toHaveTextContent("100% recalled");
-    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
-    expect(banner).not.toHaveTextContent("Nailed it!");
-    expect(banner).not.toHaveTextContent("Word for word.");
-    expect(banner).not.toHaveTextContent("Well remembered");
-    expect(banner).not.toHaveTextContent("see if it comes back");
+    expect(bannerLines()).toEqual([
+      PRACTICE_PASS_LINE,
+      "100% correct",
+      PRACTICE_ONLY_CLOSING,
+    ]);
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
-  it("uses practice pass copy at 90% and hides Well remembered", () => {
+  it("uses the practice pass line at 90%", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -395,16 +435,14 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByTestId("result-emoji")).toHaveTextContent(
       PRACTICE_PASS_EMOJI,
     );
-    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
-    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
-    expect(banner).toHaveTextContent("90% recalled");
-    expect(banner).not.toHaveTextContent("Well remembered");
-    expect(banner).not.toHaveTextContent("Nailed it!");
-    expect(banner).not.toHaveTextContent("see if it comes back");
-    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
+    expect(bannerLines()).toEqual([
+      PRACTICE_PASS_LINE,
+      "90% correct",
+      PRACTICE_ONLY_CLOSING,
+    ]);
   });
 
-  it("keeps S1 miss copy on a practice-only 70%", () => {
+  it("keeps the score line on a practice-only 70%", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -418,12 +456,11 @@ describe("VerseMemoryFeedback", () => {
         closingLine={PRACTICE_ONLY_CLOSING}
       />,
     );
-    const banner = screen.getByRole("status");
-    expect(banner).toHaveTextContent(
-      "So close. A few words slipped. The highlighted ones are worth another look.",
-    );
-    expect(banner).not.toHaveTextContent(PRACTICE_PASS_LEAD);
-    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
+    expect(bannerLines()).toEqual([
+      "Mostly there, but it needs some work.",
+      "70% correct",
+      PRACTICE_ONLY_CLOSING,
+    ]);
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🌱");
   });
 
@@ -438,14 +475,12 @@ describe("VerseMemoryFeedback", () => {
         nextSchedule={reviewingSchedule}
         now={NOW}
         bannerId="result-banner"
-        closingLine="Practice only, your progress didn't change."
+        closingLine={PRACTICE_ONLY_CLOSING}
       />,
     );
     const banner = screen.getByRole("status");
     expect(banner).toHaveAttribute("id", "result-banner");
-    expect(banner).toHaveTextContent(
-      "Practice only, your progress didn't change.",
-    );
+    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
     expect(banner).not.toHaveTextContent(/Next review/);
   });
 });

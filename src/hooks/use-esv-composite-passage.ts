@@ -229,7 +229,7 @@ export function useEsvCompositePassage(
           error:
             error instanceof Error
               ? error.message
-              : "Failed to load passage text",
+              : "Couldn't load passage text",
         });
       }
     };
@@ -284,7 +284,7 @@ export function useEsvCompositePassage(
   })();
 
   const composeError = composed.missing
-    ? "Could not load the full passage"
+    ? "Couldn't load the full passage"
     : null;
   const error = active && settled ? (loaded.error ?? composeError) : null;
   const loading = active && error === null && !settled;

@@ -84,7 +84,7 @@ export function DeleteAccountSection() {
           </h2>
           <p className="text-sm text-muted-foreground">
             Permanently delete your account, Google sign-in link, and all notes,
-            tags, highlights, and settings. This cannot be undone.
+            tags, highlights, and settings. This can&apos;t be undone.
           </p>
         </div>
         <Button

@@ -681,7 +681,7 @@ export function InlineVerseEditor({
   initialBody,
   verseRef,
   currentChapter,
-  placeholder = "Write your note...",
+  placeholder = "Write your note…",
   className,
   editorChrome: editorChromeProp,
   tourId,

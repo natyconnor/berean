@@ -283,7 +283,7 @@ export function StudyActivityDeck({
 
   // Enter: Reveal on the front, Done on the back. Shift+Enter still inserts
   // newlines in the textarea. Leave buttons alone so native activation handles
-  // focused Skip / Reveal / Try Again / Done.
+  // focused Skip / Reveal / Try again / Done.
   const shortcutRef = useRef({
     flipped: false,
     isInitialShuffle: true,
@@ -481,7 +481,7 @@ export function StudyActivityDeck({
               disabled={isInitialShuffle}
             >
               <RotateCcw className="h-4 w-4" />
-              Try Again
+              Try again
             </Button>
             <Button
               type="button"

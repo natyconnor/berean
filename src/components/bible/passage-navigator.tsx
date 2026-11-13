@@ -272,7 +272,7 @@ export function PassageNavigator({
             >
               <div className="border-b p-2">
                 <Input
-                  placeholder="Search books..."
+                  placeholder="Search books…"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);

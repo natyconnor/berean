@@ -80,7 +80,7 @@ describe("PassageNavigator", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByPlaceholderText("Search books...")).toHaveFocus();
+    expect(screen.getByPlaceholderText("Search books…")).toHaveFocus();
   });
 
   it("still picks a book and chapter from Books", async () => {

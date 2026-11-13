@@ -35,7 +35,7 @@ describe("libraryRow", () => {
         TZ,
       ),
     ).toEqual({
-      line: "Nice. Later today you'll try it with blanks.",
+      line: "Later today you'll fill in the blanks.",
       dueToday: false,
       action: null,
     });
@@ -54,7 +54,7 @@ describe("libraryRow", () => {
         TZ,
       ),
     ).toEqual({
-      line: "Nice. Tomorrow you'll try it with blanks.",
+      line: "Tomorrow you'll fill in the blanks.",
       dueToday: false,
       action: null,
     });

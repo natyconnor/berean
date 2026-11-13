@@ -200,7 +200,7 @@ async function check(answer: string, label = "Your recited passage") {
   const button = screen.getByRole("button", { name: /Check answer/ });
   await waitFor(() => expect(button).toBeEnabled());
   await userEvent.click(button);
-  await screen.findByText(/recalled/);
+  await screen.findByText(/% correct/);
 }
 
 async function click(name: RegExp | string) {
@@ -214,7 +214,9 @@ async function refresh(full: string, fromMemory = full) {
   await click(/Continue/);
   await screen.findByText("Refresh · From memory · 2 of 2");
   await check(fromMemory);
-  await screen.findByText("Practice only, your progress didn't change.");
+  await screen.findByText(
+    "This was just practice, so your progress didn't change.",
+  );
   await click(/Continue/);
 }
 
@@ -320,7 +322,7 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     // A miss stalling on verse 2, then its tricky spot (verses 1–3).
     const miss = async () => {
       await check(ONE);
-      expect(screen.getByText(/^39% recalled/)).toBeInTheDocument();
+      expect(screen.getByText(/^39% correct/)).toBeInTheDocument();
     };
     const fixTrickySpot = async () => {
       await screen.findByText("Try this part again");
@@ -356,7 +358,7 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
   it("a section-recital miss gives the same summary rows and accuracy with or without the refresher", async () => {
     const SECTION = `${ONE} ${TWO}`;
     const reachRecital = async () => {
-      await check(TWO, "Your recalled verse");
+      await check(TWO, "Your verse");
       await click(/Continue/);
       await click("Recite this section");
       await screen.findByText("This section");

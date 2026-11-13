@@ -148,11 +148,11 @@ export function nextReviewLine(
   return `Next review ${formatDueDay(schedule.dueAt, now)}`;
 }
 
-export function recalledCopy(accuracies: readonly number[]): string {
+export function percentCorrectCopy(accuracies: readonly number[]): string {
   if (accuracies.length <= 1) {
-    return `${accuracies[0] ?? 0}% recalled`;
+    return `${accuracies[0] ?? 0}% correct`;
   }
-  return `${accuracies.join("%, then ")}% recalled`;
+  return `${accuracies.join("%, then ")}% correct`;
 }
 
 /** Session-summary result line when a refresher was used on this try. */

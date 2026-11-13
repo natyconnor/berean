@@ -11,7 +11,7 @@ import { StudyScopeBookPicker } from "./study-scope-book-picker";
 import type { ScopeFormControls } from "./use-scope-form";
 
 interface ScopeFormProps extends ScopeFormControls {
-  /** Sub-heading under the "Passage Scope" section. */
+  /** Sub-heading under the "Passage scope" section. */
   passageDescription?: string;
   /** Sub-heading under the "Tags" section. */
   tagsDescription?: string;
@@ -64,7 +64,7 @@ export function ScopeForm({
       <section className="space-y-3">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Passage Scope
+            Passage scope
           </h2>
           <p className="text-xs text-muted-foreground">{passageDescription}</p>
         </div>

@@ -33,7 +33,7 @@ import {
   nextReviewLine,
   offersPassageSummaryRefresh,
   offersSummaryRefresh,
-  recalledCopy,
+  percentCorrectCopy,
   refresherResultCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
@@ -93,9 +93,9 @@ export function ReviewSummary({
         </h2>
         <p className="text-sm text-muted-foreground">
           {!hasAttempts
-            ? "No verses were graded in this session."
+            ? "You didn't review any verses this time."
             : caughtUp
-              ? "You've cleared today's review queue."
+              ? "You finished all of today's reviews."
               : `${remaining} verse${remaining !== 1 ? "s" : ""} still due today.`}
         </p>
       </div>
@@ -300,7 +300,7 @@ export function AccuracyScore({
 }
 
 /**
- * Each reviewed verse with how well it was recalled, and Add to pack and
+ * Each reviewed verse with its percent correct, and Add to pack and
  * Practice shortcuts. A pack recited as one passage gets neither. A verse
  * still Memorized whose last try here was under 85% also gets Refresh (R21),
  * and so does a Memorized passage reviewed on its Today card (R51).
@@ -354,7 +354,7 @@ export function ReviewResultRows({
                     </p>
                   ) : (
                     <p className="text-xs tabular-nums text-muted-foreground">
-                      {recalledCopy(attempt.accuracies)}
+                      {percentCorrectCopy(attempt.accuracies)}
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
@@ -363,7 +363,7 @@ export function ReviewResultRows({
                 </div>
               ) : (
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  {recalledCopy(attempt.accuracies)}
+                  {percentCorrectCopy(attempt.accuracies)}
                 </p>
               )}
             </div>

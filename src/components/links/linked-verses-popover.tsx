@@ -46,7 +46,7 @@ export function LinkedVersesPopover({ verseRefId }: LinkedVersesPopoverProps) {
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2" align="start">
         <p className="text-xs font-semibold text-muted-foreground mb-2">
-          Linked Verses
+          Linked verses
         </p>
         <div className="flex flex-wrap gap-1">
           {linkedRefs.map((ref) => {

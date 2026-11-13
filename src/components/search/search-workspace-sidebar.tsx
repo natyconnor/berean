@@ -31,7 +31,7 @@ export function SearchWorkspaceSidebar({
     <aside className="order-2 p-4 lg:border-b-0">
       <div className="space-y-3">
         <div className="space-y-1">
-          <h1 className="text-base font-semibold">Search Tools</h1>
+          <h1 className="text-base font-semibold">Search tools</h1>
           <p className="text-xs text-muted-foreground">
             Search notes, filter tags, and choose a match mode.
           </p>
@@ -42,7 +42,7 @@ export function SearchWorkspaceSidebar({
             Query
           </p>
           <Input
-            placeholder="Type 2+ characters..."
+            placeholder="Type 2+ characters…"
             value={effectiveQuery}
             onChange={(event) => updateQuery(event.target.value)}
             className="h-8 text-sm"
@@ -52,7 +52,7 @@ export function SearchWorkspaceSidebar({
 
         <div className="space-y-2" data-tour-id="search-match-mode">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Match Mode
+            Match mode
           </p>
           <div className="flex gap-1">
             <Button

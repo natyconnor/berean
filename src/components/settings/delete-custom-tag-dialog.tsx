@@ -31,8 +31,8 @@ export function DeleteCustomTagDialog({
           <DialogTitle>Delete custom tag?</DialogTitle>
           <DialogDescription>
             {deleteTagCandidate
-              ? `This will remove "${deleteTagCandidate}" from your custom tags and from any notes that use it. This action cannot be undone.`
-              : "This action cannot be undone."}
+              ? `This will remove "${deleteTagCandidate}" from your custom tags and from any notes that use it. This can't be undone.`
+              : "This can't be undone."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

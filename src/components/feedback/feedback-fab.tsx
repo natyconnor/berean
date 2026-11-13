@@ -348,8 +348,8 @@ export function FeedbackFab() {
             console.error("[feedback-capture] upload failed", uploadErr);
             warnings.push(
               uploadErr instanceof Error
-                ? `Could not upload screenshot: ${uploadErr.message}`
-                : "Could not upload screenshot.",
+                ? `Couldn't upload screenshot: ${uploadErr.message}`
+                : "Couldn't upload screenshot.",
             );
             logCaptureDebug("upload error", {
               message:
@@ -506,7 +506,7 @@ export function FeedbackFab() {
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending...
+                  Sending…
                 </>
               ) : (
                 "Send"

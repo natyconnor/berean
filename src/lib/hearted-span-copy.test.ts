@@ -15,8 +15,8 @@ describe("alreadyHeartedLeadIn", () => {
     expect(alreadyHeartedLeadIn("learning")).toBe(
       "You've already started learning",
     );
-    expect(alreadyHeartedLeadIn("reviewing")).toBe("You're already reviewing");
-    expect(alreadyHeartedLeadIn("mastered")).toBe("You've already memorized");
+    expect(alreadyHeartedLeadIn("reviewing")).toBe("You've already memorized");
+    expect(alreadyHeartedLeadIn("mastered")).toBe("You've already mastered");
   });
 });
 
@@ -40,14 +40,14 @@ describe("heartedSpanConfirmAction", () => {
     });
   });
 
-  it("uses Continue Learning for unlocked learning", () => {
+  it("uses Continue learning for unlocked learning", () => {
     expect(
       heartedSpanConfirmAction(
         "Learn",
         { status: "learning", dueAt: now },
         now,
       ),
-    ).toEqual({ label: "Continue Learning", disabled: false });
+    ).toEqual({ label: "Continue learning", disabled: false });
   });
 
   it("uses Tomorrow when learning is session-locked", () => {

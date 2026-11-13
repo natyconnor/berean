@@ -5,7 +5,7 @@ import {
   groupReviewSessionAttempts,
   offersPassageSummaryRefresh,
   offersSummaryRefresh,
-  recalledCopy,
+  percentCorrectCopy,
   refresherResultCopy,
   type ReviewSessionAttempt,
 } from "./review-session-attempts";
@@ -108,9 +108,9 @@ describe("groupReviewSessionAttempts", () => {
   });
 });
 
-describe("recalledCopy", () => {
+describe("percentCorrectCopy", () => {
   it("names a retry as a second score", () => {
-    expect(recalledCopy([85, 100])).toBe("85%, then 100% recalled");
+    expect(percentCorrectCopy([85, 100])).toBe("85%, then 100% correct");
   });
 });
 

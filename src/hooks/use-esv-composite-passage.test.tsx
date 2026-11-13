@@ -134,7 +134,7 @@ describe("useEsvCompositePassage", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.error).toBe("Could not load the full passage");
+      expect(result.current.error).toBe("Couldn't load the full passage");
     });
     expect(result.current.text).toBe("");
     expect(result.current.loading).toBe(false);
@@ -148,7 +148,7 @@ describe("useEsvCompositePassage", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.error).toBe("Could not load the full passage");
+      expect(result.current.error).toBe("Couldn't load the full passage");
     });
     expect(result.current.text).toBe("");
   });

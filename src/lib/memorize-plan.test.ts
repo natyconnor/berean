@@ -229,7 +229,7 @@ describe("nextStepCopy", () => {
           { status: "learning", learnStage, dueAt: LOCKED_DUE },
           NOW,
         ),
-      ).toBe("Nice. Later today you'll try it with blanks.");
+      ).toBe("Later today you'll fill in the blanks.");
     }
   });
 
@@ -239,7 +239,7 @@ describe("nextStepCopy", () => {
         { status: "learning", learnStage: 3, dueAt: LOCKED_DUE },
         NOW,
       ),
-    ).toBe("Great. Later today you'll say it from memory.");
+    ).toBe("Later today you'll say it from memory.");
   });
 
   it("looks ahead to tomorrow when the lock is the next local day", () => {
@@ -253,7 +253,7 @@ describe("nextStepCopy", () => {
         NOW,
         "UTC",
       ),
-    ).toBe("Nice. Tomorrow you'll try it with blanks.");
+    ).toBe("Tomorrow you'll fill in the blanks.");
   });
 
   it("keeps an in-progress verse open against a stale clock", () => {
@@ -283,7 +283,7 @@ describe("nextStepCopy", () => {
         NOW,
         "UTC",
       ),
-    ).toBe("Memorized. We'll bring it back tomorrow to keep it fresh.");
+    ).toBe("Memorized. We'll review it tomorrow to keep it fresh.");
     expect(
       nextStepCopy(
         { status: "mastered", learnStage: 3, dueAt: Date.UTC(2026, 9, 13) },
@@ -333,7 +333,7 @@ describe("nextStepCopy", () => {
       dueAt: localMidnight,
     };
     expect(nextStepCopy(schedule, evening, "America/Los_Angeles")).toBe(
-      "Memorized. We'll bring it back tomorrow to keep it fresh.",
+      "Memorized. We'll review it tomorrow to keep it fresh.",
     );
     expect(nextStepCopy(schedule, evening, "UTC")).toBe("Review due today");
   });

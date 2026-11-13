@@ -77,7 +77,7 @@ export type PassageRecallResultView = {
   /** Focus the offer instead of the main action. */
   focusOffer?: boolean;
   closingLine?: string | null;
-  /** "Counted as today's review" after a counted ••• Refresh. */
+  /** "This counted as today's review." after a counted ••• Refresh. */
   countedLine?: string | null;
   saveError?: string | null;
   practiceOnly?: boolean;
@@ -297,7 +297,7 @@ export function PassageRecallCard({
   }
 
   const fieldLabel =
-    mode === "frontier" ? "Your recalled verse" : "Your recited passage";
+    mode === "frontier" ? "Your verse" : "Your recited passage";
 
   return (
     <motion.div
@@ -370,7 +370,7 @@ export function PassageRecallCard({
                 ) : error ? (
                   <div className="space-y-3 font-sans">
                     <p className="text-sm text-destructive">
-                      Could not load verse text.
+                      Couldn&apos;t load verse text.
                     </p>
                     <Button size="sm" variant="outline" onClick={retry}>
                       Retry
@@ -449,7 +449,11 @@ export function PassageRecallCard({
                 typedAnswer={typedAnswer}
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
-                note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
+                note={
+                  passed
+                    ? undefined
+                    : `you need ${PASSAGE_PASS_ACCURACY}% to pass`
+                }
                 bannerId={bannerId}
                 errorId={errorId}
                 saveError={saveError}
@@ -499,7 +503,7 @@ export function PassageRecallCard({
                 }
               >
                 {submitPending ? (
-                  "Saving..."
+                  "Saving…"
                 ) : offerTryAgain ? (
                   <>
                     <RotateCcw className="h-4 w-4" aria-hidden />
@@ -535,7 +539,7 @@ export function PassageRecallCard({
                 loading={submitPending}
               >
                 {submitPending ? (
-                  "Saving..."
+                  "Saving…"
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" aria-hidden />

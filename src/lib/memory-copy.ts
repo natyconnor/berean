@@ -64,8 +64,7 @@ export function learnActionLabel(progress: LearningProgress): LearnActionLabel {
 }
 
 export const SESSION_COMPLETE_TITLE = "That's today's step.";
-export const SESSION_COMPLETE_FOOTER =
-  "Each day builds on the last. See you tomorrow.";
+export const SESSION_COMPLETE_FOOTER = "See you tomorrow!";
 
 /** "Memorize Psalm 1": the one start action, named for its target. */
 export function memorizeTitleLabel(title: string): string {
@@ -168,7 +167,7 @@ export const START_OVER_MENU_DETAIL = "Learn it again from the start";
 export const START_OVER_CONFIRM_LABEL = "Start over";
 export const START_OVER_CANCEL_LABEL = "Cancel";
 export const STARTED_OVER_LABEL = "Started over.";
-export const START_OVER_ERROR = "Couldn't start over. Try again.";
+export const START_OVER_ERROR = "Couldn't start over. Please try again.";
 export const START_OVER_CONFIRM_BODY =
   "You'll learn it again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.";
 
@@ -207,21 +206,27 @@ export const NEED_A_REFRESHER_PASSAGE_TOOLTIP =
 export const TRY_ANOTHER_REFRESHER_LABEL = "Try another refresher";
 export const REFRESH_IT_FIRST_LABEL = "Refresh it first";
 export const PRACTICE_ONLY_CLOSING =
-  "Practice only, your progress didn't change.";
-export const PRACTICE_PASS_LEAD = "Good work getting back on track.";
-export const PRACTICE_PASS_REST =
-  "Next time, see if you can do it on the first try.";
+  "This was just practice, so your progress didn't change.";
+export const PRACTICE_PASS_LINE =
+  "Good work getting back on track. Next time see if you can get it on the first try.";
 export const PRACTICE_PASS_EMOJI = "👍";
 export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
-export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
+export const REFRESH_SAVE_ERROR =
+  "Couldn't save your result. Please try again.";
 export const REFRESH_MENU_LABEL = "Refresh";
-export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
+export const REFRESH_START_ERROR =
+  "Couldn't start the refresher. Please try again.";
 /** Header Back of a Refresh started from a session summary, which it returns to. */
 export const SUMMARY_REFRESH_BACK_LABEL = "Back to summary";
-export const COUNTED_TODAY_CLOSING = "Counted as today's review";
+export const COUNTED_TODAY_CLOSING = "This counted as today's review.";
 /** A summary row whose verse dropped back to Learning in this session. */
 export const LAPSED_ROW_LINE =
   "Looks like you're struggling with this one. Let's learn it again.";
+
+/** A verse that dropped back to Learning: "We'll learn it again, starting with fill in the blanks." */
+export function learnAgainLine(learnStage: number): string {
+  return `We'll learn it again, starting with ${stepShortLabel(learnStage).toLowerCase()}.`;
+}
 
 /**
  * "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2", or

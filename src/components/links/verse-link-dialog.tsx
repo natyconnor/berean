@@ -71,7 +71,7 @@ export function VerseLinkDialog({
         message: err instanceof Error ? err.message : "unknown-error",
         source: formatVerseRef(sourceRef),
       });
-      setError(err instanceof Error ? err.message : "Failed to create link");
+      setError(err instanceof Error ? err.message : "Couldn't create link");
     }
   }, [targetInput, sourceRef, findOrCreateRef, createLink, onOpenChange]);
 
@@ -89,7 +89,7 @@ export function VerseLinkDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Link Verse</DialogTitle>
+          <DialogTitle>Link verse</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -122,7 +122,7 @@ export function VerseLinkDialog({
               Cancel
             </TooltipButton>
             <TooltipButton onClick={handleCreate} tooltip="Create verse link">
-              Create Link
+              Create link
             </TooltipButton>
           </div>
         </div>
