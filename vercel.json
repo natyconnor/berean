@@ -1,6 +1,7 @@
 {
   "buildCommand": "pnpm run build:vercel",
   "framework": "vite",
+  "git": { "deploymentEnabled": { "main": false } },
   "headers": [
     {
       "source": "/(.*)",
