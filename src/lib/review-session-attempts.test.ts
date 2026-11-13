@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { LAPSED_ROW_LINE } from "./memory-copy";
 import { DAY_MS } from "./memory-scheduler";
 import {
   averageReviewAccuracy,
@@ -130,19 +129,11 @@ describe("next review lines", () => {
     );
   });
 
-  it("says where learning restarts in the result box after a lapse", () => {
+  it("says where learning restarts after a lapse, in the result box and rows", () => {
     const lapsed = { status: "learning" as const, dueAt: now };
-    expect(nextReviewResultLine(lapsed, now)).toBe(
-      "We'll learn it again, starting with fill in the blanks.",
-    );
-  });
-
-  it("keeps the struggling line on a lapsed summary row", () => {
-    const lapsed = { status: "learning" as const, dueAt: now };
-    expect(nextReviewLine(lapsed, now)).toBe(LAPSED_ROW_LINE);
-    expect(LAPSED_ROW_LINE).toBe(
-      "Looks like you're struggling with this one. Let's learn it again.",
-    );
+    const line = "We'll learn it again, starting with fill in the blanks.";
+    expect(nextReviewResultLine(lapsed, now)).toBe(line);
+    expect(nextReviewLine(lapsed, now)).toBe(line);
   });
 });
 

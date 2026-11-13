@@ -219,11 +219,11 @@ export const REFRESH_START_ERROR =
 /** Header Back of a Refresh started from a session summary, which it returns to. */
 export const SUMMARY_REFRESH_BACK_LABEL = "Back to summary";
 export const COUNTED_TODAY_CLOSING = "This counted as today's review.";
-/** A summary row whose verse dropped back to Learning in this session. */
-export const LAPSED_ROW_LINE =
-  "Looks like you're struggling with this one. Let's learn it again.";
 
-/** A verse that dropped back to Learning: "We'll learn it again, starting with fill in the blanks." */
+/**
+ * A verse that dropped back to Learning, in its result box and its summary
+ * and pack rows: "We'll learn it again, starting with fill in the blanks."
+ */
 export function learnAgainLine(learnStage: number): string {
   return `We'll learn it again, starting with ${stepShortLabel(learnStage).toLowerCase()}.`;
 }

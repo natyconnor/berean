@@ -10,7 +10,6 @@ import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
   COUNTED_TODAY_CLOSING,
-  LAPSED_ROW_LINE,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -133,6 +132,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
 const PACK_ID = "pack_1" as Id<"packs">;
 const PASSAGE_ONE = "The Lord is my shepherd; I shall not want.";
 const PASSAGE_TWO = "He makes me lie down in green pastures.";
+/** A verse back in Learning: its result box, summary row and pack row. */
+const LEARN_AGAIN_LINE =
+  "We'll learn it again, starting with fill in the blanks.";
 
 const psalm23: EsvChapterData = {
   canonical: "Psalm 23",
@@ -553,8 +555,9 @@ describe("PracticeBoard composite recitation", () => {
         .getAllByText(text)
         .map((line) => line.closest("li")?.querySelector("p")?.textContent)
         .filter(Boolean);
-    expect(members(LAPSED_ROW_LINE)).toEqual(["Psalm 23:1"]);
+    expect(members(LEARN_AGAIN_LINE)).toEqual(["Psalm 23:1"]);
     expect(members(/^Next review /)).toEqual(["Psalm 23:2"]);
+    expect(screen.queryByText(/struggling/)).toBeNull();
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Refresher used/)).not.toBeInTheDocument();
   });
@@ -2395,9 +2398,6 @@ describe("PracticeBoard pre-try refresher", () => {
 const HELD_ID = "held_1" as Id<"heldVerseAttempts">;
 const CLOSE_MISS = "The Lord is my shepherd I shall";
 const BAD_MISS = "nope";
-/** The verse result box's line after a lapse (summary rows keep LAPSED_ROW_LINE). */
-const LEARN_AGAIN_RESULT =
-  "We'll learn it again, starting with fill in the blanks.";
 
 describe("PracticeBoard held first try", () => {
   beforeEach(() => {
@@ -2807,9 +2807,9 @@ describe("PracticeBoard held first try", () => {
     expect(
       withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(LEARN_AGAIN_RESULT);
-    expect(screen.getByText(LEARN_AGAIN_RESULT)).toBeVisible();
-    expect(screen.queryByText(LAPSED_ROW_LINE)).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent(LEARN_AGAIN_LINE);
+    expect(screen.getByText(LEARN_AGAIN_LINE)).toBeVisible();
+    expect(screen.queryByText(/struggling/)).toBeNull();
     expect(screen.queryByText(/^Next review /)).toBeNull();
   });
 
@@ -3102,7 +3102,7 @@ describe("PracticeBoard held first try", () => {
       ),
     ).toBeVisible();
     expect(within(row).queryByText("Next review today")).toBeNull();
-    expect(within(row).queryByText(LAPSED_ROW_LINE)).toBeNull();
+    expect(within(row).queryByText(LEARN_AGAIN_LINE)).toBeNull();
   });
 
   it.each([
@@ -3118,11 +3118,12 @@ describe("PracticeBoard held first try", () => {
         miss,
         fromMemory,
       );
-      expect(within(result).getByText(LEARN_AGAIN_RESULT)).toBeVisible();
-      expect(result).not.toHaveTextContent(LAPSED_ROW_LINE);
+      expect(within(result).getByText(LEARN_AGAIN_LINE)).toBeVisible();
+      expect(result).not.toHaveTextContent(/struggling/);
       expect(result).not.toHaveTextContent(/Next review/);
       const row = await continueToSummaryRow();
-      expect(within(row).getByText(LAPSED_ROW_LINE)).toBeVisible();
+      expect(within(row).getByText(LEARN_AGAIN_LINE)).toBeVisible();
+      expect(within(row).queryByText(/struggling/)).toBeNull();
       expect(within(row).queryByText(/Next review/)).toBeNull();
     },
   );
