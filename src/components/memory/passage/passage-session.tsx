@@ -1692,7 +1692,7 @@ function buildingRecall(args: {
       mode: "repair",
       title: windowTitle(packName, state.pieces, indexes),
       subtitle: "Try this part again",
-      promptLine: TYPE_THIS_PART_PROMPT,
+      promptLine: "Fill in the blanks from memory.",
       versePlainText: repair.answer,
       loading: compositeLoading,
       error: compositeError,

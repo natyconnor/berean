@@ -3544,7 +3544,7 @@ describe("PassageSession", () => {
       await clickButton(/Continue/);
       expect(header("Fix a tricky spot")).toBeInTheDocument();
       expect(queryLink()).toBeNull();
-      await check("He");
+      await check("He", "Missing words");
       expect(queryLink()).toBeNull();
     });
 
@@ -3590,16 +3590,19 @@ describe("PassageSession", () => {
         expect(
           await screen.findByLabelText("Your recited passage"),
         ).toHaveAttribute("placeholder", "Type the passage from memory");
+        expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
         await missWarmup();
         expect(screen.getByText("Psalm 23:1–3")).toBeInTheDocument();
-        expect(answerBox()).toHaveAttribute(
+        expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+        expect(screen.getByLabelText("Missing words")).toHaveAttribute(
           "placeholder",
           "Type the missing words",
         );
         expect(screen.getByText("Try this part again")).toBeInTheDocument();
         expect(
-          screen.getByText("Type this part from memory"),
+          screen.getByText("Fill in the blanks from memory."),
         ).toBeInTheDocument();
+        expect(screen.queryByText("Type this part from memory")).toBeNull();
         expect(screen.queryByLabelText("Starting hint")).toBeNull();
         expect(screen.queryByLabelText("Pick up after")).toBeNull();
         expect(queryLink()).toBeNull();
@@ -3610,14 +3613,16 @@ describe("PassageSession", () => {
         // 26 blanks, and Math.round(26 × 25%) = 7 of them show a letter.
         expect(hint.match(/[a-z]__/g)).toHaveLength(7);
         expect(hint.match(/___/g)).toHaveLength(19);
-        await waitFor(() => expect(answerBox()).toHaveFocus());
+        await waitFor(() =>
+          expect(screen.getByLabelText("Missing words")).toHaveFocus(),
+        );
       });
 
       it("F4: scores only the blanked words; a pass moves on to the next verse", async () => {
         renderSession(longWarmup());
         await missWarmup();
         const hint = hintText();
-        await check(SPOT);
+        await check(SPOT, "Missing words");
         expect(banner()).toHaveTextContent("Nice, now on to verse 4.");
         expect(banner()).toHaveTextContent("100% correct");
         expect(screen.queryByText(/you need 85% to pass/)).toBeNull();
@@ -3641,7 +3646,7 @@ describe("PassageSession", () => {
       it("F5: a second miss shows the answer and still moves on", async () => {
         renderSession(longWarmup());
         await missWarmup();
-        await check("nope");
+        await check("nope", "Missing words");
         expect(banner()?.querySelector("p")?.textContent).toBe(
           "You still need some work on that one, but let's move on to verse 4",
         );
@@ -3670,6 +3675,7 @@ describe("PassageSession", () => {
           expect(header("Fix a tricky spot")).toBeInTheDocument();
           await check(
             typed() === SPOT ? WORDS.slice(84, 110).join(" ") : typed(),
+            "Missing words",
           );
           expect(banner()?.querySelector("p")?.textContent).toBe(line);
           await clickButton(/Continue/);
@@ -3701,7 +3707,7 @@ describe("PassageSession", () => {
         expect(header("Fix a tricky spot")).toBeInTheDocument();
         expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
         expect(hintText().startsWith(pair.slice(0, 24).join(" "))).toBe(true);
-        await check(pair.slice(24, 50).join(" "));
+        await check(pair.slice(24, 50).join(" "), "Missing words");
         expect(banner()).toHaveTextContent("Nice, now on to verse 3.");
       });
 
@@ -3714,7 +3720,7 @@ describe("PassageSession", () => {
         await clickButton(/Continue/);
         expect(header("Fix a tricky spot")).toBeInTheDocument();
         expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
-        await check("nope");
+        await check("nope", "Missing words");
         expect(banner()?.querySelector("p")?.textContent).toBe(
           "You still need some work on that one.",
         );

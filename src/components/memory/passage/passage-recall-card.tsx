@@ -296,7 +296,11 @@ export function PassageRecallCard({
   }
 
   const fieldLabel =
-    mode === "frontier" ? "Your verse" : "Your recited passage";
+    mode === "frontier"
+      ? "Your verse"
+      : mode === "repair"
+        ? "Missing words"
+        : "Your recited passage";
 
   return (
     <motion.div
