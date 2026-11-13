@@ -447,7 +447,7 @@ describe("Today passage card: held cold miss", () => {
       expect(preview?.status).toBe("reviewing");
       expect(
         screen.getByText(
-          `Next review ${formatDueDay(preview!.dueAt, Date.now())}`,
+          `Next review ${formatDueDay(preview!.dueAt, Date.now())}.`,
         ),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Continue/ })).toBeEnabled();
@@ -496,7 +496,7 @@ describe("Today passage card: held cold miss", () => {
     expect(
       previewNextSchedule(daily, { ...input, item: "passage" }),
     ).toMatchObject({ status: "reviewing", intervalDays: 1, stageReps: 0 });
-    expect(screen.getByText("Next review tomorrow")).toBeInTheDocument();
+    expect(screen.getByText("Next review tomorrow.")).toBeInTheDocument();
   });
 
   it.each([

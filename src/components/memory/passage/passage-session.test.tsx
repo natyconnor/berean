@@ -1307,7 +1307,7 @@ describe("PassageSession", () => {
       );
       expect(
         await screen.findByText(
-          `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+          `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}.`,
         ),
       ).toBeInTheDocument();
       await clickButton(/Continue/);
@@ -1882,7 +1882,7 @@ describe("PassageSession", () => {
 
           expect(
             await screen.findByText(
-              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}.`,
             ),
           ).toBeInTheDocument();
           expect(screen.getByText(COUNTED)).toBeInTheDocument();

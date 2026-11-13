@@ -92,6 +92,7 @@ import {
 import {
   averageReviewAccuracy,
   nextReviewLine,
+  nextReviewResultLine,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -2293,7 +2294,7 @@ function PracticeCard({
       : null;
   const dateOnlyClosing =
     (showHeldOffer || afterMissCountedResult) && nextSchedule
-      ? nextReviewLine(nextSchedule, outcomeNow)
+      ? nextReviewResultLine(nextSchedule, outcomeNow)
       : null;
   const defaultFocusRef =
     showHeldOffer && !saveError ? refresherOfferRef : reviewActionRef;

@@ -148,6 +148,20 @@ export function nextReviewLine(
   return `Next review ${formatDueDay(schedule.dueAt, now)}`;
 }
 
+/** The result box's closing line: "Next review Thu.", as a sentence. */
+export function nextReviewSentence(dueAt: number, now: number): string {
+  return `Next review ${formatDueDay(dueAt, now)}.`;
+}
+
+/** {@link nextReviewLine} for the result box, where each line is a sentence. */
+export function nextReviewResultLine(
+  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  now: number,
+): string {
+  if (schedule.status === "learning") return LAPSED_ROW_LINE;
+  return nextReviewSentence(schedule.dueAt, now);
+}
+
 export function percentCorrectCopy(accuracies: readonly number[]): string {
   if (accuracies.length <= 1) {
     return `${accuracies[0] ?? 0}% correct`;

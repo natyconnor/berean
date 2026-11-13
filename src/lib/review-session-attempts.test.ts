@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { LAPSED_ROW_LINE } from "./memory-copy";
+import { DAY_MS } from "./memory-scheduler";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  nextReviewLine,
+  nextReviewResultLine,
+  nextReviewSentence,
   offersPassageSummaryRefresh,
   offersSummaryRefresh,
   percentCorrectCopy,
@@ -105,6 +110,30 @@ describe("groupReviewSessionAttempts", () => {
     expect(grouped[0]?.accuracies).toEqual([78, 100]);
     expect(grouped[0]?.refresherUsed).toBe(true);
     expect(grouped[0]?.schedule).toEqual(schedule);
+  });
+});
+
+describe("next review lines", () => {
+  const now = new Date(2026, 10, 13, 9).getTime();
+  const tomorrow = now + DAY_MS;
+
+  it("ends the result box's closing line with a period", () => {
+    expect(nextReviewSentence(tomorrow, now)).toBe("Next review tomorrow.");
+    expect(
+      nextReviewResultLine({ status: "reviewing", dueAt: tomorrow }, now),
+    ).toBe("Next review tomorrow.");
+  });
+
+  it("keeps summary rows without a period", () => {
+    expect(nextReviewLine({ status: "reviewing", dueAt: tomorrow }, now)).toBe(
+      "Next review tomorrow",
+    );
+  });
+
+  it("says a lapsed verse will be learned again in both", () => {
+    const lapsed = { status: "learning" as const, dueAt: now };
+    expect(nextReviewResultLine(lapsed, now)).toBe(LAPSED_ROW_LINE);
+    expect(nextReviewLine(lapsed, now)).toBe(LAPSED_ROW_LINE);
   });
 });
 

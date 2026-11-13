@@ -2468,7 +2468,7 @@ describe("PracticeBoard held first try", () => {
     expect(screen.getByText("So close! Just two words off.")).toBeVisible();
     const dateLine = screen.getByText(/^Next review /);
     expect(dateLine).toBeVisible();
-    expect(dateLine.textContent).toMatch(/^Next review \S+$/);
+    expect(dateLine.textContent).toMatch(/^Next review \S+\.$/);
     expect(screen.queryByText(/if you/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/held/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/not saved/i)).not.toBeInTheDocument();
@@ -3538,7 +3538,7 @@ describe("PracticeBoard held first try", () => {
     );
     expect(preview).not.toBeNull();
     expect(
-      screen.getByText(`Next review ${formatDueDay(preview!.dueAt, now)}`),
+      screen.getByText(`Next review ${formatDueDay(preview!.dueAt, now)}.`),
     ).toBeVisible();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
@@ -3601,7 +3601,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(await screen.findByText("Perfect!")).toBeVisible();
-    expect(screen.getByText("Next review tomorrow")).toBeVisible();
+    expect(screen.getByText("Next review tomorrow.")).toBeVisible();
     await waitFor(() => {
       expect(
         withinCard().getByLabelText(/Progress to mastered: Memorized/),
