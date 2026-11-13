@@ -64,7 +64,7 @@ export type PassageRecallResult = {
 };
 
 export type PassageRecallHint =
-  | { type: "tokens"; tokens: readonly HintToken[] }
+  | { type: "tokens"; tokens: readonly HintToken[]; label?: string }
   | { type: "text"; text: string; label: string }
   | { type: "hidden"; message: string };
 
@@ -77,6 +77,8 @@ export type PassageRecallResultView = {
   /** Focus the offer instead of the main action. */
   focusOffer?: boolean;
   closingLine?: string | null;
+  /** Replaces the banner's usual bold line, e.g. Fix a tricky spot's. */
+  mainLine?: string;
   /** "This counted as today's review." after a counted ••• Refresh. */
   countedLine?: string | null;
   saveError?: string | null;
@@ -96,10 +98,8 @@ interface PassageRecallCardProps {
   error: string | null;
   retry: () => void;
   hint: PassageRecallHint;
-  /** Extra cue shown after a failed rope attempt and during stall-repair. */
-  stallCue?: string | null;
-  /** Label for the stall cue (bridge vs recovery). */
-  stallCueLabel?: string;
+  /** End of the verse before, when the recall starts mid-passage. */
+  pickUpCue?: string | null;
   /** Start of the next verse, shown under the answer when typed from memory. */
   stopBeforeCue?: string | null;
   learnStage: number;
@@ -135,8 +135,7 @@ export function PassageRecallCard({
   error,
   retry,
   hint,
-  stallCue = null,
-  stallCueLabel = "Starting hint",
+  pickUpCue = null,
   stopBeforeCue = null,
   learnStage,
   stageReps,
@@ -350,7 +349,9 @@ export function PassageRecallCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {stallCue ? <StallCue text={stallCue} label={stallCueLabel} /> : null}
+          {pickUpCue ? (
+            <StallCue text={pickUpCue} label="Pick up after" />
+          ) : null}
           {!checked && (
             <>
               <div
@@ -387,7 +388,7 @@ export function PassageRecallCard({
                 ) : (
                   <>
                     {hint.type === "tokens" ? (
-                      <HintTokenText tokens={hint.tokens} />
+                      <HintTokenText tokens={hint.tokens} label={hint.label} />
                     ) : (
                       <p
                         className="whitespace-pre-wrap"
@@ -450,10 +451,12 @@ export function PassageRecallCard({
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
                 note={
-                  passed
+                  // Fix a tricky spot has no other try to pass on.
+                  passed || mode === "repair"
                     ? undefined
                     : `you need ${PASSAGE_PASS_ACCURACY}% to pass`
                 }
+                mainLine={resultView?.mainLine}
                 bannerId={bannerId}
                 errorId={errorId}
                 saveError={saveError}
@@ -562,7 +565,6 @@ function StallCue({
   text: string;
   label: string;
 }): JSX.Element {
-  const bridgeOnly = label === "Pick up after" || label === STOP_BEFORE_LABEL;
   return (
     <div
       className="rounded-xl border bg-background/75 px-4 py-3 text-left text-sm leading-6"
@@ -571,22 +573,20 @@ function StallCue({
       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
-      <p
-        className={
-          bridgeOnly
-            ? "whitespace-pre-wrap text-foreground"
-            : "whitespace-pre-wrap font-mono tracking-wide text-muted-foreground"
-        }
-      >
-        {text}
-      </p>
+      <p className="whitespace-pre-wrap text-foreground">{text}</p>
     </div>
   );
 }
 
-function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
+function HintTokenText({
+  tokens,
+  label,
+}: {
+  tokens: ReadonlyArray<HintToken>;
+  label?: string;
+}) {
   return (
-    <p className="whitespace-pre-wrap">
+    <p className="whitespace-pre-wrap" aria-label={label}>
       {tokens.map((token, index) => (
         <span
           key={index}

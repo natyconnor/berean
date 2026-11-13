@@ -25,7 +25,7 @@ const SMART_PUNCT_REPLACEMENTS: Readonly<Record<string, string>> = {
   "\u201C": '"',
   "\u201D": '"',
 };
-const WORD_SEPARATOR_PATTERN = /(?:\s+|[\p{Pd}\u00ad]+)/u;
+const WORD_SEPARATOR_PATTERN = /(\s+|[\p{Pd}\u00ad]+)/u;
 
 function normalize(word: string): string {
   return word
@@ -43,16 +43,29 @@ export function countDiffWords(text: string): number {
   return tokenize(text).length;
 }
 
-function tokenize(input: string): string[] {
-  const trimmed = input.trim();
-  if (trimmed.length === 0) return [];
+/**
+ * `text` cut into the words `diffWords` grades and everything between them,
+ * in order, so joining every part gives `text` back.
+ */
+export function splitDiffText(text: string): { text: string; word: boolean }[] {
   // Bible text commonly uses em dashes while people naturally type a space or
   // hyphen. Treat every dash form as a word boundary so those choices grade
-  // identically. Drop punctuation-only tokens (`"`, commas, periods) so a
-  // quote typed as its own "word" does not count as extra or missing.
-  return trimmed
+  // identically. Punctuation-only parts (`"`, commas, periods) are no word,
+  // so a quote typed as its own "word" does not count as extra or missing.
+  // The separator is captured, so it lands at every odd index.
+  return text
     .split(WORD_SEPARATOR_PATTERN)
-    .filter((word) => normalize(word).length > 0);
+    .map((part, index) => ({
+      text: part,
+      word: index % 2 === 0 && normalize(part).length > 0,
+    }))
+    .filter((part) => part.text.length > 0);
+}
+
+function tokenize(input: string): string[] {
+  return splitDiffText(input)
+    .filter((part) => part.word)
+    .map((part) => part.text);
 }
 
 /** True for a single insertion, deletion, substitution, or adjacent swap. */

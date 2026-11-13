@@ -14,7 +14,7 @@ import {
   ropePieceIndexes,
 } from "./passage-frontier";
 import type { PassagePiece } from "./passage-pieces";
-import { repairStartIndex, stallPieceIndex } from "./passage-stall";
+import { repairBlankRanges, type WordRange } from "./passage-stall";
 
 export type PassageSessionPhase =
   | "rope"
@@ -45,12 +45,12 @@ export type PassageSessionState = {
   tzOffsetMinutes: number;
   timeZone?: string;
   pieceWordCounts?: readonly number[];
-  /** Phase to resume after a stall-repair pass. */
+  /** Phase to go on to after the stall-repair try, passed or missed. */
   interruptedPhase?: PassageSessionPhase;
-  /** 0-based index into {@link PassageSessionState.rehearsalRopeIndexes}. */
-  stallIndex?: number;
+  /** Stall-repair: the missed try's blanks over its window, and their seed. */
+  repair?: { blanks: readonly WordRange[]; seed: number };
   rehearsalStart?: number;
-  /** Rope indexes of the prompt just attempted (full window, then repair slice). */
+  /** Rope indexes of the prompt just attempted (stall-repair keeps its window). */
   rehearsalRopeIndexes?: readonly number[];
   pendingMutation?: PassagePendingMutation;
 };
@@ -62,6 +62,8 @@ export type PassageSessionEvent =
       accuracy: number;
       now?: number;
       tokens?: readonly DiffToken[];
+      /** The pieces recited, when the screen chose its own window. */
+      pieceIndexes?: readonly number[];
     }
   | { type: "continue"; now?: number };
 
@@ -153,8 +155,7 @@ function ropeWindow(state: PassageSessionState): {
   const useStoredPair =
     state.rehearsalRopeIndexes &&
     state.rehearsalRopeIndexes.length > 0 &&
-    (state.phase === "connect" ||
-      (state.phase === "stall-repair" && state.interruptedPhase === "connect"));
+    state.phase === "connect";
   if (useStoredPair && state.rehearsalRopeIndexes) {
     const ropeIndexes = state.rehearsalRopeIndexes.filter((index) => {
       const piece = state.pieces[index];
@@ -185,26 +186,6 @@ function ropeWindow(state: PassageSessionState): {
   return { start, end: last + 1, ropeIndexes };
 }
 
-function promptRopeIndexes(
-  state: PassageSessionState,
-  windowRope: readonly number[],
-  kind: "rope" | "repair",
-): number[] {
-  if (kind !== "repair") return [...windowRope];
-  const current =
-    state.rehearsalRopeIndexes && state.rehearsalRopeIndexes.length > 0
-      ? state.rehearsalRopeIndexes
-      : windowRope;
-  const repairStart = repairWindowStart(state);
-  const from = current.findIndex((index) => index === repairStart);
-  const slice =
-    from >= 0
-      ? current.slice(from)
-      : current.filter((index) => index > repairStart);
-  if (slice.length > 0) return [...slice];
-  return current.length > 0 ? [...current] : [...windowRope];
-}
-
 function replacePiece(
   pieces: readonly PassagePiece[],
   index: number,
@@ -223,7 +204,7 @@ function clearSignals(
     ...state,
     now,
     pendingMutation: undefined,
-    stallIndex: undefined,
+    repair: undefined,
     interruptedPhase: undefined,
     rehearsalRopeIndexes: undefined,
   };
@@ -320,7 +301,6 @@ function introducePiece(
     addDayKey: todayKey,
     phase: "frontier",
     pendingMutation: { name: "introduceNext" },
-    stallIndex: undefined,
     interruptedPhase: undefined,
   };
 }
@@ -363,7 +343,6 @@ function applyFrontierAttempt(
       pieces,
       phase: "frontier",
       pendingMutation,
-      stallIndex: undefined,
       interruptedPhase: undefined,
     };
   }
@@ -375,7 +354,6 @@ function applyFrontierAttempt(
       pieces,
       phase: "passage-complete",
       pendingMutation,
-      stallIndex: undefined,
       interruptedPhase: undefined,
     };
   }
@@ -391,7 +369,6 @@ function applyFrontierAttempt(
       pieces,
       phase: "section-complete",
       pendingMutation,
-      stallIndex: undefined,
       interruptedPhase: undefined,
     };
   }
@@ -408,7 +385,6 @@ function applyFrontierAttempt(
         pieces,
         phase: "connect",
         pendingMutation,
-        stallIndex: undefined,
         interruptedPhase: undefined,
         rehearsalStart: pair[0],
         rehearsalRopeIndexes: pair,
@@ -423,70 +399,82 @@ function applyFrontierAttempt(
     pieces,
     phase: phaseAfterWarmup(pieces, remaining, now),
     pendingMutation,
-    stallIndex: undefined,
     interruptedPhase: undefined,
   };
 }
 
+/**
+ * A warm-up, section recital, or Connect try. A miss goes to Fix a tricky
+ * spot on the same window, blanking only what was missed; a miss with
+ * nothing to blank (only typos or extra words) goes on as a pass would.
+ */
 function applyRopeAttempt(
   state: PassageSessionState,
   accuracy: number,
   now: number,
   tokens: readonly DiffToken[] | undefined,
-  kind: "rope" | "repair",
+  recited: readonly number[] | undefined,
 ): PassageSessionState {
   const window = ropeWindow(state);
+  const nextPhase = phaseAfterWarmup(
+    state.pieces,
+    remainingIn(state, now),
+    now,
+  );
   if (window.ropeIndexes.length === 0) {
-    return {
-      ...clearSignals(state, now),
-      phase: phaseAfterWarmup(state.pieces, remainingIn(state, now), now),
-    };
+    return { ...clearSignals(state, now), phase: nextPhase };
   }
 
   const pendingMutation: PassagePendingMutation = {
     name: "recordAttempt",
-    kind,
+    kind: "rope",
     accuracy,
   };
+  const blanks =
+    accuracy < PASSAGE_PASS_ACCURACY && tokens ? repairBlankRanges(tokens) : [];
+  const ropeIndexes =
+    recited && recited.length > 0 ? [...recited] : window.ropeIndexes;
 
-  if (accuracy >= PASSAGE_PASS_ACCURACY) {
-    const resume = state.interruptedPhase;
-    const nextPhase =
-      kind === "repair" && resume && resume !== "connect"
-        ? resume
-        : phaseAfterWarmup(state.pieces, remainingIn(state, now), now);
+  if (blanks.length === 0) {
     return {
       ...state,
       now,
       phase: nextPhase,
       pendingMutation,
-      stallIndex: undefined,
+      repair: undefined,
       interruptedPhase: undefined,
       rehearsalStart: window.start,
       rehearsalRopeIndexes: window.ropeIndexes,
     };
   }
 
-  const mappingIndexes = promptRopeIndexes(state, window.ropeIndexes, kind);
-  const counts = mappingIndexes.map((index) => wordCountAt(state, index));
-  const localStall = tokens ? stallPieceIndex(tokens, counts) : 0;
-  const continuePhase = phaseAfterWarmup(
-    state.pieces,
-    remainingIn(state, now),
-    now,
-  );
-
   return {
     ...state,
     now,
     phase: "stall-repair",
     pendingMutation,
-    stallIndex: localStall,
-    rehearsalStart: window.start,
-    rehearsalRopeIndexes: mappingIndexes,
-    interruptedPhase:
+    repair: { blanks, seed: now },
+    rehearsalStart: ropeIndexes[0],
+    rehearsalRopeIndexes: ropeIndexes,
+    interruptedPhase: nextPhase,
+  };
+}
+
+/**
+ * Fix a tricky spot allows one try: passed or missed, it is recorded as a
+ * repair (no rep, no schedule change) and the session goes on.
+ */
+function applyRepairAttempt(
+  state: PassageSessionState,
+  accuracy: number,
+  now: number,
+): PassageSessionState {
+  return {
+    ...clearSignals(state, now),
+    phase:
       state.interruptedPhase ??
-      (state.phase === "connect" ? "connect" : continuePhase),
+      phaseAfterWarmup(state.pieces, remainingIn(state, now), now),
+    pendingMutation: { name: "recordAttempt", kind: "repair", accuracy },
   };
 }
 
@@ -520,11 +508,10 @@ export function reducePassageSession(
     };
   }
 
-  const accuracy = event.accuracy;
-  const tokens = event.tokens;
+  const { accuracy, tokens, pieceIndexes } = event;
 
   if (state.phase === "stall-repair") {
-    return applyRopeAttempt(state, accuracy, now, tokens, "repair");
+    return applyRepairAttempt(state, accuracy, now);
   }
 
   if (state.phase === "frontier") {
@@ -543,7 +530,7 @@ export function reducePassageSession(
         },
       };
     }
-    return applyRopeAttempt(state, accuracy, now, tokens, "rope");
+    return applyRopeAttempt(state, accuracy, now, tokens, pieceIndexes);
   }
 
   if (
@@ -570,7 +557,7 @@ export function reducePassageSession(
       };
       return { ...state, now, pendingMutation };
     }
-    return applyRopeAttempt(state, accuracy, now, tokens, "rope");
+    return applyRopeAttempt(state, accuracy, now, tokens, pieceIndexes);
   }
 
   return { ...state, now, pendingMutation: undefined };
@@ -582,10 +569,4 @@ export function introduceWouldExceedBudget(
   now: number = state.now,
 ): boolean {
   return remainingIn(state, now) <= 0;
-}
-
-export function repairWindowStart(state: PassageSessionState): number {
-  const ropeIndexes =
-    state.rehearsalRopeIndexes ?? ropeWindow(state).ropeIndexes;
-  return repairStartIndex(ropeIndexes, state.stallIndex ?? 0);
 }

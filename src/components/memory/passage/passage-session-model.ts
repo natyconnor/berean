@@ -10,6 +10,7 @@ import {
   type HintToken,
 } from "@/lib/verse-hint";
 import {
+  dueFrontierIndex,
   rehearsalStartIndex,
   remainingIntroduces,
   ropePieceIndexes,
@@ -18,11 +19,9 @@ import {
   isPassagePieceLocked,
   PASSAGE_MAX_ADDS_PER_DAY,
 } from "@/lib/passage-frontier";
-import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   initialPassageSessionPhase,
-  repairWindowStart,
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
@@ -152,9 +151,9 @@ export function frontierHint(
   };
 }
 
-export type StallCueContent = {
+export type PickUpCueContent = {
   text: string;
-  label: "Pick up after" | "Starting hint";
+  label: "Pick up after";
 };
 
 function isRopeVerse(piece: PassagePiece): boolean {
@@ -200,7 +199,7 @@ export function pickUpCue(
   texts: readonly string[],
   start: number,
   options?: { includeLearning?: boolean },
-): StallCueContent | null {
+): PickUpCueContent | null {
   const previousText = knownTextBefore(
     pieces,
     texts,
@@ -229,45 +228,6 @@ export function stopBeforeCue(
     .join(" ")
     .replace(/[\s,;:.!?–—-]+$/u, "");
   return `${opening}…`;
-}
-
-/**
- * Bridge / recovery cue after a failed multi-verse recitation.
- * `previousText` is the verse *before* the repair window (the phrase the
- * learner should pick up after), never the first verse they need to type.
- * When the main panel already shows Guided/Challenge letter hints, only keep
- * that clear-text bridge — do not duplicate first letters.
- */
-export function stallRepairCue(
-  previousText: string | undefined,
-  stalledText: string,
-  options?: { includeStalledLetters?: boolean },
-): string {
-  const previousEnd = previousText ? verseEnding(previousText) : "";
-  if (options?.includeStalledLetters === false) {
-    return previousEnd;
-  }
-  const stalledLetters = maskVerseText(stalledText, "first-letters")
-    .map((token) => token.text)
-    .join("");
-  return [previousEnd, stalledLetters]
-    .filter((part) => part.length > 0)
-    .join(" ");
-}
-
-/** True when the repair window already shows Guided/Challenge-style hints. */
-export function repairWindowShowsStageHints(
-  pieces: readonly PassagePiece[],
-  indexes: readonly number[],
-): boolean {
-  return indexes.some((index) => {
-    const piece = pieces[index];
-    return (
-      piece != null &&
-      piece.attachment === "attached" &&
-      piece.learnStage < MAX_LEARN_STAGE
-    );
-  });
 }
 
 export function ropeWindowPieceIndexes(
@@ -396,46 +356,32 @@ export function windowTitle(
   return packName;
 }
 
-export function repairPromptIndexes(state: PassageSessionState): number[] {
-  const mapping =
-    state.rehearsalRopeIndexes && state.rehearsalRopeIndexes.length > 0
-      ? state.rehearsalRopeIndexes
-      : ropePieceIndexes(state.pieces);
-  const start = repairWindowStart(state);
-  const slice = mapping.filter((index) => index >= start);
-  return slice.length > 0 ? [...slice] : [...mapping];
+/**
+ * The first verse of the new piece the session goes on to after Fix a tricky
+ * spot: the verse due now, or the next one to start. Null when there is none.
+ */
+export function nextNewVerse(state: PassageSessionState): number | null {
+  if (state.phase === "frontier") {
+    const due = dueFrontierIndex(state.pieces, state.now);
+    return due === null ? null : (state.pieces[due]?.startVerse ?? null);
+  }
+  if (state.phase === "offer-introduce") {
+    return nextUnreachedPiece(state.pieces)?.startVerse ?? null;
+  }
+  return null;
 }
 
-export function computeStallCue(
-  state: PassageSessionState,
-  texts: readonly string[],
-): StallCueContent | null {
-  if (state.phase !== "stall-repair") return null;
-  const mapping =
-    state.rehearsalRopeIndexes && state.rehearsalRopeIndexes.length > 0
-      ? state.rehearsalRopeIndexes
-      : ropePieceIndexes(state.pieces);
-  const stallLocal = state.stallIndex ?? 0;
-  const stalledIndex = mapping[stallLocal];
-  const stalledText =
-    stalledIndex !== undefined ? (texts[stalledIndex] ?? "") : "";
-  const indexes = repairPromptIndexes(state);
-  const repairStart = indexes[0];
-  // Repair retries from one verse *before* the stall, so the bridge must come
-  // from the verse before that window — not the ending of the starting verse.
-  const previousText =
-    repairStart === undefined
-      ? undefined
-      : knownTextBefore(state.pieces, texts, repairStart, isRopeVerse);
-  const showsStageHints = repairWindowShowsStageHints(state.pieces, indexes);
-  const cue = stallRepairCue(previousText, stalledText, {
-    includeStalledLetters: !showsStageHints,
-  });
-  if (cue.length === 0) return null;
-  return {
-    text: cue,
-    label: showsStageHints ? "Pick up after" : "Starting hint",
-  };
+/** Fix a tricky spot's result line, before the session goes on. */
+export function repairResultLine(
+  passed: boolean,
+  nextVerse: number | null,
+): string {
+  if (nextVerse === null) {
+    return passed ? "Nice." : "You still need some work on that one.";
+  }
+  return passed
+    ? `Nice, now on to verse ${nextVerse}.`
+    : `You still need some work on that one, but let's move on to verse ${nextVerse}`;
 }
 
 export function sessionFromView(

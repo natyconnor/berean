@@ -1,62 +1,33 @@
 import type { DiffToken } from "./diff-words";
 
-const STALL_STATUSES: ReadonlySet<DiffToken["status"]> = new Set([
-  "mismatch",
-  "missing",
-  "extra",
-]);
+/**
+ * Words of lead-in blanked before each missed spot. Spots this close or closer
+ * join into one, since the next lead-in would cover the gap anyway.
+ */
+export const REPAIR_LEAD_IN_WORDS = 6;
 
-function pieceIndexForExpectedWord(
-  wordIndex: number,
-  pieceWordCounts: readonly number[],
-): number {
-  if (pieceWordCounts.length === 0) return 0;
-  let remaining = Math.max(0, wordIndex);
-  for (let index = 0; index < pieceWordCounts.length; index += 1) {
-    const count = pieceWordCounts[index] ?? 0;
-    if (remaining < count) return index;
-    remaining -= count;
-  }
-  return pieceWordCounts.length - 1;
-}
+/** Window words `[start, end)`, counted in the order `diffWords` grades them. */
+export type WordRange = readonly [start: number, end: number];
 
 /**
- * Map the first non-typo error in a rope-window diff onto a piece. `pieceWordCounts`
- * is the window's rope pieces in recitation order (not the full passage).
- * Typos are ignored so a misspelling does not stall the window.
+ * What Fix a tricky spot blanks after a missed try: each run of missed words
+ * plus the up to {@link REPAIR_LEAD_IN_WORDS} words before it, never before
+ * the start of the window. A missed word is one the try got wrong or left
+ * out; a small typo or an extra typed word misses nothing, as in grading.
+ * Overlapping or touching runs come back as one range.
  */
-export function stallPieceIndex(
-  tokens: readonly DiffToken[],
-  pieceWordCounts: readonly number[],
-): number {
-  if (pieceWordCounts.length === 0) return 0;
-
-  let expectedWordIndex = 0;
+export function repairBlankRanges(tokens: readonly DiffToken[]): WordRange[] {
+  const ranges: [number, number][] = [];
+  let word = 0;
   for (const token of tokens) {
-    if (STALL_STATUSES.has(token.status)) {
-      return pieceIndexForExpectedWord(expectedWordIndex, pieceWordCounts);
+    if (token.status === "extra") continue;
+    if (token.status === "mismatch" || token.status === "missing") {
+      const start = Math.max(0, word - REPAIR_LEAD_IN_WORDS);
+      const last = ranges[ranges.length - 1];
+      if (last && start <= last[1]) last[1] = word + 1;
+      else ranges.push([start, word + 1]);
     }
-    if (token.status === "match" || token.status === "typo") {
-      expectedWordIndex += 1;
-    }
+    word += 1;
   }
-
-  return 0;
-}
-
-/**
- * Retry one rope piece earlier than the stall, staying inside the rehearsal
- * window. `ropeIndexes` is the window's attached/solid passage indexes in
- * recitation order (gaps allowed). `stallIndex` is the 0-based index into
- * that list, as returned by {@link stallPieceIndex}.
- */
-export function repairStartIndex(
-  ropeIndexes: readonly number[],
-  stallIndex: number,
-): number {
-  if (ropeIndexes.length === 0) return 0;
-  const last = ropeIndexes.length - 1;
-  const local = Math.min(Math.max(stallIndex, 0), last);
-  const repairLocal = Math.max(0, local - 1);
-  return ropeIndexes[repairLocal] ?? ropeIndexes[0] ?? 0;
+  return ranges;
 }

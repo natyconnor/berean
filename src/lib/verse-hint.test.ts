@@ -6,6 +6,7 @@ import {
   halfFirstLetters,
   hintForProgress,
   maskVerseText,
+  repairHint,
   seededRandom,
 } from "./verse-hint";
 
@@ -336,6 +337,63 @@ describe("halfFirstLetters", () => {
       ),
     );
     expect(picks.size).toBeGreaterThan(1);
+  });
+});
+
+describe("repairHint", () => {
+  const PSALM =
+    "He restores my soul. He leads me in paths of righteousness for his name's sake.\nEven though I walk through the valley—of the shadow of death";
+
+  it("keeps the window in the clear but for its blanked words", () => {
+    // Words 4–7 of the window: "He leads me in".
+    const { tokens, answer } = repairHint(PSALM, [[4, 8]], 1);
+    expect(answer).toBe("He leads me in");
+    expect(tokens.map((token) => token.text).join("")).toMatch(
+      /^He restores my soul\. [_A-Za-z]+ [_a-z]+ [_a-z]+ [_a-z]+ paths of righteousness/,
+    );
+    const shown = tokens.filter((token) => !token.masked);
+    expect(shown.map((token) => token.text).join("")).toContain(
+      "paths of righteousness for his name's sake.\nEven though",
+    );
+    expect(tokens.filter((token) => token.word && token.masked)).toHaveLength(
+      4,
+    );
+  });
+
+  it("blanks a run across a verse and chapter break in place", () => {
+    const { tokens, answer } = repairHint(PSALM, [[13, 17]], 3);
+    expect(answer).toBe("name's sake. Even though");
+    const text = tokens.map((token) => token.text).join("");
+    expect(text).toContain("his ");
+    expect(text).toContain("\n");
+    expect(text).toMatch(/ I walk through the valley—of the shadow of death$/);
+  });
+
+  it("first-letters about a quarter of one pool of blanks, stable for a seed", () => {
+    const blanks = [
+      [0, 6],
+      [12, 26],
+    ] as const;
+    const first = repairHint(PSALM, blanks, 42);
+    const again = repairHint(PSALM, blanks, 42);
+    expect(again.tokens).toEqual(first.tokens);
+    const blanked = first.tokens.filter((token) => token.masked);
+    const lettered = blanked.filter((token) => !token.text.startsWith("_"));
+    // 20 blanked words: Math.round(0.25 × 20) = 5 show a letter.
+    expect(blanked).toHaveLength(20);
+    expect(lettered).toHaveLength(5);
+  });
+
+  it("can show no letter on a very short run", () => {
+    const { tokens } = repairHint(PSALM, [[0, 1]], 7);
+    expect(tokens[0]).toEqual({ text: "__", word: true, masked: true });
+  });
+
+  it("blanks nothing without ranges", () => {
+    const { tokens, answer } = repairHint(PSALM, [], 1);
+    expect(answer).toBe("");
+    expect(tokens.map((token) => token.text).join("")).toBe(PSALM);
+    expect(tokens.every((token) => !token.masked)).toBe(true);
   });
 });
 

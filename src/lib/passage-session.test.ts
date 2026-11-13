@@ -11,7 +11,6 @@ import {
   initialPassageSessionPhase,
   reconcilePassagePhase,
   reducePassageSession,
-  repairWindowStart,
   sessionPhaseForPieces,
   type PassageSessionState,
 } from "./passage-session";
@@ -331,23 +330,118 @@ describe("reducePassageSession", () => {
     expect(next.rehearsalRopeIndexes).toEqual([0, 1]);
   });
 
-  it("repairs a rope fail then continues", () => {
-    const start = session(
-      [
-        piece(0, "attached", { learnStage: 2, stageReps: 0 }),
-        piece(1, "unreached"),
-      ],
-      { phase: "rope" },
-    );
-    const stalled = fail(start);
-    expect(stalled.phase).toBe("stall-repair");
-    expect(stalled.interruptedPhase).toBeDefined();
+  describe("Fix a tricky spot", () => {
+    const warmup = () =>
+      session(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "attached", { learnStage: 2, dueAt: NOW + DAY_MS }),
+          piece(2, "attached", { learnStage: 2, dueAt: NOW + DAY_MS }),
+          piece(3, "unreached"),
+        ],
+        { phase: "rope" },
+      );
 
-    const continued = pass(stalled);
-    expect(continued.phase).not.toBe("stall-repair");
-    expect(["frontier", "offer-introduce", "frontier-locked"]).toContain(
-      continued.phase,
-    );
+    it("keeps the missed window and blanks only the missed spot", () => {
+      const stalled = fail(
+        warmup(),
+        diffWords("a b c d e f g h WRONG j k l", "a b c d e f g h i j k l"),
+      );
+      expect(stalled.phase).toBe("stall-repair");
+      expect(stalled.rehearsalRopeIndexes).toEqual([0, 1, 2]);
+      expect(stalled.repair?.blanks).toEqual([[2, 9]]);
+      expect(stalled.interruptedPhase).toBe("offer-introduce");
+      expect(stalled.pendingMutation).toEqual({
+        name: "recordAttempt",
+        kind: "rope",
+        accuracy: 40,
+      });
+    });
+
+    it("keeps the window the screen recited", () => {
+      const stalled = reducePassageSession(warmup(), {
+        type: "attempt",
+        accuracy: 40,
+        tokens: diffWords("wrong", "one two three"),
+        pieceIndexes: [1, 2],
+      });
+      expect(stalled.rehearsalRopeIndexes).toEqual([1, 2]);
+    });
+
+    it.each([
+      ["passed", 100],
+      ["missed again", 40],
+    ])("allows one try: %s, it records a repair and goes on", (_, accuracy) => {
+      const stalled = fail(warmup());
+      const next = reducePassageSession(stalled, {
+        type: "attempt",
+        accuracy,
+        tokens: diffWords("wrong", "one two three"),
+      });
+      expect(next.phase).toBe("offer-introduce");
+      expect(next.pendingMutation).toEqual({
+        name: "recordAttempt",
+        kind: "repair",
+        accuracy,
+      });
+      // Only recorded: no rep and no schedule change on any piece.
+      expect(next.pieces).toEqual(stalled.pieces);
+      expect(next.repair).toBeUndefined();
+      expect(next.interruptedPhase).toBeUndefined();
+    });
+
+    it("skips the quick fix when a miss has nothing to blank", () => {
+      const typosOnly = diffWords(
+        "shepherd pastrues watres restroes",
+        "shepherd pastures waters restores",
+      );
+      const next = fail(warmup(), typosOnly);
+      expect(next.phase).toBe("offer-introduce");
+      expect(next.repair).toBeUndefined();
+      expect(next.pendingMutation).toEqual({
+        name: "recordAttempt",
+        kind: "rope",
+        accuracy: 40,
+      });
+    });
+
+    it("uses the same quick fix for a missed section recital", () => {
+      const section = session(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "solid", { learnStage: 3 }),
+          piece(2, "unreached", { sectionIndex: 1 }),
+        ],
+        { phase: "section-complete" },
+      );
+      const stalled = reducePassageSession(section, {
+        type: "attempt",
+        accuracy: 40,
+        tokens: diffWords("wrong", "one two three"),
+        pieceIndexes: [0, 1],
+      });
+      expect(stalled.phase).toBe("stall-repair");
+      expect(stalled.rehearsalRopeIndexes).toEqual([0, 1]);
+      expect(pass(stalled).phase).toBe("offer-introduce");
+    });
+
+    it("uses the same quick fix for a missed Connect", () => {
+      const connect = session(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "attached", { learnStage: 3, dueAt: NOW + DAY_MS }),
+          piece(2, "attached", { learnStage: 2, dueAt: NOW + DAY_MS }),
+          piece(3, "unreached"),
+        ],
+        { phase: "connect", rehearsalRopeIndexes: [1, 2] },
+      );
+      const stalled = fail(connect);
+      expect(stalled.phase).toBe("stall-repair");
+      expect(stalled.rehearsalRopeIndexes).toEqual([1, 2]);
+      const next = fail(stalled);
+      expect(next.phase).toBe("offer-introduce");
+      expect(next.pendingMutation).toMatchObject({ kind: "repair" });
+    });
   });
 
   it("does not recitation-warmup across unreached verses to a later rope piece", () => {
@@ -369,42 +463,7 @@ describe("reducePassageSession", () => {
       tokens,
     });
     expect(stalled.rehearsalRopeIndexes).toEqual([0]);
-    expect(stalled.stallIndex).toBe(0);
-  });
-
-  it("does not remap a failed repair onto rope pieces omitted from the prompt", () => {
-    const afterFirstFail = session(
-      [
-        piece(0, "solid", { learnStage: 3 }),
-        piece(1, "unreached"),
-        piece(2, "attached", { learnStage: 2 }),
-        piece(3, "learning", { learnStage: 0 }),
-        piece(4, "unreached"),
-        piece(5, "attached", { learnStage: 2 }),
-      ],
-      {
-        phase: "stall-repair",
-        stallIndex: 2,
-        rehearsalStart: 0,
-        rehearsalRopeIndexes: [0, 2, 5],
-        pieceWordCounts: [3, 3, 3, 3, 3, 3],
-      },
-    );
-    expect(repairWindowStart(afterFirstFail)).toBe(2);
-
-    const retried = reducePassageSession(afterFirstFail, {
-      type: "attempt",
-      accuracy: 40,
-      tokens: diffWords(
-        "WRONG two three four five six",
-        "one two three four five six",
-      ),
-    });
-    expect(retried.phase).toBe("stall-repair");
-    expect(retried.rehearsalRopeIndexes).toEqual([2, 5]);
-    expect(retried.stallIndex).toBe(0);
-    expect(repairWindowStart(retried)).toBe(2);
-    expect(repairWindowStart(retried)).not.toBe(0);
+    expect(stalled.repair?.blanks).toEqual([[0, 1]]);
   });
 
   it("solids a piece when From Memory clears", () => {

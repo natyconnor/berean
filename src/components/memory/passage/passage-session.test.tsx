@@ -2963,7 +2963,7 @@ describe("PassageSession", () => {
 
     /**
      * Verses 1–3 learned (the whole warm-up, at 120 words), verse 4 being
-     * learned. A miss stalling on verse 3 repairs verses 2–3 only.
+     * learned. A miss keeps verses 1–3 and blanks only what was missed.
      */
     function longWarmup(): PassageView {
       serveChapter(LONG.slice(0, 4));
@@ -3438,7 +3438,10 @@ describe("PassageSession", () => {
         expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
       );
       await clickButton(/Continue/);
-      const nextScreen = document.body.textContent;
+      // Fix a tricky spot picks its first letters afresh on each miss.
+      const screenText = () =>
+        (document.body.textContent ?? "").replace(/\b[a-z](?=_)/g, "_");
+      const nextScreen = screenText();
       expectOnlyLoggedTries(2);
       control.unmount();
       mutationMocks.clear();
@@ -3447,7 +3450,7 @@ describe("PassageSession", () => {
       await clickButton(LINK);
       await runRefresher(LONG_PAIR);
       await clickButton(/Continue/);
-      expect(document.body.textContent).toBe(nextScreen);
+      expect(screenText()).toBe(nextScreen);
       expectOnlyLoggedTries(2);
     });
 
@@ -3543,6 +3546,174 @@ describe("PassageSession", () => {
       expect(queryLink()).toBeNull();
       await check("He");
       expect(queryLink()).toBeNull();
+    });
+
+    describe("Fix a tricky spot blanks only the missed spots (#396)", () => {
+      const WORDS = LONG_WARMUP.split(" ");
+      /** The warm-up with window words `[from, to)` left out: a miss. */
+      const leaveOut = (from: number, to: number) =>
+        WORDS.filter((_, index) => index < from || index >= to).join(" ");
+      /** Verse 2's words 10–29 left out, so 44–69 are blanked. */
+      const SPOT = WORDS.slice(44, 70).join(" ");
+
+      /** Verses 1–2 learned and verse 3 locked until tomorrow: no new verse. */
+      function noNextVerseWarmup(): PassageView {
+        serveChapter(LONG.slice(0, 3));
+        const now = getSessionNow();
+        const view = passageView(
+          [
+            piece(0, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+            piece(1, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+            piece(2, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+          ],
+          { lastSessionAt: now - 60_000 },
+        );
+        record().mockResolvedValue(view);
+        return view;
+      }
+
+      async function missWarmup() {
+        await check(leaveOut(50, 70));
+        expect(screen.getByText(/83% correct/)).toBeInTheDocument();
+        await clickButton(/Continue/);
+        expect(header("Fix a tricky spot")).toBeInTheDocument();
+      }
+
+      function banner() {
+        return screen
+          .getAllByRole("status")
+          .find((node) => /% correct/.test(node.textContent ?? ""));
+      }
+
+      it("F1: keeps the card and the missed window, blanking only the spot and its lead-in", async () => {
+        renderSession(longWarmup());
+        await missWarmup();
+        expect(screen.getByText("Psalm 23:1–3")).toBeInTheDocument();
+        expect(screen.getByText("Try this part again")).toBeInTheDocument();
+        expect(
+          screen.getByText("Type this part from memory"),
+        ).toBeInTheDocument();
+        expect(screen.queryByLabelText("Starting hint")).toBeNull();
+        expect(screen.queryByLabelText("Pick up after")).toBeNull();
+        expect(queryLink()).toBeNull();
+
+        const hint = hintText();
+        expect(hint.startsWith(`${WORDS.slice(0, 44).join(" ")} `)).toBe(true);
+        expect(hint.endsWith(` ${WORDS.slice(70).join(" ")}`)).toBe(true);
+        // 26 blanks, and Math.round(26 × 25%) = 7 of them show a letter.
+        expect(hint.match(/[a-z]__/g)).toHaveLength(7);
+        expect(hint.match(/___/g)).toHaveLength(19);
+        await waitFor(() => expect(answerBox()).toHaveFocus());
+      });
+
+      it("F4: scores only the blanked words; a pass moves on to the next verse", async () => {
+        renderSession(longWarmup());
+        await missWarmup();
+        const hint = hintText();
+        await check(SPOT);
+        expect(banner()).toHaveTextContent("Nice, now on to verse 4.");
+        expect(banner()).toHaveTextContent("100% correct");
+        expect(screen.queryByText(/you need 85% to pass/)).toBeNull();
+        expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+        await waitFor(() =>
+          expect(
+            screen.getByRole("button", { name: /Continue/ }),
+          ).toHaveFocus(),
+        );
+        // Only recorded, as a repair.
+        expect(record()).toHaveBeenCalledTimes(2);
+        expect(record().mock.calls[1]?.[0]).toMatchObject({
+          kind: "repair",
+          accuracy: 100,
+        });
+        await clickButton(/Continue/);
+        expect(await screen.findByText("Psalm 23:4")).toBeInTheDocument();
+        expect(screen.queryByText(hint)).toBeNull();
+      });
+
+      it("F5: a second miss shows the answer and still moves on", async () => {
+        renderSession(longWarmup());
+        await missWarmup();
+        await check("nope");
+        expect(banner()?.querySelector("p")?.textContent).toBe(
+          "You still need some work on that one, but let's move on to verse 4",
+        );
+        expect(screen.getByText("How you did")).toBeInTheDocument();
+        expect(screen.queryByText(/you need 85% to pass/)).toBeNull();
+        expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+        expect(record().mock.calls[1]?.[0]).toMatchObject({ kind: "repair" });
+        await clickButton(/Continue/);
+        expect(await screen.findByText("Psalm 23:4")).toBeInTheDocument();
+        expect(screen.queryByText("Try this part again")).toBeNull();
+        expect(record()).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([
+        ["passes", () => SPOT, "Nice."],
+        ["misses", () => "nope", "You still need some work on that one."],
+      ])(
+        "F10/F11: with no next new verse, a try that %s says so plainly",
+        async (_, typed, line) => {
+          renderSession(noNextVerseWarmup());
+          // Verse 3 is the window's last 40 words; leave out 20 of them.
+          await check(
+            WORDS.filter((_, index) => index < 90 || index >= 110).join(" "),
+          );
+          await clickButton(/Continue/);
+          expect(header("Fix a tricky spot")).toBeInTheDocument();
+          await check(
+            typed() === SPOT ? WORDS.slice(84, 110).join(" ") : typed(),
+          );
+          expect(banner()?.querySelector("p")?.textContent).toBe(line);
+          await clickButton(/Continue/);
+          expect(screen.queryByText("Try this part again")).toBeNull();
+        },
+      );
+
+      it("skips the quick fix when the miss has nothing to blank", async () => {
+        renderSession(longWarmup());
+        // An extra word after every word: 50%, a miss, but none was missed.
+        await check(WORDS.map((word) => `${word} so`).join(" "));
+        expect(screen.getByText(/50% correct/)).toBeInTheDocument();
+        await clickButton(/Continue/);
+        expect(await screen.findByText("Psalm 23:4")).toBeInTheDocument();
+        expect(screen.queryByText("Try this part again")).toBeNull();
+        expectOnlyLoggedTries(1);
+      });
+
+      it("F7/F8: a missed section recital uses the same quick fix", async () => {
+        renderSession(sectionView());
+        await check(LONG[1] ?? "", "Your verse");
+        await clickButton(/Continue/);
+        await clickButton(SECTION_RECITE_LABEL);
+        const pair = LONG_PAIR.split(" ");
+        await check(
+          pair.filter((_, index) => index < 30 || index >= 50).join(" "),
+        );
+        await clickButton(/Continue/);
+        expect(header("Fix a tricky spot")).toBeInTheDocument();
+        expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
+        expect(hintText().startsWith(pair.slice(0, 24).join(" "))).toBe(true);
+        await check(pair.slice(24, 50).join(" "));
+        expect(banner()).toHaveTextContent("Nice, now on to verse 3.");
+      });
+
+      it("F9: a missed Connect uses the same quick fix, with no next verse", async () => {
+        renderSession(connectView());
+        await check(LONG[0] ?? "", "Your verse");
+        await clickButton(/Continue/);
+        await clickButton(CONNECT_RECITE_LABEL);
+        await check(typedAt(LONG_PAIR, 30));
+        await clickButton(/Continue/);
+        expect(header("Fix a tricky spot")).toBeInTheDocument();
+        expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
+        await check("nope");
+        expect(banner()?.querySelector("p")?.textContent).toBe(
+          "You still need some work on that one.",
+        );
+        await clickButton(/Continue/);
+        expect(screen.queryByText("Try this part again")).toBeNull();
+      });
     });
 
     it("R38: the Connect verses recital shows no link, and no offer at 30% or 84%", async () => {

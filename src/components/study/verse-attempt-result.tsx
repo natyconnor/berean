@@ -40,6 +40,8 @@ interface VerseAttemptResultProps {
   /** Shown after the closing line, e.g. "This counted as today's review." */
   countedLine?: string | null;
   practiceOnly?: boolean;
+  /** Replaces the banner's usual bold line. */
+  mainLine?: string;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -174,6 +176,7 @@ export function VerseAttemptResult({
   closingLine = null,
   countedLine = null,
   practiceOnly = false,
+  mainLine,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -207,6 +210,7 @@ export function VerseAttemptResult({
           closingLine={closingLine}
           countedLine={countedLine}
           practiceOnly={practiceOnly}
+          mainLine={mainLine}
         />
       ) : null}
       {saveError ? (
