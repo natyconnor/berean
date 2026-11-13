@@ -1,3 +1,5 @@
+import { splitDiffText } from "./diff-words";
+import type { WordRange } from "./passage-stall";
 import {
   MAX_LEARN_STAGE,
   requiredRepsFor,
@@ -233,6 +235,51 @@ export function halfFirstLetters(
   return maskVerseText(text, "first-letters").map((token, index) =>
     picked.has(index) ? token : blanks[index],
   );
+}
+
+/** Share of Fix a tricky spot's blanks that show a first letter. */
+const REPAIR_FIRST_LETTER_DENSITY = 0.25;
+
+/**
+ * Fix a tricky spot: `text` in the clear except the words in `blanks`
+ * (counted the way `diffWords` grades them), which become blank slots. About
+ * a quarter of all the blanked words, picked by `seed` the way cloze picks
+ * them, show their first letter. `answer` is the blanked words in reading
+ * order, the only words the try is scored on.
+ */
+export function repairHint(
+  text: string,
+  blanks: readonly WordRange[],
+  seed: number,
+): { tokens: HintToken[]; answer: string } {
+  const parts = splitDiffText(text);
+  let wordIndex = 0;
+  const blanked = new Set<number>();
+  parts.forEach((part, index) => {
+    if (!part.word) return;
+    if (blanks.some(([start, end]) => wordIndex >= start && wordIndex < end)) {
+      blanked.add(index);
+    }
+    wordIndex += 1;
+  });
+  const words = parts
+    .filter((_, index) => blanked.has(index))
+    .map((part) => part.text);
+  const answer = words.join(" ");
+  const lettered = getClozeFirstLetterIndices(answer, words, {
+    density: REPAIR_FIRST_LETTER_DENSITY,
+    seed,
+  });
+  let blankIndex = 0;
+  const tokens = parts.flatMap((part, index): HintToken[] => {
+    if (!blanked.has(index)) {
+      return [{ text: part.text, word: part.word, masked: false }];
+    }
+    const stage = lettered.has(blankIndex) ? "first-letters" : "hidden";
+    blankIndex += 1;
+    return maskVerseText(part.text, stage);
+  });
+  return { tokens, answer };
 }
 
 /** A repeatable `Math.random` stand-in (mulberry32), so a hint holds still. */

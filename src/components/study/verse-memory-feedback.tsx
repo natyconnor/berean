@@ -63,6 +63,8 @@ interface VerseMemoryFeedbackProps {
   /** Shown after the closing line, e.g. "This counted as today's review." */
   countedLine?: string | null;
   practiceOnly?: boolean;
+  /** Replaces the usual bold line, e.g. Fix a tricky spot's. */
+  mainLine?: string;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -114,6 +116,7 @@ export function VerseMemoryFeedback({
   closingLine = null,
   countedLine = null,
   practiceOnly = false,
+  mainLine,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
@@ -124,11 +127,13 @@ export function VerseMemoryFeedback({
   const tone = practicePass ? "pass" : band;
   const emoji = practicePass ? PRACTICE_PASS_EMOJI : BAND_EMOJI[band];
   const celebrate = band === "exact" && !skipCelebrate && !practicePass;
-  const line = practicePass
-    ? PRACTICE_PASS_LINE
-    : !showScheduleOutcome && requireExactToAdvance && quality === "close"
-      ? FROM_MEMORY_CLOSE_MESSAGE
-      : attemptFeedbackLine({ accuracy: scored, outcome, errors });
+  const line =
+    mainLine ??
+    (practicePass
+      ? PRACTICE_PASS_LINE
+      : !showScheduleOutcome && requireExactToAdvance && quality === "close"
+        ? FROM_MEMORY_CLOSE_MESSAGE
+        : attemptFeedbackLine({ accuracy: scored, outcome, errors }));
   const consequence =
     closingLine !== null
       ? closingLine

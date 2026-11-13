@@ -19,8 +19,7 @@ import {
 } from "@/components/memory/passage/passage-recall-card";
 import {
   chromeStage,
-  computeStallCue,
-  type StallCueContent,
+  type PickUpCueContent,
   CONNECT_COPY,
   CONNECT_RECITE_LABEL,
   connectPairTitle,
@@ -37,6 +36,7 @@ import {
   hasStartedPassage,
   joinPieceTexts,
   latestLockedPiece,
+  nextNewVerse,
   nextUnreachedPiece,
   PASSAGE_SESSION_PHASE_LABELS,
   pieceCardTitle,
@@ -48,7 +48,7 @@ import {
   stopBeforeCue,
   RECITE_IT_ALL_LABEL,
   remainingAddsIn,
-  repairPromptIndexes,
+  repairResultLine,
   ropeWindowPieceIndexes,
   SECTION_COMPLETE_COPY,
   SECTION_RECITE_LABEL,
@@ -141,7 +141,7 @@ import {
   usePassageStale,
   type ReviewSave,
 } from "@/components/memory/passage/use-passage-review";
-import { countVerseWords, seededRandom } from "@/lib/verse-hint";
+import { countVerseWords, repairHint, seededRandom } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -159,7 +159,7 @@ type BuiltRecall = {
   retry: () => void;
   hint: PassageRecallHint;
   /** End of the verse before this recall when it starts mid-passage. */
-  pickUpCue: StallCueContent | null;
+  pickUpCue: PickUpCueContent | null;
   /** Start of the verse after this recall when it is typed from memory. */
   stopBeforeCue: string | null;
   learnStage: number;
@@ -299,7 +299,6 @@ export function PassageSession({
   const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
     useState<RopeStartOverride>("rehearsal");
-  const [stallCue, setStallCue] = useState<StallCueContent | null>(null);
   const [holdResult, setHoldResult] = useState(false);
   const [heldRecall, setHeldRecall] = useState<BuiltRecall | null>(null);
   const [recitingSection, setRecitingSection] = useState(false);
@@ -445,8 +444,6 @@ export function PassageSession({
           segments: learningRefresherSegments,
         })
       : shownRecall;
-  // A logged miss's starting hint is for its next try, not the refresher.
-  const cue = (refresher.isOpen ? null : stallCue) ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
   // The day's step starts once warm-up ends. Until then (warm-up, or a
@@ -875,6 +872,7 @@ export function PassageSession({
       type: "attempt",
       accuracy: result.accuracy,
       tokens: result.tokens,
+      pieceIndexes: liveRecall?.pieceIndexes,
       now: Date.now(),
     });
     const saved = await persist(next, result.quality, result.durationMs);
@@ -886,12 +884,14 @@ export function PassageSession({
       setHeldRecall(heldRecallWithJourneyProgress(liveRecall, next));
       setHoldResult(true);
     }
+    const passed = result.accuracy >= PASSAGE_PASS_ACCURACY;
     setResultView(
-      learningRefreshable && result.accuracy < PASSAGE_PASS_ACCURACY
-        ? { offer: needARefresher(() => openRefresher("after-miss")) }
-        : null,
+      state.phase === "stall-repair"
+        ? { mainLine: repairResultLine(passed, nextNewVerse(next)) }
+        : learningRefreshable && !passed
+          ? { offer: needARefresher(() => openRefresher("after-miss")) }
+          : null,
     );
-    setStallCue(computeStallCue(next, pieceTexts));
     return true;
   }
 
@@ -906,7 +906,6 @@ export function PassageSession({
       const saved = await persist(next, undefined);
       if (!saved) return false;
       setRopeOverride("rehearsal");
-      setStallCue(null);
       setHoldResult(false);
       setHeldRecall(null);
       setRecitingSection(false);
@@ -944,7 +943,6 @@ export function PassageSession({
     setState(next);
     setHoldResult(false);
     setHeldRecall(null);
-    setStallCue(null);
     setRopeOverride("rehearsal");
   }
 
@@ -956,7 +954,6 @@ export function PassageSession({
     setState(next);
     setHoldResult(false);
     setHeldRecall(null);
-    setStallCue(null);
     setRecitingSection(false);
     setRecitingConnect(false);
   }
@@ -1175,8 +1172,7 @@ export function PassageSession({
             error={recall.error}
             retry={recall.retry}
             hint={recall.hint}
-            stallCue={cue?.text}
-            stallCueLabel={cue?.label}
+            pickUpCue={recall.pickUpCue?.text}
             stopBeforeCue={recall.stopBeforeCue}
             learnStage={recall.learnStage}
             stageReps={recall.stageReps}
@@ -1685,23 +1681,23 @@ function buildingRecall(args: {
   }
 
   if (phase === "stall-repair") {
-    const indexes = repairPromptIndexes(state);
-    const start = indexes[0] ?? 0;
-    const end = (indexes[indexes.length - 1] ?? 0) + 1;
+    // The window just missed, in the clear but for its missed spots.
+    const indexes = state.rehearsalRopeIndexes ?? [];
+    const repair = repairHint(
+      joinPieceTexts(state.pieces, indexes, pieceTexts),
+      state.repair?.blanks ?? [],
+      state.repair?.seed ?? 0,
+    );
     return {
       mode: "repair",
       title: windowTitle(packName, state.pieces, indexes),
       subtitle: "Try this part again",
       promptLine: TYPE_THIS_PART_PROMPT,
-      versePlainText: joinPieceTexts(state.pieces, indexes, pieceTexts),
+      versePlainText: repair.answer,
       loading: compositeLoading,
       error: compositeError,
       retry,
-      hint: {
-        type: "text",
-        text: compositeHintForWindow(state.pieces, start, end, pieceTexts),
-        label: "Hint",
-      },
+      hint: { type: "tokens", tokens: repair.tokens, label: "Hint" },
       pickUpCue: null,
       stopBeforeCue: null,
       learnStage: chromeStage(state.pieces, indexes),
