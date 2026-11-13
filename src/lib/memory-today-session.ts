@@ -284,6 +284,30 @@ export function todaySessionCounts(
   };
 }
 
+/** Items done per queue group (Passages, Verses to learn, Reviews). */
+export type TodayGroupDone = Record<TodaySegment["kind"], number>;
+
+export const NO_GROUP_DONE: TodayGroupDone = {
+  passage: 0,
+  learning: 0,
+  review: 0,
+};
+
+/** Items done in each queue group, so a later visit can carry them. */
+export function todayGroupDone(
+  segments: readonly TodaySegment[],
+  doneItems: readonly number[],
+): TodayGroupDone {
+  const done = { ...NO_GROUP_DONE };
+  segments.forEach((segment, index) => {
+    done[segment.kind] += clampDone(
+      doneItems[index],
+      todaySegmentItemCount(segment),
+    );
+  });
+  return done;
+}
+
 /**
  * Adds items finished on an earlier visit today to the count and the bar,
  * so coming back reads "8 of 13", not "0 of 5".
@@ -347,6 +371,11 @@ export interface TodayQueueInput extends TodayProgressInput {
   current: number | null;
   /** The card on screen; only this row is current in a verse group. */
   shownId?: string;
+  /**
+   * Items each group finished on an earlier visit today. They no longer sit
+   * in the queue, so they add to the group's count but not its rows.
+   */
+  carried?: TodayGroupDone;
 }
 
 const QUEUE_HEADINGS: Record<TodaySegment["kind"], string> = {
@@ -461,12 +490,11 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
       target: state === "upcoming" ? index : null,
     });
   });
-  if (passages.length === 0) return groups;
   const firstOpen =
     passages.find((item) => item.openable && item.state === "upcoming") ??
     passages.find((item) => item.openable);
-  return [
-    {
+  if (passages.length > 0) {
+    groups.push({
       kind: "passage",
       heading: QUEUE_HEADINGS.passage,
       state: passages.some((item) => item.state === "current")
@@ -482,9 +510,42 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
         firstOpen && !passages.some((item) => item.state === "current")
           ? firstOpen.segment
           : null,
-    },
-    ...groups,
-  ];
+    });
+  }
+  return withCarried(groups, input.carried ?? NO_GROUP_DONE);
+}
+
+/**
+ * Adds earlier visits' items to each group's count. A group finished
+ * entirely on an earlier visit still shows, done, with no rows.
+ */
+function withCarried(
+  groups: TodayQueueGroup[],
+  carried: TodayGroupDone,
+): TodayQueueGroup[] {
+  const kinds: TodaySegment["kind"][] = ["passage", "learning", "review"];
+  return kinds.flatMap((kind): TodayQueueGroup[] => {
+    const earlier = carried[kind];
+    const group = groups.find((item) => item.kind === kind);
+    if (group) {
+      return [
+        { ...group, done: group.done + earlier, total: group.total + earlier },
+      ];
+    }
+    if (earlier === 0) return [];
+    return [
+      {
+        kind,
+        heading: QUEUE_HEADINGS[kind],
+        state: "done",
+        total: earlier,
+        done: earlier,
+        items: [],
+        moreCount: 0,
+        target: null,
+      },
+    ];
+  });
 }
 
 export interface TodaySessionTally {
