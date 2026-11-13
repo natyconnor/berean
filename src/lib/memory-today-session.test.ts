@@ -6,6 +6,7 @@ import {
   TODAY_QUEUE_REVIEW_LIMIT,
   todayDoneItems,
   todayFinishedSegments,
+  todayGroupDone,
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
@@ -415,6 +416,65 @@ describe("todayQueueGroups", () => {
     ]);
   });
 
+  it("adds an earlier visit's items to its group, so a reload reads 5 of 10", () => {
+    const remaining = Array.from({ length: 5 }, (_, index) => ({
+      id: `r${index}`,
+      label: `Review ${index}`,
+    }));
+    const segments = planTodaySession({
+      passages: [],
+      learningVerses: 0,
+      reviews: remaining.length,
+    });
+    const earlier = { passage: 0, learning: 0, review: 5 };
+    const doneItems = todayDoneItems({
+      segments,
+      learning: [],
+      reviews: remaining,
+      done: new Set(),
+    });
+    const { counts } = carryTodayProgress(
+      todaySessionCounts(segments, doneItems),
+      0,
+      5,
+    );
+    expect(todaySessionCountLabel(counts)).toBe("Today · 5 of 10");
+    const [group] = todayQueueGroups({
+      segments,
+      learning: [],
+      reviews: remaining,
+      done: new Set(),
+      current: 0,
+      carried: earlier,
+    });
+    expect(group).toMatchObject({ heading: "Reviews", done: 5, total: 10 });
+    expect(group?.items).toHaveLength(5);
+  });
+
+  it("shows a group finished on an earlier visit as done, with no rows", () => {
+    const groups = todayQueueGroups({
+      segments: [{ kind: "learning", verseCount: 1 }],
+      learning: [{ id: "jn1", label: "John 1:1" }],
+      reviews: [],
+      done: new Set(),
+      current: 0,
+      carried: { passage: 1, learning: 1, review: 3 },
+    });
+    expect(
+      groups.map((group) => [
+        group.heading,
+        group.state,
+        group.done,
+        group.total,
+        group.items.length,
+      ]),
+    ).toEqual([
+      ["Passages", "done", 1, 1, 0],
+      ["Verses to learn", "current", 1, 2, 1],
+      ["Reviews", "done", 3, 3, 0],
+    ]);
+  });
+
   it("folds a long review list into +N more", () => {
     const many = Array.from({ length: 20 }, (_, index) => ({
       id: `r${index}`,
@@ -513,6 +573,21 @@ describe("todaySessionDoneLine", () => {
     expect(
       todaySessionDoneLine({ passages: [], learningSteps: 0, reviews: 0 }),
     ).toBe("Today's session is done.");
+  });
+});
+
+describe("todayGroupDone", () => {
+  it("splits items done by queue group", () => {
+    const segments = planTodaySession({
+      passages: [PSALM_16],
+      learningVerses: 2,
+      reviews: 3,
+    });
+    expect(todayGroupDone(segments, [1, 1, 2])).toEqual({
+      passage: 1,
+      learning: 1,
+      review: 2,
+    });
   });
 });
 

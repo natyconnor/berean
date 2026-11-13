@@ -64,6 +64,7 @@ import {
   planTodaySession,
   todayDoneItems,
   todayFinishedSegments,
+  todayGroupDone,
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
@@ -71,6 +72,7 @@ import {
   todaySessionCountLabel,
   todaySessionCounts,
   todaySessionProgress,
+  type TodayGroupDone,
   type TodayPassageInput,
   type TodayProgressInput,
   type TodayQueueEntry,
@@ -366,14 +368,15 @@ function dayCarry(
   segments: readonly TodaySegment[],
   tally: TodayTally,
   earlier: TodaySessionCarry,
-  doneItems: number,
+  groupDone: TodayGroupDone,
 ): TodaySessionCarry {
   const runResults = segments.flatMap((segment, index) => {
     const result = tally.runs[index];
     return result ? [{ segment, result }] : [];
   });
   return mergeTodayCarry(earlier, {
-    doneItems,
+    doneItems: groupDone.passage + groupDone.learning + groupDone.review,
+    groupDone,
     passages: tally.passages.flatMap((index) => {
       const segment = segments[index];
       return segment?.kind === "passage" ? [segment.title] : [];
@@ -670,15 +673,36 @@ function TodaySession({
     search.return,
   ]);
 
-  const doneCount = todaySessionCounts(segments, doneItems).done;
-  const day = dayCarry(segments, tally, earlier, doneCount);
+  const {
+    passage,
+    learning: learningDone,
+    review,
+  } = todayGroupDone(segments, doneItems);
+  const day = dayCarry(segments, tally, earlier, {
+    passage,
+    learning: learningDone,
+    review,
+  });
   useEffect(() => {
     writeTodayCarry(
       carryScope,
       dayKey,
-      dayCarry(segments, tally, earlier, doneCount),
+      dayCarry(segments, tally, earlier, {
+        passage,
+        learning: learningDone,
+        review,
+      }),
     );
-  }, [carryScope, dayKey, segments, tally, earlier, doneCount]);
+  }, [
+    carryScope,
+    dayKey,
+    segments,
+    tally,
+    earlier,
+    passage,
+    learningDone,
+    review,
+  ]);
   const { learned, attempts, passages: passagesDone } = day;
 
   const showExtraPractice =
@@ -753,6 +777,7 @@ function TodaySession({
       reopenable,
       current,
       shownId: currentItemId,
+      carried: earlier.groupDone,
     });
   const showQueue =
     segments.length > 1 || queue.learning.length + queue.reviews.length > 1;

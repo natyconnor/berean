@@ -1,3 +1,4 @@
+import { NO_GROUP_DONE, type TodayGroupDone } from "@/lib/memory-today-session";
 import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
 
 import type { SessionCompleteVerse } from "./session-complete";
@@ -11,6 +12,8 @@ import type { SessionCompleteVerse } from "./session-complete";
 export interface TodaySessionCarry {
   /** Queue items finished, as counted in "Today · 4 of 12". */
   doneItems: number;
+  /** The same items by queue group, for the rail's group counts. */
+  groupDone: TodayGroupDone;
   /** Passages finished for the day, by title. */
   passages: string[];
   learned: SessionCompleteVerse[];
@@ -19,6 +22,7 @@ export interface TodaySessionCarry {
 
 export const EMPTY_TODAY_CARRY: TodaySessionCarry = {
   doneItems: 0,
+  groupDone: NO_GROUP_DONE,
   passages: [],
   learned: [],
   attempts: [],
@@ -46,6 +50,11 @@ export function mergeTodayCarry(
   for (const verse of later.learned) learned.set(verse.id, verse);
   return {
     doneItems: earlier.doneItems + later.doneItems,
+    groupDone: {
+      passage: earlier.groupDone.passage + later.groupDone.passage,
+      learning: earlier.groupDone.learning + later.groupDone.learning,
+      review: earlier.groupDone.review + later.groupDone.review,
+    },
     passages: [...new Set([...earlier.passages, ...later.passages])],
     learned: [...learned.values()],
     attempts: [...earlier.attempts, ...later.attempts],
@@ -68,6 +77,7 @@ export function readTodayCarry(
     }
     return {
       doneItems: record.doneItems,
+      groupDone: record.groupDone,
       passages: record.passages,
       learned: record.learned,
       attempts: record.attempts,
@@ -120,9 +130,15 @@ function hasReference(value: Record<string, unknown>): boolean {
   );
 }
 
+function count(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : 0;
+}
+
 function toCarryRecord(value: unknown): CarryRecord | null {
   if (!isRecord(value)) return null;
-  const { day, doneItems, passages, learned, attempts } = value;
+  const { day, doneItems, groupDone, passages, learned, attempts } = value;
   if (
     typeof day !== "number" ||
     typeof doneItems !== "number" ||
@@ -134,7 +150,15 @@ function toCarryRecord(value: unknown): CarryRecord | null {
   }
   return {
     day,
-    doneItems: Math.max(0, Math.trunc(doneItems)),
+    doneItems: count(doneItems),
+    // Records from before the per-group counts read as none in each group.
+    groupDone: isRecord(groupDone)
+      ? {
+          passage: count(groupDone.passage),
+          learning: count(groupDone.learning),
+          review: count(groupDone.review),
+        }
+      : NO_GROUP_DONE,
     passages: passages.filter(
       (title): title is string => typeof title === "string",
     ),

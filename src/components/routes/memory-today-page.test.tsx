@@ -469,6 +469,14 @@ function queueRow(container: HTMLElement, label: string): HTMLElement {
   return row as HTMLElement;
 }
 
+/** A group in the Today's queue rail: Passages, Verses to learn, or Reviews. */
+function railGroup(kind: "passage" | "learning" | "review"): HTMLElement {
+  const rail = screen.getByRole("region", { name: "Today's queue" });
+  const group = rail.querySelector<HTMLElement>(`[data-group="${kind}"]`);
+  expect(group).not.toBeNull();
+  return group as HTMLElement;
+}
+
 function renderToday() {
   return render(
     <TooltipProvider delayDuration={0}>
@@ -1245,6 +1253,86 @@ describe("MemoryTodayPage", () => {
     renderToday();
     expect(screen.queryByText("All caught up")).not.toBeInTheDocument();
     expect(screen.getByText("John 15:2")).toBeInTheDocument();
+  });
+
+  it("keeps the rail's Reviews count after a mid-run reload (#391)", async () => {
+    const reviews = Array.from({ length: 10 }, (_, index) =>
+      dueVerse(`lk9_${index + 1}`, index + 1),
+    );
+    setToday({ passages: [], learning: [], due: reviews });
+    const first = renderToday();
+    for (let count = 0; count < 5; count += 1) {
+      await userEvent.click(
+        screen.getByRole("button", { name: "Spend the shown review card" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show the next card" }),
+      );
+    }
+    first.unmount();
+
+    setToday({ passages: [], learning: [], due: reviews.slice(5) });
+    renderToday();
+    expect(screen.getByText("5 of 10 done")).toBeInTheDocument();
+    expect(railGroup("review")).toHaveTextContent("5 of 10");
+    expect(within(railGroup("review")).getAllByRole("listitem")).toHaveLength(
+      5,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown review card" }),
+    );
+    expect(screen.getByText("Today · 6 of 10")).toBeInTheDocument();
+    expect(railGroup("review")).toHaveTextContent("6 of 10");
+  });
+
+  it("splits carried work between learning and reviews in the rail", async () => {
+    const reviews = [dueVerse("lk9_1", 1), dueVerse("lk9_2", 2)];
+    setToday({ passages: [], due: reviews });
+    const first = renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the first learning card" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Luke 9:1" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown review card" }),
+    );
+    first.unmount();
+
+    setToday({
+      passages: [],
+      learning: [inMemory("jn15_2", 2, "new")],
+      due: reviews.slice(1),
+    });
+    renderToday();
+    expect(screen.getByText("2 of 4 done")).toBeInTheDocument();
+    expect(railGroup("learning")).toHaveTextContent("1 of 2");
+    expect(railGroup("review")).toHaveTextContent("1 of 2");
+  });
+
+  it("keeps a group finished on an earlier visit in the rail, with no rows", async () => {
+    const reviews = [dueVerse("lk9_1", 1), dueVerse("lk9_2", 2)];
+    setToday({ passages: [], due: reviews });
+    const first = renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Luke 9:1" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend every review card" }),
+    );
+    first.unmount();
+
+    setToday({ passages: [], due: [] });
+    renderToday();
+    expect(screen.getByText("2 of 4 done")).toBeInTheDocument();
+    expect(railGroup("learning")).toHaveTextContent("0 of 2");
+    expect(railGroup("review")).toHaveTextContent("2 of 2");
+    expect(railGroup("review")).toHaveAttribute("data-state", "done");
+    expect(within(railGroup("review")).queryAllByRole("listitem")).toHaveLength(
+      0,
+    );
   });
 
   it("runs only a passage pack's passage", () => {
