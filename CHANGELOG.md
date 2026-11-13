@@ -30,6 +30,16 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.21.1](https://github.com/natyconnor/berean/compare/v1.21.0...v1.21.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* Blank only the missed spots on Fix a tricky spot ([#409](https://github.com/natyconnor/berean/issues/409)) ([f26ce47](https://github.com/natyconnor/berean/commit/f26ce47e69a7e52df24a1f02567e9e9659e258ad))
+* Keep the rail's group counts after a Today reload ([#406](https://github.com/natyconnor/berean/issues/406)) ([9a27f44](https://github.com/natyconnor/berean/commit/9a27f4462403bd356e519845f4cc6c5cf19507aa))
+* Make the app's copy sound like a person wrote it ([#407](https://github.com/natyconnor/berean/issues/407)) ([764fe95](https://github.com/natyconnor/berean/commit/764fe954bfb522058eec448f2e5030479574bdf1))
+* Quick fix placeholder says Type the missing words ([#411](https://github.com/natyconnor/berean/issues/411)) ([#412](https://github.com/natyconnor/berean/issues/412)) ([56014eb](https://github.com/natyconnor/berean/commit/56014eb5b464c70a4c8a48b88a245127189774c8))
+
 ## [1.21.0](https://github.com/natyconnor/berean/compare/v1.20.0...v1.21.0) (2026-11-12)
 
 
