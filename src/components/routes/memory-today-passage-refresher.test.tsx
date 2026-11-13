@@ -326,7 +326,7 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     };
     const fixTrickySpot = async () => {
       await screen.findByText("Try this part again");
-      await check(WARMUP);
+      await check(WARMUP, "Missing words");
       await click(/Continue/);
     };
 
@@ -366,7 +366,7 @@ describe("Today summary after a Learning passage refresher (S15, Designer check 
     };
     const fixTrickySpot = async () => {
       await screen.findByText("Try this part again");
-      await check(SECTION);
+      await check(SECTION, "Missing words");
       await click(/Continue/);
     };
 
