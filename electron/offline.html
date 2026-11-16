@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>Berean</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 0 24px;
+        background: #14110d;
+        color: rgba(255, 255, 255, 0.85);
+        font-family: Georgia, "Times New Roman", serif;
+        text-align: center;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 44px;
+        font-weight: 400;
+        letter-spacing: 0.2em;
+        color: rgba(255, 255, 255, 0.95);
+      }
+      p {
+        margin: 0;
+        max-width: 420px;
+        font-size: 17px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.65);
+      }
+      button {
+        margin-top: 10px;
+        padding: 10px 28px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
+        font: inherit;
+        font-size: 16px;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.16);
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>BEREAN</h1>
+    <p>
+      Berean needs an internet connection. Check your connection, then try
+      again.
+    </p>
+    <button id="retry" type="button">Retry</button>
+    <script>
+      const button = document.getElementById("retry");
+
+      function retry() {
+        button.disabled = true;
+        button.textContent = "Trying…";
+        // Main reloads the app URL. If that fails this page is loaded afresh.
+        window.bereanOffline?.retry();
+      }
+
+      button.addEventListener("click", retry);
+      window.addEventListener("online", retry);
+    </script>
+  </body>
+</html>

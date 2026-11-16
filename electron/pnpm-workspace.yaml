@@ -1,0 +1,10 @@
+# Makes electron/ its own pnpm root, with its own lockfile, so the web app's
+# install (CI, Vercel) never pulls in Electron. See README.md.
+saveExact: true
+
+allowBuilds:
+  # Downloads the Electron binary.
+  electron: true
+  # Windows installer tooling pulled in by electron-builder; not used on Mac.
+  electron-winstaller: false
+  esbuild: true

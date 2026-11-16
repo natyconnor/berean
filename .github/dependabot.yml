@@ -29,3 +29,39 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+
+  # Desktop shell (electron/ has its own lockfile).
+  - package-ecosystem: "npm"
+    directory: "/electron"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 2
+      semver-patch-days: 2
+      semver-minor-days: 2
+      semver-major-days: 14
+    open-pull-requests-limit: 3
+    versioning-strategy: "increase-if-necessary"
+    groups:
+      desktop-dependencies:
+        update-types:
+          - "minor"
+          - "patch"
+    # Electron majors are deliberately not ignored: only the newest few major
+    # lines get security fixes, so the runtime has to keep moving.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "electron-builder"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "esbuild"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"

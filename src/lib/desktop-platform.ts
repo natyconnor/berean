@@ -1,11 +1,17 @@
-/**
- * What the Electron preload script exposes as `window.bereanDesktop`.
- * The `Window` augmentation lives in `src/vite-env.d.ts`.
- */
+/** What the Electron preload script exposes as `window.bereanDesktop`. */
 export type BereanDesktopBridge = {
   isDesktop: true;
   platform: "darwin" | "win32" | "linux";
 };
+
+// Declared here rather than in `vite-env.d.ts` so the Electron preload, which
+// type-imports the bridge from this module, type-checks on its own.
+declare global {
+  interface Window {
+    /** Present only inside the desktop (Electron) shell. */
+    bereanDesktop?: BereanDesktopBridge;
+  }
+}
 
 /** Where the browser lands after sign-in started from the desktop app. */
 export const DESKTOP_AUTH_REDIRECT_PATH = "/desktop-auth.html";
