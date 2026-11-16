@@ -9,6 +9,7 @@ import {
   type MenuItemConstructorOptions,
   type WebContents,
 } from "electron";
+import { parseBereanOpenUrl, withAuthCode } from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
 
@@ -18,6 +19,10 @@ import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
  * The shell renders exactly two things: the app origin and its own local
  * offline page. Every other navigation is cancelled and, if it is a web URL,
  * handed to the system browser.
+ *
+ * Sign-in therefore happens in the browser. The login page navigates to the
+ * provider, the guard sends that to the browser, and the browser hands a
+ * one-time code back through `berean://auth?code=…` (see README.md).
  */
 
 const APP_NAME = "Berean";
@@ -34,6 +39,16 @@ const appOrigin = resolveAppOrigin();
 
 /** The app URL each window should load when its offline page asks to retry. */
 const retryUrls = new WeakMap<WebContents, string>();
+
+/**
+ * The window whose page last navigated away to the browser. That is how
+ * sign-in starts, so it is the window to bring back when the code arrives.
+ */
+let signInContents: WebContents | null = null;
+
+/** A `berean:` link that arrived before the app finished starting. */
+let pendingOpenUrl: string | null = null;
+let hasLaunched = false;
 
 function resolveAppOrigin(): string {
   const override = process.env.BEREAN_DESKTOP_URL;
@@ -67,20 +82,25 @@ function isOfflinePageUrl(rawUrl: string | undefined): boolean {
   return rawUrl.split(/[?#]/)[0] === OFFLINE_PAGE_URL;
 }
 
-/** Opens a web URL in the system browser. Anything else is dropped. */
-function openInBrowser(rawUrl: string): void {
+/**
+ * Opens a web URL in the system browser and returns true. Anything that is
+ * not an http(s) URL is dropped, returning false.
+ */
+function openInBrowser(rawUrl: string): boolean {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    return;
+    return false;
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
 
+  // Origin only: sign-in URLs carry state that does not belong in a log.
   console.info(`[berean] Opening ${url.origin} in the default browser`);
   shell.openExternal(url.toString()).catch((error: unknown) => {
     console.error("[berean] Could not open the default browser:", error);
   });
+  return true;
 }
 
 function loadAppUrl(contents: WebContents, url: string): void {
@@ -96,7 +116,7 @@ function guardNavigation(contents: WebContents): void {
   contents.on("will-navigate", (details) => {
     if (isAppUrl(details.url)) return;
     details.preventDefault();
-    openInBrowser(details.url);
+    if (openInBrowser(details.url)) signInContents = contents;
   });
 
   contents.on("will-redirect", (details) => {
@@ -179,6 +199,44 @@ function focusOrCreateWindow(): void {
   } else {
     createWindow();
   }
+}
+
+/**
+ * Finishes a browser sign-in: reloads a window with `?code=` set. On load the
+ * web app exchanges the code using the verifier it stored (in this session's
+ * localStorage) when sign-in started, then strips the param.
+ */
+function finishSignIn(code: string): void {
+  const startedIn =
+    signInContents && !signInContents.isDestroyed()
+      ? BrowserWindow.fromWebContents(signInContents)
+      : null;
+  signInContents = null;
+
+  const win = startedIn ?? BrowserWindow.getAllWindows()[0];
+  if (!win) {
+    createWindow(withAuthCode(`${appOrigin}/`, code));
+    return;
+  }
+
+  const contents = win.webContents;
+  const currentUrl = contents.getURL();
+  const currentAppUrl = isAppUrl(currentUrl)
+    ? currentUrl
+    : (retryUrls.get(contents) ?? `${appOrigin}/`);
+
+  loadAppUrl(contents, withAuthCode(currentAppUrl, code));
+  focusWindow(win);
+}
+
+/** Handles a `berean:` link from the OS. Never log the link: it has a code. */
+function handleOpenUrl(rawUrl: string): void {
+  const target = parseBereanOpenUrl(rawUrl);
+  if (target?.kind === "auth") {
+    console.info("[berean] Sign-in code received from the browser");
+    finishSignIn(target.code);
+  }
+  // Route links (berean://passage/John-1) are PR 4 of the desktop plan.
 }
 
 /** Reload, except on the offline page, where it means "try the app again". */
@@ -280,6 +338,17 @@ if (!app.requestSingleInstanceLock()) {
     focusOrCreateWindow();
   });
 
+  // macOS delivers berean: links here, including the one that launched the
+  // app, which can arrive before the app is ready to make windows.
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    if (hasLaunched) {
+      handleOpenUrl(url);
+    } else {
+      pendingOpenUrl = url;
+    }
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -293,7 +362,15 @@ if (!app.requestSingleInstanceLock()) {
     .then(() => {
       Menu.setApplicationMenu(buildMenu());
       registerIpc();
-      createWindow();
+      hasLaunched = true;
+
+      if (pendingOpenUrl !== null) {
+        const launchUrl = pendingOpenUrl;
+        pendingOpenUrl = null;
+        handleOpenUrl(launchUrl);
+      }
+      // Unless a sign-in link already opened one.
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
     })
     .catch((error: unknown) => {
       console.error("[berean] Failed to start:", error);

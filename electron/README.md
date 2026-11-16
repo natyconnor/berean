@@ -93,7 +93,7 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
 
 | File                   | Role                                                          |
 | ---------------------- | ------------------------------------------------------------- |
-| `main.ts`              | Windows, menu, navigation guard, offline fallback             |
+| `main.ts`              | Windows, menu, navigation guard, offline, sign-in hand-back   |
 | `preload.ts`           | Exposes `window.bereanDesktop` (`{ isDesktop, platform }`)    |
 | `offline.html`         | Local "needs an internet connection" page with Retry          |
 | `ipc-channels.ts`      | IPC channel names shared by main and preload                  |
@@ -118,4 +118,85 @@ honours a custom scheme for a packaged app, so anything involving `berean://`
 links has to be tested with `desktop:pack`, not `desktop:dev`.
 
 Signing, notarization, the `.dmg`, self-update and the release workflow are
-not here yet; they arrive with PR 6 of the plan.
+not here yet; they arrive with PR 6 of the plan. So do `berean://` links to app
+routes (PR 4): today the shell only acts on `berean://auth`.
+
+## Sign-in through the browser
+
+Google does not allow sign-in from an embedded browser, and the shell never
+renders a third-party page anyway. Sign-in happens in the user's default
+browser and comes back through `berean://auth`:
+
+1. **Login page** (`src/components/login-page.tsx`, desktop only) calls
+   `signIn("google", { redirectTo: "/desktop-auth.html" })`. Convex Auth stores
+   a _verifier_ in the app's `localStorage`, then points the window at
+   `{CONVEX_SITE_URL}/api/auth/signin/google?…`.
+2. **Main** sees that navigation leave the app origin, cancels it and opens it
+   in the system browser. It remembers which window it came from. The login
+   page stays put and shows "Finish signing in in your browser" with an **Open
+   browser again** button, which simply starts over.
+3. **The browser** goes through Google. Convex then redirects to
+   `{SITE_URL}/desktop-auth.html?code=…`.
+4. **`public/desktop-auth.html`** navigates to `berean://auth?code=…` and shows
+   an **Open Berean** button with the same link, for browsers that block the
+   automatic hand-back. Browsers ask the user to allow opening Berean; that
+   prompt is expected.
+5. **macOS** delivers the link to main as `open-url`. Main parses it with
+   `parseBereanOpenUrl`, reloads the window that started sign-in at its current
+   URL with `?code=…` added, and brings it to the front. If that window is
+   gone it uses the first window, or opens a new one. A link that launches the
+   app (cold start) opens its first window with the code.
+6. **The web app** loads, finds `?code=`, exchanges it using the stored
+   verifier, and strips the param. The user is signed in, in every window.
+
+Nothing under `convex/` changed for this: Convex Auth's default redirect
+callback already accepts a `redirectTo` that starts with `/` and resolves it
+against the `SITE_URL` environment variable.
+
+### Why `desktop-auth.html` is a static file
+
+The code is useless without the verifier, and the verifier never leaves the
+desktop app's own storage. If the hand-back URL loaded the web app, its
+`ConvexAuthProvider` would see `?code=` and try to redeem it right there in the
+browser, where there is no verifier: the exchange would fail and the code would
+be spent. So the page is plain HTML with an inline script, lives in `public/`,
+and is served as a file (paths with an extension skip the SPA rewrite in
+`middleware.ts`). Keep it that way: no bundle, no imports.
+
+It also means **the web deployment has to contain `desktop-auth.html`** before
+a desktop build that depends on it is released.
+
+### Testing it
+
+The scheme needs a packed app, and the redirect goes to `SITE_URL`, so test
+against the local dev server (the dev Convex `SITE_URL` is
+`http://localhost:5173`):
+
+```bash
+pnpm dev                 # terminal 1 — must be on port 5173
+pnpm run desktop:pack    # terminal 2
+BEREAN_DESKTOP_URL=http://localhost:5173 \
+  electron/release/mac-arm64/Berean.app/Contents/MacOS/Berean
+```
+
+Click **Sign in with Google**: the default browser opens, and after choosing an
+account it shows the hand-back page and Berean comes to the front signed in.
+
+To exercise the hand-back without Google, with the app running as above:
+
+```bash
+open "berean://auth?code=test"
+```
+
+The window reloads at `…/?code=test`, the app strips the param, the exchange
+fails (the code is fake) and the login page comes back. If `open` starts a
+different copy of Berean, or nothing, re-register the packed app:
+
+```bash
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+  -f electron/release/mac-arm64/Berean.app
+```
+
+The main process logs each hand-off to the terminal (`[berean] Opening … in
+the default browser`, `[berean] Sign-in code received from the browser`). It
+never logs the code.
