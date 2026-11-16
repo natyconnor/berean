@@ -335,14 +335,15 @@
         >
         <h1>Desktop Electron + iPad PWA</h1>
         <p class="lede">
-          Ship a Mac Electron thin shell that loads production web, plus an
-          installable iPad PWA — same React app, same Convex backend, automatic
-          web updates on desktop.
+          Ship a Mac Electron thin shell that loads production web, signs in
+          through the user's browser and keeps itself up to date, plus an
+          installable iPad PWA — same React app, same Convex backend.
         </p>
         <div class="meta">
-          <span class="chip">7 pull requests</span>
+          <span class="chip">9 pull requests</span>
           <span class="chip ghost">Electron + electron-builder (Mac)</span>
           <span class="chip ghost">no Capacitor in this plan</span>
+          <span class="chip ghost">revised 2026-11-15</span>
         </div>
         <div class="callout">
           <strong>How to use this document.</strong> Each numbered block below
@@ -350,7 +351,40 @@
           PR until the current one is green: implement only what that PR lists,
           run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
           criteria, then stop. The <code>run-implementation-plan</code> skill
-          orchestrates this.
+          orchestrates this. PRs 1–7 are the Mac release. PRs 8–9 add sign-in
+          options and are <b>proposed, not yet confirmed</b> — do not build them
+          until the product owner says which ones they want.
+        </div>
+        <div class="callout">
+          <strong>What changed in the 2026-11-15 revision.</strong> Nothing in
+          this plan had been built when it was revised.
+          <ul class="clean small">
+            <li>
+              <b>Sign-in</b> now happens in the user's default browser and
+              returns to the app through <code>berean://auth</code>. The old
+              in-window Google sign-in is gone (Google's policy disallows
+              sign-in from embedded browsers). No Convex changes are needed.
+            </li>
+            <li>
+              <b>The shell updates itself</b> with
+              <code>electron-updater</code>. Users download the app from the
+              website once and never again.
+            </li>
+            <li>
+              <b>Desktop has its own version and its own release location</b>
+              (<code>natyconnor/berean-desktop</code>), separate from the web
+              app's release-please releases.
+            </li>
+            <li>
+              <b>Universal Links are dropped.</b> No AASA file, no App ID, no
+              Associated Domains. <code>berean://</code> links still open the
+              app.
+            </li>
+            <li>
+              <b>Two proposed PRs added:</b> email sign-in code (PR 8) and Sign
+              in with Apple (PR 9).
+            </li>
+          </ul>
         </div>
       </header>
 
@@ -362,31 +396,36 @@
         <h2>Manual steps you must do (agents cannot)</h2>
         <div class="callout urgent">
           <strong>Read this first.</strong> Agents implement code and CI wiring.
-          Signing, Apple Developer setup, and secret injection require you. Do
-          items 1–4 before or during the build; item 5 after PR 6 merges; items
-          6–7 are optional polish.
+          Apple setup, the releases repo and secret injection require you. Do
+          items 1–4 before or during the build; item 5 once PR 6 is merged.
+          Items 6–7 are only needed if you go ahead with PRs 8–9.
         </div>
         <div class="card">
           <ol class="manual small">
             <li>
-              <b>Apple Developer account</b> — Enroll (if needed). Create an App
-              ID with bundle id <code>dev.nathanconnor.berean</code> and enable
-              <b>Associated Domains</b>.
+              <b>Developer ID Application certificate</b> — In your Apple
+              Developer account, create a
+              <b>Developer ID Application</b> certificate (only the Account
+              Holder can). Install it in Keychain, then export it as a
+              <code>.p12</code> with a password. As of 2026-11-15 this Mac had
+              no signing certificates installed. You do <b>not</b> need to
+              register an App ID for this plan.
             </li>
             <li>
-              <b>Developer ID Application certificate</b> — Create/download a
-              Developer ID Application cert for notarized distribution outside
-              the Mac App Store. Export as <code>.p12</code> for CI.
+              <b>Notarization key</b> — In App Store Connect → Users and Access
+              → Integrations, create a Team API key (Developer role is enough).
+              Save the <code>.p8</code> file (it downloads once), the Key ID and
+              the Issuer ID.
             </li>
             <li>
-              <b>Notarization credentials</b> — Create an App Store Connect API
-              key (Issuer ID + Key ID + <code>.p8</code>) <em>or</em> an
-              app-specific password for your Apple ID. Prefer API key.
+              <b>Releases repo</b> — Create a public GitHub repo
+              <code>natyconnor/berean-desktop</code> with just a README. It
+              holds desktop downloads and the update feed, nothing else. Then
+              create a fine-grained personal access token limited to that repo
+              with <b>Contents: read and write</b>.
             </li>
             <li>
-              <b>GitHub Actions secrets</b> (repo
-              <code>natyconnor/berean</code>) — add before the first signed
-              release workflow run:
+              <b>GitHub Actions secrets</b> on <code>natyconnor/berean</code>:
               <ul class="clean">
                 <li>
                   <code>CSC_LINK</code> — base64 of the Developer ID
@@ -399,38 +438,50 @@
                 <li><code>APPLE_API_KEY_ID</code></li>
                 <li><code>APPLE_API_ISSUER</code></li>
                 <li>
-                  <code>APPLE_TEAM_ID</code> — 10-character Team ID (also used
-                  in AASA)
+                  <code>DESKTOP_RELEASES_TOKEN</code> — the token from item 3
                 </li>
               </ul>
-              Until secrets exist, CI must still produce an
-              <b>unsigned</b> <code>.dmg</code> artifact so agents can verify
-              the pipeline.
+              Until these exist the workflow builds an <b>unsigned</b>
+              <code>.dmg</code> as a workflow artifact only. An unsigned build
+              cannot auto-update and is not published.
             </li>
             <li>
-              <b>Patch AASA Team ID</b> — After PR 4, replace the placeholder
-              <code>APPLE_TEAM_ID</code> in
-              <code>public/.well-known/apple-app-site-association</code> with
-              your real Team ID (or set it via the secret-driven check in PR 6
-              docs). Confirm
-              <code
-                >https://berean.nathanconnor.dev/.well-known/apple-app-site-association</code
-              >
-              returns JSON (not the SPA HTML).
+              <b>Smoke-test on a Mac</b> — Run the release workflow, then:
+              install the <code>.dmg</code>; sign in with Google (your browser
+              opens, then hands back to Berean); quit and relaunch (still signed
+              in); open a second window; turn off the network to see the offline
+              screen; run <code>open berean://passage/John-1</code>. To test
+              updating, bump the desktop version, run the workflow again and
+              confirm the installed app offers to restart into the new version.
             </li>
             <li>
-              <b>Smoke-test on a Mac</b> — After the branch is ready: install
-              the <code>.dmg</code>, sign in with Google, open a second window,
-              kill network to see the offline screen, click an
-              <code>https://berean.nathanconnor.dev/passage/…</code> link and
-              confirm it can open in the app (Universal Links / protocol).
+              <b>Only for PR 8 (email code)</b> — Create a Resend account,
+              verify a sending domain (DNS records on
+              <code>nathanconnor.dev</code>), create an API key and set it as
+              <code>AUTH_RESEND_KEY</code> in Convex for dev and production.
             </li>
             <li>
-              <b>Out of scope for you this round</b> — Windows signing cert,
-              Linux packages, Capacitor / App Store, offline Bible, touch/pen
-              iPad redesign, full marketing homepage.
+              <b>Only for PR 9 (Sign in with Apple)</b> — In the Apple Developer
+              account create an App ID with the Sign in with Apple capability, a
+              Services ID, and a Sign in with Apple key. Set the return URL to
+              <code>&lt;CONVEX_SITE_URL&gt;/api/auth/callback/apple</code>.
+              Generate the client secret and set <code>AUTH_APPLE_ID</code> and
+              <code>AUTH_APPLE_SECRET</code> in Convex. Apple client secrets
+              expire after at most six months, so set a reminder to regenerate.
             </li>
           </ol>
+          <p class="small muted">
+            Nothing to change in Google Cloud: the OAuth redirect URI stays the
+            Convex callback it is today. Convex production
+            <code>SITE_URL</code> is already
+            <code>https://berean.nathanconnor.dev</code> (checked 2026-11-15),
+            which the browser sign-in return relies on.
+          </p>
+          <p class="small muted">
+            Out of scope for you this round: Windows signing cert, Linux
+            packages, Capacitor / App Store, offline Bible, touch/pen iPad
+            redesign, full marketing homepage.
+          </p>
         </div>
       </section>
 
@@ -458,8 +509,19 @@
                   Electron thin shell loads
                   <code>https://berean.nathanconnor.dev</code> (override via
                   <code>BEREAN_DESKTOP_URL</code> for local/dev). Does
-                  <b>not</b> bundle the Vite <code>dist/</code>. Web deploys
-                  update desktop automatically.
+                  <b>not</b> bundle the Vite <code>dist/</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Two kinds of update</b></td>
+                <td>
+                  <b>App content</b> (everything inside the window) is the live
+                  website, so every web deploy reaches desktop users with the
+                  existing refresh prompt. <b>The shell</b> (window, menus,
+                  sign-in handoff, updater) changes rarely and updates itself
+                  with <code>electron-updater</code>: it downloads in the
+                  background and installs on restart. Users never return to the
+                  website to get a newer version.
                 </td>
               </tr>
               <tr>
@@ -472,19 +534,34 @@
               <tr>
                 <td><b>Distribution</b></td>
                 <td>
-                  Signed + notarized <code>.dmg</code> via GitHub Releases +
-                  download link on the website (login footer). No Mac App Store.
+                  Signed + notarized universal <code>.dmg</code> (Apple silicon
+                  and Intel in one file), published to GitHub Releases on
+                  <code>natyconnor/berean-desktop</code>, with a direct download
+                  link on the website login footer. No Mac App Store.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Desktop release cadence</b></td>
+                <td>
+                  Desktop releases are separate from web releases. The web app
+                  releases several times a week through release-please; a
+                  desktop release happens only when
+                  <code>electron/</code> changes, by bumping
+                  <code>electron/package.json</code> and running the
+                  <code>desktop-release</code> workflow by hand.
                 </td>
               </tr>
               <tr>
                 <td><b>Desktop auth</b></td>
                 <td>
-                  Complete Google OAuth <b>inside</b> Electron
-                  <code>BrowserWindow</code>s on the production origin (same
-                  Convex Auth flow as web). True system-browser OAuth cannot
-                  share Convex Auth session storage with the shell without a
-                  custom token bridge — deferred. Use a persistent session
-                  partition so File → New Window shares login.
+                  Sign-in opens in the user's default browser and returns to the
+                  app through <code>berean://auth</code>. The shell never shows
+                  a Google page itself. This uses Convex Auth's existing
+                  <code>redirectTo</code> support, so
+                  <code>convex/auth.ts</code> does not change. All windows share
+                  the <code>persist:berean</code> session partition, so File →
+                  New Window is already signed in and the session survives
+                  relaunch.
                 </td>
               </tr>
               <tr>
@@ -498,10 +575,10 @@
               <tr>
                 <td><b>Deep links</b></td>
                 <td>
-                  Normal <code>https://berean.nathanconnor.dev/…</code> URLs
-                  (passages, memory, study, search, settings — whatever the web
-                  route already is). Optionally open in the Mac app via
-                  Associated Domains + custom scheme <code>berean://</code>.
+                  Custom scheme <code>berean://</code> only, mirroring web paths
+                  (<code>berean://passage/John-1</code>). Normal
+                  <code>https://berean.nathanconnor.dev/…</code> links open in
+                  the browser as they do today — no Universal Links, no AASA.
                   Signed-out deep links keep the path, show login, then continue
                   to that route after auth.
                 </td>
@@ -525,31 +602,38 @@
               <tr>
                 <td><b>Versioning</b></td>
                 <td>
-                  One semver from root <code>package.json</code>. Desktop
-                  reports the web app version (already via
-                  <code>/version.json</code> on the loaded site). Electron
-                  binary version may match package.json at build time.
+                  Two version numbers. The web app keeps the root
+                  <code>package.json</code> semver managed by release-please.
+                  The shell has its own semver in
+                  <code>electron/package.json</code>, starting at
+                  <code>1.0.0</code>; this is the number
+                  <code>electron-updater</code> compares.
                 </td>
               </tr>
               <tr>
                 <td><b>Accounts</b></td>
                 <td>
-                  Google only. One Convex account everywhere (web + desktop +
-                  future iPad).
+                  Google today. PRs 8–9 propose an email sign-in code and Sign
+                  in with Apple. One Convex account everywhere (web + desktop +
+                  future iPad); Convex Auth links providers that report the same
+                  verified email to the same account.
                 </td>
               </tr>
               <tr>
                 <td><b>Tooling</b></td>
                 <td>
-                  Plain Electron + electron-builder (not electron-vite). Reuse
-                  existing Vite web app unchanged as the content source.
+                  Plain Electron + electron-builder + electron-updater (not
+                  electron-vite). <code>electron/</code> is its own small
+                  package so the shell does not ship the web app's dependencies.
+                  Reuse the existing Vite web app unchanged as the content
+                  source.
                 </td>
               </tr>
               <tr>
                 <td><b>Marketing / about page</b></td>
                 <td>
                   Deferred. This plan only adds a Mac download link on the login
-                  footer (and GitHub Releases).
+                  footer.
                 </td>
               </tr>
             </tbody>
@@ -573,11 +657,23 @@
             <tbody>
               <tr>
                 <td class="fileref">
-                  package.json → version 1.11.0, scripts, pnpm
+                  package.json → web version (1.21.1 at revision), scripts, pnpm
                 </td>
                 <td>
-                  Single semver; add <code>desktop:*</code> scripts and Electron
-                  deps here.
+                  Web semver, untouched by desktop releases. Add thin
+                  <code>desktop:*</code> scripts that delegate to the
+                  <code>electron/</code> package.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  shared/http-routes.ts → CANONICAL_ORIGIN, APP_ROUTE_PATTERNS,
+                  resolveAppPath
+                </td>
+                <td>
+                  Already the single source of truth for the production origin
+                  and for which paths are real app routes. Deep-link helpers
+                  must reuse these rather than keep a second route list.
                 </td>
               </tr>
               <tr>
@@ -585,8 +681,10 @@
                   src/main.tsx → ConvexAuthProvider + ConvexReactClient
                 </td>
                 <td>
-                  Unchanged auth client; desktop inherits session via same
-                  origin + partition.
+                  Unchanged. On load the provider reads
+                  <code>?code=</code> from the URL and exchanges it using the
+                  verifier it stored in <code>localStorage</code> — the shell
+                  relies on exactly this to finish browser sign-in.
                 </td>
               </tr>
               <tr>
@@ -595,7 +693,22 @@
                   signIn("google")
                 </td>
                 <td>
-                  Same Google button; footer gets Mac download link (PR 7).
+                  Same Google button. On desktop it passes
+                  <code>redirectTo</code> and shows a “finish in your browser”
+                  state (PR 3). Footer gets the Mac download link (PR 7).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  @convex-dev/auth → signIn(provider, { redirectTo }) and the
+                  default redirect callback
+                </td>
+                <td>
+                  The default callback accepts any
+                  <code>redirectTo</code> that starts with <code>/</code> and
+                  resolves it against <code>SITE_URL</code>, then appends
+                  <code>?code=…</code>. That is why
+                  <code>/desktop-auth.html</code> works with no Convex change.
                 </td>
               </tr>
               <tr>
@@ -610,15 +723,6 @@
               </tr>
               <tr>
                 <td class="fileref">
-                  src/routes/passage/$passageId.tsx, memory/*, study/*,
-                  search.tsx
-                </td>
-                <td>
-                  Canonical deep-link path shapes for AASA and protocol handler.
-                </td>
-              </tr>
-              <tr>
-                <td class="fileref">
                   src/lib/app-version.ts + use-app-version-monitor.ts +
                   vite.config.ts version.json plugin
                 </td>
@@ -628,17 +732,20 @@
                 </td>
               </tr>
               <tr>
-                <td class="fileref">vercel.json</td>
+                <td class="fileref">middleware.ts + vercel.json</td>
                 <td>
-                  Add headers for AASA / webmanifest; keep SPA rewrite for app
-                  routes.
+                  Paths with a file extension fall through to the filesystem, so
+                  a static <code>public/desktop-auth.html</code> is served as-is
+                  without loading the SPA.
                 </td>
               </tr>
               <tr>
-                <td class="fileref">.github/workflows/ci.yml</td>
+                <td class="fileref">
+                  .github/workflows/ci.yml, release-please.yml
+                </td>
                 <td>
-                  Leave verify job as-is; add a separate desktop-release
-                  workflow (PR 6).
+                  Leave both as-is; add a separate, manually run
+                  <code>desktop-release</code> workflow (PR 6).
                 </td>
               </tr>
               <tr>
@@ -659,8 +766,8 @@
               <tr>
                 <td class="fileref">convex/auth.ts + convex/http.ts</td>
                 <td>
-                  No Convex Auth changes required for thin-shell same-origin
-                  OAuth.
+                  No changes for PRs 1–7. PRs 8–9 add providers to
+                  <code>convex/auth.ts</code>.
                 </td>
               </tr>
             </tbody>
@@ -668,11 +775,16 @@
         </div>
         <div class="callout small">
           <strong>Gaps this plan adds.</strong>
-          <code>electron/</code> main+preload+offline HTML (PR 2–3);
-          <code>src/lib/desktop-platform.ts</code> detection helpers (PR 1);
-          AASA + <code>berean://</code> protocol (PR 4); PWA manifest + A2HS UI
-          (PR 5); electron-builder + release workflow (PR 6); login download
-          link (PR 7). No Capacitor. No Windows target yet.
+          <code>shared/desktop-deep-link.ts</code> and
+          <code>src/lib/desktop-platform.ts</code> helpers (PR 1);
+          <code>electron/</code> package with main, preload, offline page and an
+          unsigned local pack (PR 2); browser sign-in handoff with
+          <code>public/desktop-auth.html</code> and
+          <code>berean://auth</code> (PR 3); <code>berean://</code> route links
+          (PR 4); PWA manifest + A2HS UI (PR 5); signing, notarization,
+          self-update and the release workflow (PR 6); login download link (PR
+          7); proposed extra sign-in options (PR 8–9). No Capacitor. No Windows
+          target yet.
         </div>
       </section>
 
@@ -683,24 +795,24 @@
         <h2>Data model &amp; core contracts (referenced by every PR)</h2>
 
         <h3>Production URL &amp; identity</h3>
-        <pre><code><span class="c">// Canonical production origin (Electron default load URL)</span>
-<span class="k">export const</span> BEREAN_PRODUCTION_ORIGIN = <span class="s">"https://berean.nathanconnor.dev"</span>;
+        <pre><code><span class="c">// Production origin: reuse CANONICAL_ORIGIN from shared/http-routes.ts</span>
+<span class="c">// ("https://berean.nathanconnor.dev"). Do not add a second constant.</span>
 
 <span class="c">// Bundle / protocol</span>
 <span class="c">// appId:           dev.nathanconnor.berean</span>
 <span class="c">// productName:     Berean</span>
 <span class="c">// custom scheme:   berean:</span>
-<span class="c">// associated host: berean.nathanconnor.dev</span>
+<span class="c">// releases repo:   natyconnor/berean-desktop</span>
 
 <span class="c">// Session: all BrowserWindows use partition "persist:berean"</span>
-<span class="c">// so auth tokens/cookies/localStorage are shared across File→New Window.</span></code></pre>
+<span class="c">// so auth tokens/localStorage are shared across File→New Window</span>
+<span class="c">// and survive relaunch.</span></code></pre>
 
         <h3>Platform detection (renderer)</h3>
         <pre><code><span class="c">// src/lib/desktop-platform.ts</span>
 <span class="k">export type</span> BereanDesktopBridge = {
   isDesktop: <span class="k">true</span>;
   platform: <span class="s">"darwin"</span> | <span class="s">"win32"</span> | <span class="s">"linux"</span>;
-  openExternal?: (url: string) =&gt; Promise&lt;void&gt;;
 };
 
 <span class="k">declare global</span> {
@@ -711,51 +823,85 @@
 
 <span class="k">export function</span> isBereanDesktop(): boolean;
 <span class="k">export function</span> isPwaStandalone(): boolean;
-<span class="c">// isPwaStandalone: matchMedia(display-mode: standalone) or navigator.standalone</span></code></pre>
+<span class="c">// isPwaStandalone: matchMedia(display-mode: standalone) or navigator.standalone</span>
 
-        <h3>Deep-link path helpers</h3>
-        <pre><code><span class="c">// src/lib/desktop-deep-link.ts</span>
-<span class="k">export function</span> isBereanAppPath(pathname: string): boolean;
-<span class="c">// true for /, /passage/*, /memory/*, /study/*, /search, /settings/*,</span>
-<span class="c">// /privacy, /terms — reject javascript:, file:, and unknown hosts when parsing URLs</span>
+<span class="c">// Where the browser lands after sign-in started from the desktop app.</span>
+<span class="k">export const</span> DESKTOP_AUTH_REDIRECT_PATH = <span class="s">"/desktop-auth.html"</span>;</code></pre>
 
-<span class="k">export function</span> parseBereanOpenUrl(raw: string): {
-  origin: string;
-  pathname: string;
-  search: string;
-  hash: string;
-} | <span class="k">null</span>;
-<span class="c">// Accepts:</span>
-<span class="c">//   https://berean.nathanconnor.dev/passage/John-1?mode=read</span>
-<span class="c">//   berean://passage/John-1?mode=read</span>
-<span class="c">//   berean:///passage/John-1  (some OS normalize with extra slash)</span>
-<span class="c">// Returns null for non-Berean hosts / dangerous schemes.</span>
+        <h3>Deep-link helpers (shared by web tests and the Electron main)</h3>
+        <pre><code><span class="c">// shared/desktop-deep-link.ts — pure, no DOM, no Electron imports</span>
+<span class="k">export type</span> BereanOpenTarget =
+  | { kind: <span class="s">"route"</span>; pathname: string; search: string; hash: string }
+  | { kind: <span class="s">"auth"</span>; code: string };
 
-<span class="k">export function</span> toProductionAppUrl(parsed: {
-  pathname: string;
-  search: string;
-  hash: string;
-}): string;
-<span class="c">// → https://berean.nathanconnor.dev{pathname}{search}{hash}</span></code></pre>
+<span class="k">export function</span> parseBereanOpenUrl(raw: string): BereanOpenTarget | <span class="k">null</span>;
+<span class="c">// Accepts only the berean: scheme:</span>
+<span class="c">//   berean://passage/John-1?verse=3   → route</span>
+<span class="c">//   berean:///passage/John-1          → route (some OSes add a slash)</span>
+<span class="c">//   berean://auth?code=abc123         → auth</span>
+<span class="c">// Route targets must pass resolveAppPath(pathname, search) as "serve" or</span>
+<span class="c">// "redirect" (use the canonical path); anything else returns null.</span>
+<span class="c">// Auth targets need a non-empty code of at most 512 characters.</span>
+<span class="c">// Returns null for every other scheme, including https:, file:, javascript:.</span>
+
+<span class="k">export function</span> toAppUrl(
+  origin: string,
+  target: { pathname: string; search: string; hash: string },
+): string;
+<span class="c">// → {origin}{pathname}{search}{hash}; origin is CANONICAL_ORIGIN or the</span>
+<span class="c">// BEREAN_DESKTOP_URL override.</span>
+
+<span class="k">export function</span> withAuthCode(currentUrl: string, code: string): string;
+<span class="c">// Sets ?code= on currentUrl, replacing any existing code param.</span></code></pre>
+
+        <h3>Browser sign-in handoff</h3>
+        <pre><code><span class="c">// 1. Renderer (login page, desktop only):</span>
+<span class="c">//      signIn("google", { redirectTo: DESKTOP_AUTH_REDIRECT_PATH })</span>
+<span class="c">//    Convex Auth stores a verifier in the app's localStorage, then sets</span>
+<span class="c">//    window.location to {CONVEX_SITE_URL}/api/auth/signin/google?...</span>
+<span class="c">// 2. Electron main sees will-navigate to a non-app origin:</span>
+<span class="c">//      event.preventDefault(); shell.openExternal(url)</span>
+<span class="c">//    The app window stays on the login page.</span>
+<span class="c">// 3. The user signs in with Google in their own browser. Convex redirects to</span>
+<span class="c">//      {SITE_URL}/desktop-auth.html?code=XYZ</span>
+<span class="c">// 4. public/desktop-auth.html (static, does NOT load the SPA) navigates to</span>
+<span class="c">//      berean://auth?code=XYZ   and shows an "Open Berean" button.</span>
+<span class="c">// 5. macOS delivers open-url to Electron main → parseBereanOpenUrl → auth.</span>
+<span class="c">//    Main reloads the window that started sign-in at</span>
+<span class="c">//      withAuthCode(currentAppUrl, code)   and focuses it.</span>
+<span class="c">// 6. ConvexAuthProvider sees ?code= on load, exchanges it with the stored</span>
+<span class="c">//    verifier, and strips the param. The user is signed in.</span>
+<span class="c">//</span>
+<span class="c">// The code is useless without the verifier, which never leaves the app's</span>
+<span class="c">// own storage. desktop-auth.html must stay outside the SPA: if the SPA</span>
+<span class="c">// loaded there, its ConvexAuthProvider would try to consume the code in</span>
+<span class="c">// the browser, where no verifier exists.</span></code></pre>
 
         <h3>Electron main process responsibilities</h3>
-        <pre><code><span class="c">// electron/main.ts (or .mjs compiled from TS)</span>
-<span class="c">// 1. app.setName("Berean")</span>
-<span class="c">// 2. Register berean:// via app.setAsDefaultProtocolClient("berean")</span>
+        <pre><code><span class="c">// electron/main.ts</span>
+<span class="c">// 1. app.setName("Berean"); single-instance lock</span>
+<span class="c">// 2. berean:// is declared in electron-builder "protocols" (Info.plist).</span>
+<span class="c">//    macOS only honours the scheme for a packaged app, so deep links and</span>
+<span class="c">//    sign-in are tested with `pnpm run desktop:pack`, not `desktop:dev`.</span>
 <span class="c">// 3. createWindow(initialUrl?): BrowserWindow</span>
 <span class="c">//      - partition: "persist:berean"</span>
 <span class="c">//      - title: "Berean"</span>
 <span class="c">//      - minWidth: 1024, minHeight: 700</span>
 <span class="c">//      - width: 1280, height: 800</span>
 <span class="c">//      - titleBarStyle: default (native)</span>
-<span class="c">//      - loadURL(BEREAN_DESKTOP_URL || BEREAN_PRODUCTION_ORIGIN + path)</span>
-<span class="c">//      - on did-fail-load / offline → loadFile(electron/offline.html)</span>
-<span class="c">// 4. setWindowOpenHandler: allow OAuth/Google popups as child BrowserWindows</span>
-<span class="c">//      with the same partition; deny unrelated targets or openExternal</span>
-<span class="c">// 5. Menu: File → New Window (Cmd+N), standard Edit/View/Window; do NOT</span>
-<span class="c">//      bind Cmd+K, Cmd+G, Cmd+,, Cmd+J, Cmd+Enter</span>
-<span class="c">// 6. open-url / second-instance: parseBereanOpenUrl → focus or create window</span>
-<span class="c">//      navigating to toProductionAppUrl(...)</span></code></pre>
+<span class="c">//      - loadURL(appOrigin + path), appOrigin = BEREAN_DESKTOP_URL ?? CANONICAL_ORIGIN</span>
+<span class="c">//      - on did-fail-load / offline → loadFile(offline.html)</span>
+<span class="c">// 4. Navigation guard, on every window:</span>
+<span class="c">//      will-navigate / setWindowOpenHandler to any origin other than</span>
+<span class="c">//      appOrigin → cancel, and shell.openExternal(url) if http(s).</span>
+<span class="c">//      The shell never renders third-party pages, sign-in included.</span>
+<span class="c">// 5. Menu: File → New Window (Cmd+N), Berean → Check for Updates…,</span>
+<span class="c">//      standard Edit/View/Window; do NOT bind Cmd+K, Cmd+G, Cmd+,, Cmd+J,</span>
+<span class="c">//      Cmd+Enter</span>
+<span class="c">// 6. open-url (and second-instance argv): parseBereanOpenUrl →</span>
+<span class="c">//      route → focus or create a window at toAppUrl(appOrigin, target)</span>
+<span class="c">//      auth  → finish sign-in as in "Browser sign-in handoff"</span>
+<span class="c">// 7. Updater (packaged builds only): see "Shell self-update"</span></code></pre>
 
         <h3>Preload bridge</h3>
         <pre><code><span class="c">// electron/preload.ts — contextIsolation: true, nodeIntegration: false</span>
@@ -764,21 +910,24 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
   platform: process.platform,
 });</code></pre>
 
-        <h3>AASA (Associated Domains)</h3>
-        <pre><code><span class="c">// public/.well-known/apple-app-site-association</span>
-{
-  <span class="s">"applinks"</span>: {
-    <span class="s">"apps"</span>: [],
-    <span class="s">"details"</span>: [{
-      <span class="s">"appID"</span>: <span class="s">"APPLE_TEAM_ID.dev.nathanconnor.berean"</span>,
-      <span class="s">"paths"</span>: [
-        <span class="s">"/"</span>, <span class="s">"/passage/*"</span>, <span class="s">"/memory/*"</span>,
-        <span class="s">"/study/*"</span>, <span class="s">"/search"</span>, <span class="s">"/search/*"</span>,
-        <span class="s">"/settings/*"</span>
-      ]
-    }]
-  }
-}</code></pre>
+        <h3>Shell self-update</h3>
+        <pre><code><span class="c">// electron/updater.ts — electron-updater, GitHub provider</span>
+<span class="c">// Feed: releases of natyconnor/berean-desktop (public, no token needed to read).</span>
+<span class="c">// Each release carries Berean.dmg (first install), a versioned .zip</span>
+<span class="c">// (what the updater downloads) and latest-mac.yml (the feed).</span>
+<span class="c">//</span>
+<span class="c">// - Skip entirely when !app.isPackaged.</span>
+<span class="c">// - autoDownload = true; autoInstallOnAppQuit = true.</span>
+<span class="c">// - Check shortly after launch and every 4 hours while running.</span>
+<span class="c">// - On update-downloaded: native dialog "A new version of Berean is ready."</span>
+<span class="c">//   with Restart Now / Later. Later installs on next quit.</span>
+<span class="c">// - "Check for Updates…" menu item reports up-to-date / downloading / error.</span>
+<span class="c">// - Network and feed errors are logged, never shown unless the user asked</span>
+<span class="c">//   via the menu item.</span>
+<span class="c">//</span>
+<span class="c">// macOS only applies updates to a signed app, so unsigned builds do not</span>
+<span class="c">// self-update. Stable first-install link:</span>
+<span class="c">//   https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg</span></code></pre>
 
         <h3>PWA</h3>
         <pre><code><span class="c">// public/manifest.webmanifest — name/short_name "Berean",</span>
@@ -790,20 +939,22 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
 
         <h3>Data flow</h3>
         <p class="muted">
-          User launches Mac app → Electron creates a
+          User downloads <code>Berean.dmg</code> once, drags the app to
+          Applications and launches it → Electron creates a
           <code>persist:berean</code> window → loads
-          <code>https://berean.nathanconnor.dev</code> (or deep-link path) →
-          existing Vite React SPA + Convex Auth run exactly as in Chrome. Google
-          sign-in completes in-app (popup/child window). Web deploys change
-          Vercel assets; desktop users get the existing
-          <code>/version.json</code> refresh prompt. Share links use https;
-          macOS may hand the URL to Electron via Associated Domains /
-          <code>berean://</code>; main process navigates a window to that path.
-          If signed out, <code>RootRouteComponent</code> shows
-          <code>LoginPage</code> while the router URL stays on the deep link;
-          after auth, <code>AppShell</code> + <code>Outlet</code> render that
-          route. iPad users install via PWA (Add to Home Screen); no separate
-          binary in this plan.
+          <code>https://berean.nathanconnor.dev</code> (or a
+          <code>berean://</code> deep-link path) → the existing Vite React SPA
+          runs as it does in Chrome. Clicking Sign in opens the default browser;
+          after Google sign-in the browser hands a one-time code back through
+          <code>berean://auth</code> and the app finishes signing in. Web
+          deploys change Vercel assets; desktop users get the existing
+          <code>/version.json</code> refresh prompt. When the shell itself has a
+          new release, the updater downloads it in the background and offers a
+          restart. If signed out on a deep link,
+          <code>RootRouteComponent</code> shows <code>LoginPage</code> while the
+          router URL stays on the deep link; after auth, <code>AppShell</code> +
+          <code>Outlet</code> render that route. iPad users install via PWA (Add
+          to Home Screen); no separate binary in this plan.
         </p>
       </section>
 
@@ -827,8 +978,8 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               </li>
               <li>
                 Regenerate Convex types with
-                <code>pnpm run codegen</code> only if Convex files change (this
-                plan should not need Convex changes).
+                <code>pnpm run codegen</code> only if Convex files change (only
+                PRs 8–9 touch Convex).
               </li>
               <li>
                 Never commit or push unless the orchestrator checkpoint step
@@ -836,11 +987,18 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               </li>
               <li>
                 Do not implement Windows/Linux targets, Capacitor, offline sync,
-                or a marketing homepage unless a PR explicitly lists it.
+                Universal Links, or a marketing homepage unless a PR explicitly
+                lists it.
               </li>
               <li>
                 Prefer exact versions (<code>pnpm</code> /
                 <code>save-exact=true</code>) when adding dependencies.
+              </li>
+              <li>
+                Library and tool behaviour in this plan was checked against the
+                versions installed on 2026-11-15. Confirm electron-builder and
+                electron-updater option names against their current docs before
+                relying on them.
               </li>
             </ul>
           </div>
@@ -852,14 +1010,20 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
                 <code>nodeIntegration: false</code>, no remote module.
               </li>
               <li>
-                Never load arbitrary URLs — only
-                <code>berean.nathanconnor.dev</code> (or
+                Never load arbitrary URLs in a window — only the app origin
+                (<code>berean.nathanconnor.dev</code> or the
                 <code>BEREAN_DESKTOP_URL</code> override) and local
-                <code>offline.html</code>.
+                <code>offline.html</code>. Everything else goes to the system
+                browser.
               </li>
               <li>
                 Do not register Electron menu accelerators that collide with
                 Cmd/Ctrl+K, G, ,, J, or Enter.
+              </li>
+              <li>
+                <code>electron/</code> is its own package with its own
+                <code>package.json</code>, version and dependencies. Web
+                dependencies must not end up inside the packaged app.
               </li>
               <li>Keep the React app a SPA: no Next.js, no SSR requirement.</li>
               <li>
@@ -870,11 +1034,6 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
                 <code>args</code> + <code>returns</code>, auth, indexes, no
                 <code>Date.now()</code> in queries, await every promise.
               </li>
-              <li>
-                Static files for AASA/manifest go under <code>public/</code>;
-                ensure <code>vercel.json</code> Content-Type headers where
-                needed.
-              </li>
             </ul>
           </div>
         </div>
@@ -884,22 +1043,22 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
 
       <section id="prs">
         <div class="eyebrow">The build</div>
-        <h2>7 pull requests</h2>
+        <h2>9 pull requests</h2>
         <div class="card toc">
           <a href="#pr1"
             ><b>PR 1</b> — Platform + deep-link helpers
             <span class="chip ghost">foundation</span></a
           >
           <a href="#pr2"
-            ><b>PR 2</b> — Electron thin shell
+            ><b>PR 2</b> — Electron thin shell + local pack
             <span class="chip ghost">desktop</span></a
           >
           <a href="#pr3"
-            ><b>PR 3</b> — Session partition + OAuth windows
+            ><b>PR 3</b> — Sign in through the browser
             <span class="chip ghost">auth</span></a
           >
           <a href="#pr4"
-            ><b>PR 4</b> — HTTPS / berean:// deep links + AASA
+            ><b>PR 4</b> — berean:// route links
             <span class="chip ghost">deep links</span></a
           >
           <a href="#pr5"
@@ -907,12 +1066,20 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
             <span class="chip ghost">iPad PWA</span></a
           >
           <a href="#pr6"
-            ><b>PR 6</b> — Mac DMG packaging + CI release
+            ><b>PR 6</b> — Signed DMG, self-update, release workflow
             <span class="chip ghost">distribution</span></a
           >
           <a href="#pr7"
             ><b>PR 7</b> — Website download link + README
             <span class="chip ghost">web polish</span></a
+          >
+          <a href="#pr8"
+            ><b>PR 8</b> — Email sign-in code
+            <span class="chip ghost">proposed</span></a
+          >
+          <a href="#pr9"
+            ><b>PR 9</b> — Sign in with Apple
+            <span class="chip ghost">proposed</span></a
           >
         </div>
       </section>
@@ -928,12 +1095,14 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 2, PR 4, PR 5, PR 7.
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 2, PR 3, PR 4, PR 5,
+            PR 7.
           </p>
           <h4>Goal</h4>
           <p>
             Add pure TypeScript helpers and unit tests for desktop/PWA detection
-            and safe Berean URL parsing. No Electron runtime yet; no UI change.
+            and safe <code>berean://</code> URL parsing. No Electron runtime
+            yet; no UI change.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
@@ -942,7 +1111,7 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               <span class="tag-new">(new)</span> —
               <code>BereanDesktopBridge</code>, <code>isBereanDesktop</code>,
               <code>isPwaStandalone</code>,
-              <code>BEREAN_PRODUCTION_ORIGIN</code>.
+              <code>DESKTOP_AUTH_REDIRECT_PATH</code>.
             </li>
             <li>
               <span class="fileref">src/lib/desktop-platform.test.ts</span>
@@ -950,15 +1119,18 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               for <code>window.bereanDesktop</code> and matchMedia / standalone.
             </li>
             <li>
-              <span class="fileref">src/lib/desktop-deep-link.ts</span>
-              <span class="tag-new">(new)</span> — <code>isBereanAppPath</code>,
-              <code>parseBereanOpenUrl</code>,
-              <code>toProductionAppUrl</code> per Architecture.
+              <span class="fileref">shared/desktop-deep-link.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>parseBereanOpenUrl</code>, <code>toAppUrl</code>,
+              <code>withAuthCode</code> per Architecture. Lives in
+              <code>shared/</code> because both the web tests and the Electron
+              main process import it.
             </li>
             <li>
               <span class="fileref">src/lib/desktop-deep-link.test.ts</span>
-              <span class="tag-new">(new)</span> — cover https, berean://,
-              berean:///, query strings, reject evil schemes/hosts.
+              <span class="tag-new">(new)</span> — cover route links, the triple
+              slash form, query strings and hashes, the auth callback, and
+              rejection of other schemes, unknown paths and oversized codes.
             </li>
             <li>
               <span class="fileref">src/vite-env.d.ts</span> — augment
@@ -969,11 +1141,15 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           <ul class="clean small">
             <li>
               Implement helpers exactly as specified in Architecture; keep them
-              free of Electron imports so Vitest can run them.
+              free of Electron and DOM imports so Vitest can run them and the
+              main process can bundle them.
             </li>
             <li>
-              <code>isBereanAppPath</code> should accept the route prefixes
-              listed in Architecture (including legal paths).
+              Validate route targets with the existing
+              <code>resolveAppPath</code> from
+              <code>shared/http-routes.ts</code>. Do not write a second list of
+              route prefixes; a new web route should become deep-linkable with
+              no change here.
             </li>
             <li>Write thorough tests; do not change login/root UI yet.</li>
           </ul>
@@ -981,11 +1157,12 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           <ul class="acc small">
             <li>
               <code>pnpm run agent:check</code> passes;
-              <code>pnpm test</code> passes including new desktop-*.test.ts.
+              <code>pnpm test</code> passes including the new desktop tests.
             </li>
             <li>
-              Tests prove rejection of non-Berean hosts and
-              <code>javascript:</code> / <code>file:</code> URLs.
+              Tests prove rejection of <code>https:</code>,
+              <code>javascript:</code> and <code>file:</code> URLs and of paths
+              that are not app routes.
             </li>
             <li>
               Behavioral: no visible product change (manual: app still looks
@@ -1001,7 +1178,9 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           <div class="num">2</div>
           <div>
             <div class="pr-sub">desktop · thin shell</div>
-            <h3 class="pr-title">Electron thin shell (load production URL)</h3>
+            <h3 class="pr-title">
+              Electron thin shell and an unsigned local pack
+            </h3>
           </div>
         </div>
         <div class="pr-body">
@@ -1010,17 +1189,27 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           </p>
           <h4>Goal</h4>
           <p>
-            Add an <code>electron/</code> app that opens a native window to
+            Add an <code>electron/</code> package that opens a native window to
             production (or <code>BEREAN_DESKTOP_URL</code>), shows a local
-            offline page on load failure, supports File → New Window, and
-            exposes the preload bridge. Packaging/signing comes later.
+            offline page on load failure, supports File → New Window, keeps
+            every window on the app origin, and exposes the preload bridge. Also
+            produce an unsigned local <code>.app</code> so later PRs can test
+            the <code>berean://</code> scheme. Signing, notarization, publishing
+            and the updater come in PR 6.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
             <li>
+              <span class="fileref">electron/package.json</span>
+              <span class="tag-new">(new)</span> — name, version
+              <code>1.0.0</code>, <code>main</code>, exact-pinned
+              <code>electron</code> and <code>electron-builder</code>.
+            </li>
+            <li>
               <span class="fileref">electron/main.ts</span>
-              <span class="tag-new">(new)</span> — window factory, menu, load
-              URL, offline fallback (see Architecture).
+              <span class="tag-new">(new)</span> — window factory with the
+              <code>persist:berean</code> partition, menu, load URL, offline
+              fallback, navigation guard (see Architecture items 1–5).
             </li>
             <li>
               <span class="fileref">electron/preload.ts</span>
@@ -1030,80 +1219,100 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
             <li>
               <span class="fileref">electron/offline.html</span>
               <span class="tag-new">(new)</span> — simple “Berean needs an
-              internet connection” + Retry button that reloads production URL.
+              internet connection” + Retry button that reloads the app URL.
             </li>
             <li>
               <span class="fileref">electron/tsconfig.json</span>
               <span class="tag-new">(new)</span> — Node/Electron TS config
-              isolated from the Vite app if needed.
+              isolated from the Vite app.
             </li>
             <li>
-              <span class="fileref">package.json</span> — add
-              <code>electron</code> dependency; scripts
-              <code>desktop:dev</code> (and compile step if using TS); do not
-              break existing web scripts.
+              <span class="fileref">electron/electron-builder.yml</span>
+              <span class="tag-new">(new)</span> — minimal: appId
+              <code>dev.nathanconnor.berean</code>, productName Berean, icon,
+              <code>protocols</code> entry for the <code>berean</code> scheme,
+              mac <code>dir</code> target. No signing or publish config yet.
             </li>
             <li>
-              <span class="fileref">.gitignore</span> — ignore Electron build
-              output dirs (<code>dist-electron/</code>, <code>release/</code>,
-              or whatever electron-builder will use) if not already ignored.
+              <span class="fileref">electron/README.md</span>
+              <span class="tag-new">(new)</span> — how to run, the
+              <code>BEREAN_DESKTOP_URL</code> override, how the package is wired
+              into the repo.
+            </li>
+            <li>
+              <span class="fileref">package.json</span> — root scripts
+              <code>desktop:dev</code> and <code>desktop:pack</code> that
+              delegate to <code>electron/</code>; do not break existing web
+              scripts or add Electron to the web app's dependencies.
+            </li>
+            <li>
+              <span class="fileref">.gitignore</span>, lint/format/typecheck
+              config — ignore Electron build output; make sure
+              <code>agent:check</code> and CI still pass with the new folder.
+            </li>
+            <li>
+              <span class="fileref">.github/dependabot.yml</span> — add an
+              update entry for <code>/electron</code> so the Electron runtime
+              keeps receiving security updates.
             </li>
           </ul>
           <h4>Implementation steps</h4>
           <ul class="clean small">
             <li>
-              Add Electron with exact version via pnpm. Prefer compiling
-              <code>electron/*.ts</code> to <code>electron-dist/</code> with
-              <code>tsc</code>, or use a minimal loader — pick one approach and
-              wire <code>desktop:dev</code> to it.
+              Decide how <code>electron/</code> joins the repo (pnpm workspace
+              member, or a standalone package with its own lockfile) and
+              document the choice in <code>electron/README.md</code>.
+              electron-builder is known to struggle with pnpm's symlinked
+              <code>node_modules</code>; bundling the main and preload scripts
+              into single files (for example with esbuild) avoids packaging
+              <code>node_modules</code> at all and lets main import
+              <code>shared/desktop-deep-link.ts</code> directly.
             </li>
             <li>
-              Default load URL:
-              <code
-                >process.env.BEREAN_DESKTOP_URL ??
-                BEREAN_PRODUCTION_ORIGIN</code
-              >
-              (import constant from a tiny shared file under
-              <code>electron/</code> or duplicate the string constant in
-              electron to avoid bundling Vite path aliases — either is fine;
-              keep values identical).
+              App origin:
+              <code>process.env.BEREAN_DESKTOP_URL ?? CANONICAL_ORIGIN</code>.
+            </li>
+            <li>
+              Centralize window creation so every window uses the same
+              partition, preload and navigation guard.
+            </li>
+            <li>
+              Navigation guard: any <code>will-navigate</code> or
+              <code>window.open</code> to an origin other than the app origin is
+              cancelled and, if http(s), opened with
+              <code>shell.openExternal</code>.
             </li>
             <li>
               Implement native menu with File → New Window. Leave app shortcuts
               for K/G/,/J/Enter unbound.
             </li>
             <li>
-              On <code>did-fail-load</code> (and optionally
-              <code>offline</code> event), load <code>offline.html</code>. Retry
-              button uses <code>ipc</code> or <code>location</code> guidance to
-              call back into main to <code>loadURL</code> again.
+              On <code>did-fail-load</code> for the main frame, load
+              <code>offline.html</code>. The Retry button calls back into main
+              to <code>loadURL</code> again.
             </li>
             <li>
-              Dock icon: use <code>public/berean-logo.png</code> via
-              <code>BrowserWindow</code> / app dock icon APIs where
-              straightforward on darwin.
-            </li>
-            <li>
-              Ensure <code>pnpm run agent:check</code> still typechecks the web
-              app; include electron types in a way that does not break
-              <code>tsc -b</code> (separate project reference or exclude
-              electron from root if compiled separately — document the choice in
-              a short <code>electron/README.md</code>).
+              Dock icon: use <code>public/berean-logo.png</code> as the icon
+              source.
             </li>
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
             <li>
-              <code>pnpm run agent:check</code> passes; existing tests pass.
+              <code>pnpm run agent:check</code> passes; existing tests and
+              <code>pnpm run build</code> still pass.
             </li>
             <li>
-              <code>pnpm run desktop:dev</code> (or documented equivalent)
-              starts Electron without crash when run manually.
+              <code>pnpm run desktop:dev</code> starts Electron without crash
+              when run manually; <code>pnpm run desktop:pack</code> produces an
+              unsigned <code>Berean.app</code>.
             </li>
             <li>
               Behavioral (manual): window title Berean; min size respected; New
               Window works; with network disabled / bad URL, offline page
-              appears and Retry works.
+              appears and Retry works; clicking an external link (for example
+              the GitHub link in the login footer) opens the system browser, not
+              an app window.
             </li>
           </ul>
         </div>
@@ -1114,65 +1323,112 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         <div class="pr-head">
           <div class="num">3</div>
           <div>
-            <div class="pr-sub">auth · session</div>
-            <h3 class="pr-title">
-              Persistent session partition and OAuth child windows
-            </h3>
+            <div class="pr-sub">auth · browser handoff</div>
+            <h3 class="pr-title">Sign in through the system browser</h3>
           </div>
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> PR 2. <b>Unblocks:</b> PR 4 (usable signed-in
-            deep links).
+            <b>Depends on:</b> PR 1, PR 2. <b>Unblocks:</b> PR 4, PR 6, and
+            desktop support for any later OAuth provider (PR 9).
           </p>
           <h4>Goal</h4>
           <p>
-            Make Google sign-in reliable inside Electron and share the session
-            across windows via <code>persist:berean</code>. Document the
-            in-window OAuth decision in <code>electron/README.md</code>.
+            Make Google sign-in work on desktop by doing it in the user's
+            default browser and returning to the app through
+            <code>berean://auth</code>, exactly as described in “Browser sign-in
+            handoff”. Zero Convex changes. This is the riskiest PR in the plan;
+            prove it end to end before building on it.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
             <li>
-              <span class="fileref">electron/main.ts</span> — enforce
-              <code>partition: "persist:berean"</code> on all windows; implement
-              <code>setWindowOpenHandler</code> for OAuth/Google/Convex auth
-              popups as child windows with the same partition; deny or
-              <code>shell.openExternal</code> only for clearly external http(s)
-              links the user clicks that are not auth-related (optional: open
-              external in system browser for non-Berean http links).
+              <span class="fileref">public/desktop-auth.html</span>
+              <span class="tag-new">(new)</span> — static page, inline CSS and
+              script only, <code>noindex</code>. With a <code>code</code> param:
+              navigate to <code>berean://auth?code=…</code> and show “You're
+              signed in. Return to Berean.” plus an <b>Open Berean</b> button
+              with the same link. Without one: “Sign-in didn't finish. Go back
+              to Berean and try again.” Must not load the SPA bundle.
             </li>
             <li>
-              <span class="fileref">electron/README.md</span>
-              <span class="tag-new">(new)</span> or update — explain why OAuth
-              runs in-app, how to set <code>BEREAN_DESKTOP_URL</code>, and how
-              sessions persist.
+              <span class="fileref">electron/main.ts</span> — handle
+              <code>open-url</code> (and a cold start caused by one) for the
+              <code>auth</code> target: remember which window last started an
+              external sign-in navigation, reload that window (or the first
+              window, or a new one) at
+              <code>withAuthCode(currentAppUrl, code)</code>, then show and
+              focus it.
+            </li>
+            <li>
+              <span class="fileref">src/components/login-page.tsx</span> — when
+              <code>isBereanDesktop()</code>, call
+              <code
+                >signIn("google", { redirectTo: DESKTOP_AUTH_REDIRECT_PATH
+                })</code
+              >. Because main cancels the navigation, the page would otherwise
+              spin forever: replace the spinner with a “Finish signing in in
+              your browser” state and an <b>Open browser again</b> action that
+              restarts sign-in. Web behaviour is unchanged.
+            </li>
+            <li>
+              <span class="fileref">src/components/login-page.test.tsx</span>
+              <span class="tag-new">(new)</span> or a small pure helper test —
+              desktop passes <code>redirectTo</code> and shows the waiting
+              state; web does neither.
+            </li>
+            <li>
+              <span class="fileref">electron/README.md</span> — document the
+              handoff, why <code>desktop-auth.html</code> is static, and how to
+              test it with a packed build.
             </li>
           </ul>
           <h4>Implementation steps</h4>
           <ul class="clean small">
             <li>
-              Centralize window creation so every window (main, New Window, auth
-              popup) uses the same partition and preload.
+              Do not change <code>convex/auth.ts</code>. The library's default
+              redirect callback already accepts a path starting with
+              <code>/</code> and resolves it against <code>SITE_URL</code>.
             </li>
             <li>
-              Allow popup URLs for Google accounts and the Convex auth HTTP
-              routes (pattern-match <code>accounts.google.com</code>,
-              <code>*.google.com</code>, Convex <code>.convex.site</code> /
-              deployment auth hosts, and <code>berean.nathanconnor.dev</code>).
+              The navigation guard from PR 2 already sends the sign-in URL to
+              the system browser; this PR only records which window it came
+              from.
             </li>
             <li>
-              Do not change <code>convex/auth.ts</code> unless absolutely
-              required (preferred: zero Convex changes).
+              Keep the existing analytics/log calls in
+              <code>handleGoogleSignIn</code>; on desktop log “handed off to
+              browser” instead of “completed”.
+            </li>
+            <li>
+              The scheme only works for a packaged app on macOS, so test with
+              <code>pnpm run desktop:pack</code>. For local runs point the
+              packed app at the dev server with
+              <code>BEREAN_DESKTOP_URL=http://localhost:5173</code> (the dev
+              Convex <code>SITE_URL</code> is already
+              <code>http://localhost:5173</code>).
+            </li>
+            <li>
+              Sign-out needs no change: it clears tokens in the shared
+              partition.
             </li>
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
-            <li><code>pnpm run agent:check</code> passes.</li>
             <li>
-              Behavioral (manual): Sign in with Google inside Electron succeeds;
-              File → New Window is already signed in; quitting and relaunching
-              keeps the session (persist partition).
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              No diff under <code>convex/</code>; web sign-in in a normal
+              browser behaves exactly as before.
+            </li>
+            <li>
+              Behavioral (manual, packed app): clicking Sign in opens the
+              default browser; after choosing a Google account the browser shows
+              the hand-back page and Berean comes to the front signed in; File →
+              New Window is signed in; quitting and relaunching keeps the
+              session; abandoning the browser tab and clicking Open browser
+              again works.
             </li>
           </ul>
         </div>
@@ -1183,47 +1439,28 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         <div class="pr-head">
           <div class="num">4</div>
           <div>
-            <div class="pr-sub">deep links · AASA</div>
-            <h3 class="pr-title">
-              HTTPS / berean:// deep links and Apple App Site Association
-            </h3>
+            <div class="pr-sub">deep links</div>
+            <h3 class="pr-title">berean:// links to app routes</h3>
           </div>
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> PR 1, PR 2, PR 3. <b>Unblocks:</b> PR 6
-            (entitlements), sharing UX.
+            <b>Depends on:</b> PR 1, PR 2, PR 3. <b>Unblocks:</b> sharing UX.
           </p>
           <h4>Goal</h4>
           <p>
-            Register <code>berean://</code>, handle OS open-url /
-            second-instance events with <code>parseBereanOpenUrl</code>, ship
-            AASA for <code>berean.nathanconnor.dev</code>, and ensure signed-out
-            deep links continue to the target route after login (verify root
-            gate; fix only if broken).
+            Open <code>berean://passage/John-1</code> style links in the app,
+            and make sure a signed-out deep link continues to its route after
+            login. No Universal Links: there is no AASA file, no entitlement and
+            no <code>vercel.json</code> change in this PR.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
             <li>
-              <span class="fileref">electron/main.ts</span> —
-              <code>setAsDefaultProtocolClient("berean")</code>;
-              <code>open-url</code> (darwin); Windows-style
-              <code>second-instance</code> argv parsing prepared but Mac is
-              primary; navigate/focus window.
-            </li>
-            <li>
-              <span class="fileref"
-                >public/.well-known/apple-app-site-association</span
-              >
-              <span class="tag-new">(new)</span> — JSON per Architecture;
-              placeholder Team ID <code>APPLE_TEAM_ID</code> clearly commented
-              in electron README for human replacement.
-            </li>
-            <li>
-              <span class="fileref">vercel.json</span> — Content-Type
-              <code>application/json</code> for the AASA path; ensure it is not
-              broken by SPA rewrite (static file in public should win; add
-              explicit header entry).
+              <span class="fileref">electron/main.ts</span> — route targets from
+              <code>open-url</code> and <code>second-instance</code>: on cold
+              start create the first window at that URL; when running, focus an
+              existing window and <code>loadURL(toAppUrl(…))</code>.
             </li>
             <li>
               <span class="fileref"
@@ -1245,20 +1482,10 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           <h4>Implementation steps</h4>
           <ul class="clean small">
             <li>
-              On cold start with a deep link, create the first window with that
-              production URL (not just home).
-            </li>
-            <li>
-              On warm open-url, focus an existing window and
-              <code>loadURL</code> / send an ipc navigate event — prefer
-              <code>win.loadURL(toProductionAppUrl(...))</code> for simplicity
-              in the thin shell.
-            </li>
-            <li>
-              Manually verify (document in README) that visiting
-              <code>/passage/John-1</code> while signed out shows login, then
-              after Google auth the passage appears — if the app currently
-              redirects away, fix with the smallest root/index change.
+              The browser sign-in return reloads the same path with
+              <code>?code=</code>, so a deep link opened while signed out should
+              land on its route after sign-in. Verify this manually and fix with
+              the smallest root/index change only if the app redirects away.
             </li>
             <li>
               Do not implement a custom “Open in Berean” web banner in this PR.
@@ -1270,13 +1497,11 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
             </li>
             <li>
-              AASA file exists under <code>public/.well-known/</code> and
-              <code>vercel.json</code> sets JSON content-type for it.
-            </li>
-            <li>
-              Behavioral (manual): <code>berean://passage/John-1</code> opens
-              the app to that passage; signed-out https path continues after
-              login.
+              Behavioral (manual, packed app):
+              <code>open berean://passage/John-1</code> opens the app to that
+              passage whether or not it was already running; the same link while
+              signed out shows login and lands on the passage after sign-in; a
+              link to a non-route such as <code>berean://nope</code> is ignored.
             </li>
           </ul>
         </div>
@@ -1296,7 +1521,8 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         <div class="pr-body">
           <p class="dep">
             <b>Depends on:</b> PR 1. <b>Unblocks:</b> iPad install testing
-            (human).
+            (human). Independent of PRs 2–4 and can be built at any point after
+            PR 1.
           </p>
           <h4>Goal</h4>
           <p>
@@ -1390,89 +1616,115 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
           <div>
             <div class="pr-sub">distribution · Mac CI</div>
             <h3 class="pr-title">
-              electron-builder Mac DMG and GitHub release workflow
+              Signed, notarized DMG, shell self-update and the release workflow
             </h3>
           </div>
         </div>
         <div class="pr-body">
           <p class="dep">
             <b>Depends on:</b> PR 2–4. <b>Unblocks:</b> PR 7 (download URL),
-            human notarized releases.
+            human smoke test.
           </p>
           <h4>Goal</h4>
           <p>
-            Package Berean as a Mac <code>.dmg</code> with electron-builder,
-            wire a GitHub Actions workflow that uploads artifacts to GitHub
-            Releases, and support signed+notarized builds when secrets exist
-            (unsigned fallback when they do not).
+            Turn the local pack into a real release: a signed, notarized
+            universal <code>.dmg</code> published to
+            <code>natyconnor/berean-desktop</code>, an app that updates itself
+            from those releases, and a manually run GitHub Actions workflow that
+            does the whole thing. Unsigned fallback when secrets are missing.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
             <li>
-              <span class="fileref">electron-builder.yml</span>
-              <span class="tag-new">(new)</span> — appId
-              <code>dev.nathanconnor.berean</code>, productName Berean, mac
-              target dmg, category reference/education-appropriate, protocol
-              <code>berean</code>, icon from logo, hardenedRuntime /
-              gatekeeperAssess settings suitable for notarization.
+              <span class="fileref">electron/electron-builder.yml</span> —
+              extend: mac targets <code>dmg</code> and <code>zip</code> (the
+              updater needs the zip), arch <code>universal</code>, hardened
+              runtime, notarization on, DMG artifact named
+              <code>Berean.dmg</code> (no version in the name so the download
+              link is stable), <code>publish</code> to GitHub owner
+              <code>natyconnor</code> repo <code>berean-desktop</code> as a
+              published (not draft) release.
             </li>
             <li>
               <span class="fileref">electron/entitlements.mac.plist</span>
-              <span class="tag-new">(new)</span> — entitlements needed for
-              hardened runtime + associated domains if required by builder.
+              <span class="tag-new">(new)</span> — only what hardened-runtime
+              Electron needs. No Associated Domains.
             </li>
             <li>
-              <span class="fileref">package.json</span> — scripts
-              <code>desktop:pack</code> / <code>desktop:dist</code>;
-              electron-builder devDependency; version already drives artifact
-              naming.
+              <span class="fileref">electron/updater.ts</span>
+              <span class="tag-new">(new)</span> — per “Shell self-update”;
+              wired into <code>main.ts</code> and the app menu.
+            </li>
+            <li>
+              <span class="fileref">electron/package.json</span> — add
+              exact-pinned <code>electron-updater</code>; script
+              <code>dist</code>. Root <code>package.json</code> gets
+              <code>desktop:dist</code>.
             </li>
             <li>
               <span class="fileref">.github/workflows/desktop-release.yml</span>
-              <span class="tag-new">(new)</span> —
-              <code>macos-latest</code> runner; triggers:
-              <code>workflow_dispatch</code> and
-              <code>release: published</code> (and/or tags <code>v*</code>);
-              build dmg; upload to the GitHub Release; use signing env vars when
-              present.
+              <span class="tag-new">(new)</span> — <code>macos-latest</code>;
+              trigger <code>workflow_dispatch</code> only. Reads the version
+              from <code>electron/package.json</code> and fails early if
+              <code>berean-desktop</code> already has that release. With secrets
+              present: write the <code>.p8</code> to a temp file, build, sign,
+              notarize and publish using <code>DESKTOP_RELEASES_TOKEN</code>.
+              Without them: build unsigned, upload the <code>.dmg</code> as a
+              workflow artifact, publish nothing.
             </li>
             <li>
-              <span class="fileref">electron/README.md</span> — list required
-              secrets (mirror Manual steps); how to run unsigned local pack.
+              <span class="fileref">electron/README.md</span> — required secrets
+              (mirror Manual steps), the release procedure (bump
+              <code>electron/package.json</code>, merge, run the workflow), and
+              how to test an update.
             </li>
           </ul>
           <h4>Implementation steps</h4>
           <ul class="clean small">
             <li>
-              Thin shell packaging: electron-builder should package
-              <code>electron/</code> compiled output + Electron runtime only —
-              <b>not</b> the Vite <code>dist/</code> as the web content (content
-              is remote).
+              Package only the bundled <code>electron/</code> output and the
+              Electron runtime — <b>not</b> the Vite <code>dist/</code> and not
+              the web app's <code>node_modules</code>.
             </li>
             <li>
-              Workflow must not fail the whole repo CI on PRs — keep it separate
-              from <code>ci.yml</code> verify job.
+              Keep the workflow separate from <code>ci.yml</code> and from
+              <code>release-please.yml</code>. A web release must never trigger
+              a desktop build.
             </li>
             <li>
-              If signing secrets are missing, build unsigned and still upload
-              artifact (document Gatekeeper caveat).
+              Signing uses <code>CSC_LINK</code> /
+              <code>CSC_KEY_PASSWORD</code>; notarization uses the App Store
+              Connect key. Confirm the exact environment variable names and
+              whether the key is passed as a file path against the current
+              electron-builder docs.
+            </li>
+            <li>
+              The updater must never block startup or show an error on its own;
+              a missing network or feed just means no update this time.
             </li>
             <li>Do not add Windows targets in this PR.</li>
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
             <li>
-              <code>pnpm run agent:check</code> passes on the web/electron TS
-              surface.
+              <code>pnpm run agent:check</code> passes on the web and electron
+              TS surface.
             </li>
             <li>
-              <code>desktop-release.yml</code> exists and is valid YAML; scripts
-              to pack are documented.
+              <code>desktop-release.yml</code> is valid; a run without secrets
+              produces an unsigned <code>.dmg</code> artifact and publishes
+              nothing.
             </li>
             <li>
-              Behavioral (manual / when workflow run): a
-              <code>.dmg</code> artifact is produced; with secrets, notarized
-              install does not Gatekeeper-block.
+              Behavioral (when run with secrets): the
+              <code>berean-desktop</code> release contains
+              <code>Berean.dmg</code>, a zip and <code>latest-mac.yml</code>;
+              the downloaded app opens with no Gatekeeper warning.
+            </li>
+            <li>
+              Behavioral (manual update test): with version N installed in
+              Applications, publishing N+1 makes the running app offer a restart
+              and come back as N+1, with the session intact.
             </li>
           </ul>
         </div>
@@ -1491,14 +1743,15 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> PR 5 (PWA bits stable), PR 6 (release URL shape).
+            <b>Depends on:</b> PR 5 (PWA bits stable), PR 6 and a first
+            published desktop release (otherwise the link is a 404).
             <b>Unblocks:</b> user testing of the full loop.
           </p>
           <h4>Goal</h4>
           <p>
             Add a Mac download affordance on the web login footer (hidden in
-            Electron), pointing at GitHub Releases latest, and document desktop
-            + PWA in the root README. No full marketing page.
+            Electron) that downloads the latest <code>.dmg</code> directly, and
+            document desktop + PWA in the root README. No full marketing page.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
@@ -1506,22 +1759,20 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
               <span class="fileref">src/components/login-page.tsx</span> — add
               “Download for Mac” link beside existing footer links; hide when
               <code>isBereanDesktop()</code>; href
-              <code>https://github.com/natyconnor/berean/releases/latest</code>
-              (or direct latest dmg URL if stable — prefer releases/latest page
-              for resilience).
+              <code
+                >https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg</code
+              >.
             </li>
             <li>
               <span class="fileref">README.md</span> — Desktop (Electron thin
-              shell), PWA install, env note that
-              <code>CONVEX_SITE_URL</code> for production remains the Vercel
-              origin, link to <code>electron/README.md</code> and Manual signing
-              secrets.
+              shell, browser sign-in, self-update), PWA install, link to
+              <code>electron/README.md</code> for release and signing.
             </li>
             <li>
               <span class="fileref">src/components/login-page.test.tsx</span>
-              <span class="tag-new">(new)</span> — optional small test that
-              download link renders when not desktop; skip if login page is hard
-              to mount — prefer a tiny pure wrapper test over brittle UI tests.
+              — small test that the download link renders when not desktop and
+              is absent on desktop; prefer a tiny pure wrapper test over brittle
+              UI tests.
             </li>
           </ul>
           <h4>Implementation steps</h4>
@@ -1532,8 +1783,7 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
             </li>
             <li>
               Confirm the link is not shown when
-              <code>window.bereanDesktop</code> is present (unit test the
-              condition via helper if easier).
+              <code>window.bereanDesktop</code> is present.
             </li>
           </ul>
           <h4>Acceptance criteria</h4>
@@ -1544,8 +1794,161 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
             </li>
             <li>README documents desktop + PWA at a glance.</li>
             <li>
-              Behavioral (manual): web login shows Mac download; Electron login
-              does not.
+              Behavioral (manual): web login shows Mac download and clicking it
+              starts the <code>.dmg</code> download; Electron login does not
+              show it.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 8 -->
+      <div class="pr" id="pr8">
+        <div class="pr-head">
+          <div class="num">8</div>
+          <div>
+            <div class="pr-sub">proposed · sign-in options</div>
+            <h3 class="pr-title">Email sign-in code</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> manual step 6. Independent of PRs 2–7; touches
+            the login page, so build it after PR 3 if both are planned.
+            <b>Status:</b> proposed — confirm with the product owner first.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Let someone sign in with just an email address: they enter it,
+            receive a short code by email and type it in. On desktop this
+            happens entirely inside the app, with no browser handoff.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/auth.ts</span> — add a one-time-code
+              email provider (Convex Auth's OTP pattern, sending through Resend
+              with <code>AUTH_RESEND_KEY</code>).
+            </li>
+            <li>
+              <span class="fileref">convex/ResendOTP.ts</span>
+              <span class="tag-new">(new)</span> — provider config: code length,
+              expiry, the email itself.
+            </li>
+            <li>
+              <span class="fileref">src/components/login-page.tsx</span> — email
+              field → code field flow beside the Google button, with resend and
+              wrong/expired-code states. Keep the existing look.
+            </li>
+            <li>
+              <span class="fileref">src/content/legal/privacy.md</span> — say
+              that sign-in emails are sent through an email provider.
+            </li>
+            <li>Tests for the new login states.</li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Follow the current Convex Auth OTP documentation for the provider
+              shape; do not hand-roll token storage.
+            </li>
+            <li>
+              Leave account linking on the library default: a verified email
+              that matches an existing account signs into that account, so a
+              current Google user who uses the same address by email keeps their
+              notes.
+            </li>
+            <li>
+              Preview deployments have no Resend key; the email option must fail
+              gracefully there and must not break the existing preview auto
+              sign-in.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code>,
+              <code>pnpm run codegen</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Behavioral (manual): a new email address can sign up and sign in;
+              an address already used with Google lands in the same account;
+              wrong and expired codes show a clear message; the flow works in
+              the desktop app without opening a browser.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 9 -->
+      <div class="pr" id="pr9">
+        <div class="pr-head">
+          <div class="num">9</div>
+          <div>
+            <div class="pr-sub">proposed · sign-in options</div>
+            <h3 class="pr-title">Sign in with Apple</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> manual step 7; PR 3 for desktop support.
+            <b>Status:</b> proposed — confirm with the product owner first.
+            Apple requires this option for App Store apps that offer Google
+            sign-in, so it becomes mandatory if the iPad app ever ships through
+            the App Store.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add Apple as a sign-in provider on web and desktop. Desktop needs no
+            extra work: the PR 2 navigation guard and the PR 3 handoff already
+            carry any OAuth provider through the browser.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/auth.ts</span> — add the Apple
+              provider following the current Convex Auth Apple documentation
+              (Apple only sends the user's name on first sign-in).
+            </li>
+            <li>
+              <span class="fileref">src/components/login-page.tsx</span> — “Sign
+              in with Apple” button following Apple's button guidelines; on
+              desktop pass the same <code>redirectTo</code> as Google and reuse
+              the waiting state.
+            </li>
+            <li>
+              <span class="fileref">src/content/legal/privacy.md</span> — list
+              Apple as a sign-in provider.
+            </li>
+            <li>
+              <span class="fileref">README.md</span> or
+              <span class="fileref">convex/README.md</span> — how to regenerate
+              the Apple client secret before it expires.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Generalize the PR 3 login-page code so the provider is a
+              parameter, not a copy of the Google handler.
+            </li>
+            <li>
+              Someone who chooses Apple's “Hide My Email” gets a relay address,
+              which will not match an existing Google account and so creates a
+              separate account. Do not try to merge these; note it in the README
+              as a known behaviour.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code>,
+              <code>pnpm run codegen</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Behavioral (manual): Apple sign-in works on web and, through the
+              browser handoff, in the desktop app; an Apple ID that shares its
+              real email with an existing Google account lands in that account.
             </li>
           </ul>
         </div>
@@ -1559,10 +1962,14 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
         <div class="card">
           <ul class="clean small">
             <li>Windows / Linux Electron targets and signing</li>
+            <li>
+              Universal Links (https links opening the Mac app), AASA,
+              Associated Domains
+            </li>
             <li>Capacitor / App Store iPad binary</li>
             <li>Touch / Apple Pencil optimization</li>
             <li>Offline Bible or notes sync</li>
-            <li>System-browser OAuth token bridge</li>
+            <li>Password sign-in</li>
             <li>Full marketing / about homepage</li>
             <li>Push notifications, file associations, custom menu-heavy UX</li>
             <li>Service worker precaching</li>
@@ -1585,43 +1992,70 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
             </thead>
             <tbody>
               <tr>
-                <td>System-browser OAuth cannot share session with shell</td>
+                <td>Google refuses sign-in inside an embedded window</td>
                 <td>
-                  PR 3 uses in-window OAuth + <code>persist:berean</code>;
-                  documented decision.
+                  The shell never shows Google. PR 2 sends every off-origin
+                  navigation to the system browser; PR 3 brings the result back
+                  through <code>berean://auth</code>.
                 </td>
               </tr>
               <tr>
-                <td>Universal Links flaky for non–App Store Electron</td>
+                <td>The browser handoff has not been run end to end yet</td>
                 <td>
-                  PR 4 also registers <code>berean://</code>; https association
-                  is best-effort with AASA + Team ID (manual).
+                  It was designed by reading the installed Convex Auth code, not
+                  by running it. PR 3 comes early and its acceptance test is the
+                  full loop in a packed app, before any signing work.
                 </td>
               </tr>
               <tr>
-                <td>Signing secrets block CI</td>
+                <td>Another app claims <code>berean://</code></td>
                 <td>
-                  PR 6 unsigned fallback; Manual steps list secrets for you.
+                  The code in the link is useless without the verifier, which
+                  stays in the app's own storage.
+                </td>
+              </tr>
+              <tr>
+                <td>Browser shows an “Open Berean?” prompt</td>
+                <td>
+                  Expected for custom schemes.
+                  <code>desktop-auth.html</code> explains what to do and offers
+                  a button if the automatic hand-back is blocked.
+                </td>
+              </tr>
+              <tr>
+                <td>Web releases break the desktop update feed</td>
+                <td>
+                  Desktop releases live in their own repo with their own version
+                  numbers; release-please never touches them.
+                </td>
+              </tr>
+              <tr>
+                <td>Unsigned builds cannot self-update</td>
+                <td>
+                  PR 6 publishes only signed builds; the unsigned path exists to
+                  prove the pipeline. Manual steps 1–4 gate the first real
+                  release.
                 </td>
               </tr>
               <tr>
                 <td>Agents cannot smoke-test Mac UI</td>
                 <td>
                   Acceptance criteria split mechanical vs behavioral; you run
-                  Manual step 6.
-                </td>
-              </tr>
-              <tr>
-                <td>SPA rewrite serves HTML for AASA</td>
-                <td>
-                  PR 4 puts file in <code>public/</code> + explicit Content-Type
-                  in <code>vercel.json</code>.
+                  Manual step 5.
                 </td>
               </tr>
               <tr>
                 <td>Menu accelerators steal app shortcuts</td>
                 <td>
                   Architecture + PR 2 forbid Cmd+K/G/,/J/Enter menu bindings.
+                </td>
+              </tr>
+              <tr>
+                <td>Same person ends up with two accounts</td>
+                <td>
+                  Providers reporting the same verified email are linked by
+                  Convex Auth. The known exception is Apple's Hide My Email (PR
+                  9), which is documented rather than worked around.
                 </td>
               </tr>
             </tbody>
@@ -1631,7 +2065,7 @@ contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
 
       <footer>
         Berean · Desktop Electron + iPad PWA implementation plan · grounded in
-        the current codebase.
+        the current codebase · revised 2026-11-15.
       </footer>
     </div>
   </body>
