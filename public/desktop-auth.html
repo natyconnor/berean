@@ -96,9 +96,11 @@
         if (!code || code.length > MAX_CODE_LENGTH) return;
 
         var link = "berean://auth?code=" + encodeURIComponent(code);
+        // Keep the code out of the browser's history and address bar.
+        history.replaceState(null, "", window.location.pathname);
 
         document.getElementById("message").textContent =
-          "You’re signed in. Return to Berean.";
+          "Return to Berean to finish signing in.";
         var button = document.getElementById("open-berean");
         button.href = link;
         button.hidden = false;

@@ -97,6 +97,7 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
 | `preload.ts`           | Exposes `window.bereanDesktop` (`{ isDesktop, platform }`)    |
 | `offline.html`         | Local "needs an internet connection" page with Retry          |
 | `ipc-channels.ts`      | IPC channel names shared by main and preload                  |
+| `shell-policy.ts`      | Pure URL checks used by main (sign-in, origins, frames)       |
 | `electron-builder.yml` | Packaging: app id, `berean://` scheme, icon, mac `dir` target |
 
 - **One session.** Every window uses the `persist:berean` partition, so File →
@@ -104,14 +105,19 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
 - **Navigation guard.** A window only ever renders the app origin or
   `offline.html`. Any other navigation, redirect or `window.open` is cancelled
   and, if it is an `http(s)` URL, opened in the system browser. The guard is
-  attached to every `WebContents` the app creates.
-- **Offline.** If the app URL fails to load, the window shows `offline.html`.
-  Retry (or View → Reload, or the network coming back) asks main to load the
-  app URL again.
+  attached to every `WebContents` the app creates. Frames inside the page may
+  only load the app origin (or `about:blank`); any other navigation or
+  redirect in a frame is cancelled.
+- **Offline.** If the app URL fails to load, or redirects off the app origin
+  before any app page has shown, the window shows `offline.html`. Retry (or
+  View → Reload, or the network coming back) asks main to load the app URL
+  again.
 - **Menu.** File → New Window is Cmd+N. The web app owns Cmd+K, Cmd+G, Cmd+,,
   Cmd+J and Cmd+Enter; do not bind those in the menu.
 - **Security defaults.** `contextIsolation: true`, `nodeIntegration: false`,
-  `sandbox: true`, no `<webview>`.
+  `sandbox: true`, no `<webview>`. Every permission request and check
+  (notifications, geolocation, clipboard read, camera, …) is denied: the web
+  app uses none.
 
 The `berean://` scheme is declared in `electron-builder.yml`. macOS only
 honours a custom scheme for a packaged app, so anything involving `berean://`
@@ -132,7 +138,9 @@ browser and comes back through `berean://auth`:
    a _verifier_ in the app's `localStorage`, then points the window at
    `{CONVEX_SITE_URL}/api/auth/signin/google?…`.
 2. **Main** sees that navigation leave the app origin, cancels it and opens it
-   in the system browser. It remembers which window it came from. The login
+   in the system browser. Because it is a Convex sign-in URL
+   (`https://*.convex.site/api/auth/signin/…`), main records a pending
+   sign-in for that window, good for 10 minutes. The login
    page stays put and shows "Finish signing in in your browser" with an **Open
    browser again** button, which simply starts over.
 3. **The browser** goes through Google. Convex then redirects to
@@ -140,12 +148,16 @@ browser and comes back through `berean://auth`:
 4. **`public/desktop-auth.html`** navigates to `berean://auth?code=…` and shows
    an **Open Berean** button with the same link, for browsers that block the
    automatic hand-back. Browsers ask the user to allow opening Berean; that
-   prompt is expected.
+   prompt is expected. It removes `?code=` from the address bar and history
+   once the link is built.
 5. **macOS** delivers the link to main as `open-url`. Main parses it with
-   `parseBereanOpenUrl`, reloads the window that started sign-in at its current
-   URL with `?code=…` added, and brings it to the front. If that window is
-   gone it uses the first window, or opens a new one. A link that launches the
-   app (cold start) opens its first window with the code.
+   `parseBereanOpenUrl`. If a sign-in is pending, it clears it, reloads the
+   window that started sign-in at its current URL with `?code=…` added, and
+   brings it to the front. If that window is gone it uses the first window, or
+   opens a new one. With no pending sign-in (none started, it expired, or a
+   code was already used, including a link that launches the app) the link is
+   ignored and Berean just comes to the front, so another site cannot reload
+   the app with a code of its choosing.
 6. **The web app** loads, finds `?code=`, exchanges it using the stored
    verifier, and strips the param. The user is signed in, in every window.
 
@@ -182,14 +194,17 @@ BEREAN_DESKTOP_URL=http://localhost:5173 \
 Click **Sign in with Google**: the default browser opens, and after choosing an
 account it shows the hand-back page and Berean comes to the front signed in.
 
-To exercise the hand-back without Google, with the app running as above:
+To exercise the hand-back without Google, with the app running as above, click
+**Sign in with Google** (close the browser tab it opens), then within 10
+minutes:
 
 ```bash
 open "berean://auth?code=test"
 ```
 
 The window reloads at `…/?code=test`, the app strips the param, the exchange
-fails (the code is fake) and the login page comes back. If `open` starts a
+fails (the code is fake) and the login page comes back. Run the same `open`
+again and nothing reloads: the pending sign-in was used. If `open` starts a
 different copy of Berean, or nothing, re-register the packed app:
 
 ```bash

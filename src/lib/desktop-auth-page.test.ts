@@ -71,7 +71,20 @@ describe("desktop-auth.html", () => {
     expect(button.getAttribute("href")).toBe("berean://auth?code=abc123");
     expect(button.hidden).toBe(false);
     expect(button.textContent).toBe("Open Berean");
-    expect(message).toBe("You’re signed in. Return to Berean.");
+    expect(message).toBe("Return to Berean to finish signing in.");
+  });
+
+  it("removes the code from the address bar and history", () => {
+    loadPage("?code=abc123");
+
+    expect(window.location.pathname).toBe(DESKTOP_AUTH_REDIRECT_PATH);
+    expect(window.location.search).toBe("");
+  });
+
+  it("leaves the URL alone when there is no code to hand back", () => {
+    loadPage("?error=access_denied");
+
+    expect(window.location.search).toBe("?error=access_denied");
   });
 
   it("builds a link the app's parser accepts, whatever the code contains", () => {
