@@ -5,6 +5,7 @@ import {
   BrowserWindow,
   ipcMain,
   Menu,
+  session,
   shell,
   type MenuItemConstructorOptions,
   type WebContents,
@@ -12,6 +13,13 @@ import {
 import { parseBereanOpenUrl, withAuthCode } from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
+import {
+  isAllowedFrameUrl,
+  isConvexSignInUrl,
+  isSameOrigin,
+  isSignInPending,
+  type PendingSignIn,
+} from "./shell-policy";
 
 /**
  * Berean desktop shell: a native window around the live web app.
@@ -41,10 +49,10 @@ const appOrigin = resolveAppOrigin();
 const retryUrls = new WeakMap<WebContents, string>();
 
 /**
- * The window whose page last navigated away to the browser. That is how
- * sign-in starts, so it is the window to bring back when the code arrives.
+ * The window that sent a sign-in to the browser. `berean://auth` is only
+ * accepted while this is set and recent, and it goes back to this window.
  */
-let signInContents: WebContents | null = null;
+let pendingSignIn: PendingSignIn<WebContents> | null = null;
 
 /** A `berean:` link that arrived before the app finished starting. */
 let pendingOpenUrl: string | null = null;
@@ -70,11 +78,7 @@ function resolveAppOrigin(): string {
 }
 
 function isAppUrl(rawUrl: string): boolean {
-  try {
-    return new URL(rawUrl).origin === appOrigin;
-  } catch {
-    return false;
-  }
+  return isSameOrigin(rawUrl, appOrigin);
 }
 
 function isOfflinePageUrl(rawUrl: string | undefined): boolean {
@@ -104,8 +108,15 @@ function openInBrowser(rawUrl: string): boolean {
 }
 
 function loadAppUrl(contents: WebContents, url: string): void {
+  retryUrls.set(contents, url);
   // A failed load is handled by did-fail-load, which shows the offline page.
   contents.loadURL(url).catch(() => undefined);
+}
+
+function showOfflinePage(contents: WebContents): void {
+  contents.loadFile(OFFLINE_PAGE).catch((error: unknown) => {
+    console.error("[berean] Could not show the offline page:", error);
+  });
 }
 
 /**
@@ -116,13 +127,30 @@ function guardNavigation(contents: WebContents): void {
   contents.on("will-navigate", (details) => {
     if (isAppUrl(details.url)) return;
     details.preventDefault();
-    if (openInBrowser(details.url)) signInContents = contents;
+    if (openInBrowser(details.url) && isConvexSignInUrl(details.url)) {
+      pendingSignIn = { contents, startedAt: Date.now() };
+    }
   });
 
   contents.on("will-redirect", (details) => {
-    if (!details.isMainFrame || isAppUrl(details.url)) return;
+    if (!details.isMainFrame) {
+      // will-frame-navigate does not see redirects.
+      if (!isAllowedFrameUrl(details.url, appOrigin)) details.preventDefault();
+      return;
+    }
+    if (isAppUrl(details.url)) return;
     details.preventDefault();
     openInBrowser(details.url);
+    // Nothing of the app is showing yet, so the window would stay blank.
+    if (!isAppUrl(contents.getURL())) showOfflinePage(contents);
+  });
+
+  // Main-frame navigations are handled above; frames never leave the app.
+  contents.on("will-frame-navigate", (details) => {
+    if (details.isMainFrame || isAllowedFrameUrl(details.url, appOrigin)) {
+      return;
+    }
+    details.preventDefault();
   });
 
   contents.setWindowOpenHandler(({ url }) => {
@@ -176,9 +204,7 @@ function createWindow(initialUrl = `${appOrigin}/`): BrowserWindow {
       if (!isMainFrame || errorCode === ERR_ABORTED) return;
       if (!isAppUrl(validatedURL)) return;
       retryUrls.set(contents, validatedURL);
-      contents.loadFile(OFFLINE_PAGE).catch((error: unknown) => {
-        console.error("[berean] Could not show the offline page:", error);
-      });
+      showOfflinePage(contents);
     },
   );
 
@@ -207,11 +233,12 @@ function focusOrCreateWindow(): void {
  * localStorage) when sign-in started, then strips the param.
  */
 function finishSignIn(code: string): void {
+  const startedFrom = pendingSignIn?.contents;
+  pendingSignIn = null;
   const startedIn =
-    signInContents && !signInContents.isDestroyed()
-      ? BrowserWindow.fromWebContents(signInContents)
+    startedFrom && !startedFrom.isDestroyed()
+      ? BrowserWindow.fromWebContents(startedFrom)
       : null;
-  signInContents = null;
 
   const win = startedIn ?? BrowserWindow.getAllWindows()[0];
   if (!win) {
@@ -233,8 +260,13 @@ function finishSignIn(code: string): void {
 function handleOpenUrl(rawUrl: string): void {
   const target = parseBereanOpenUrl(rawUrl);
   if (target?.kind === "auth") {
-    console.info("[berean] Sign-in code received from the browser");
-    finishSignIn(target.code);
+    if (isSignInPending(pendingSignIn, Date.now())) {
+      console.info("[berean] Sign-in code received from the browser");
+      finishSignIn(target.code);
+    } else {
+      console.info("[berean] Ignoring a sign-in link: no sign-in is pending");
+      focusOrCreateWindow();
+    }
   }
   // Route links (berean://passage/John-1) are PR 4 of the desktop plan.
 }
@@ -248,6 +280,19 @@ function reloadWindow(win: BrowserWindow): void {
   } else {
     contents.reload();
   }
+}
+
+/**
+ * The web app needs no permissions (its only async clipboard call is in the
+ * dev-only log overlay, which falls back to execCommand). Electron grants
+ * everything by default, so refuse everything.
+ */
+function denyPermissions(): void {
+  const appSession = session.fromPartition(SESSION_PARTITION);
+  appSession.setPermissionRequestHandler((_contents, _permission, callback) => {
+    callback(false);
+  });
+  appSession.setPermissionCheckHandler(() => false);
 }
 
 function registerIpc(): void {
@@ -360,6 +405,7 @@ if (!app.requestSingleInstanceLock()) {
   app
     .whenReady()
     .then(() => {
+      denyPermissions();
       Menu.setApplicationMenu(buildMenu());
       registerIpc();
       hasLaunched = true;
