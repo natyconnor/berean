@@ -6,7 +6,15 @@ import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist", "coverage", "convex/_generated", "electron-dist"]),
+  globalIgnores([
+    "dist",
+    "coverage",
+    "convex/_generated",
+    "electron-dist",
+    // The desktop shell is a standalone package whose types are only present
+    // after `pnpm --dir electron install`. `pnpm run desktop:check` lints it.
+    "electron",
+  ]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [

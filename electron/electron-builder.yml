@@ -1,0 +1,26 @@
+# Local pack only. Signing, notarization, the dmg/zip targets and publishing
+# are added by PR 6 of the desktop plan.
+appId: dev.nathanconnor.berean
+productName: Berean
+
+directories:
+  output: release
+
+# main.ts and preload.ts are bundled into dist/ by esbuild, so the app ships
+# no node_modules at all.
+files:
+  - dist/**
+  - offline.html
+  - package.json
+npmRebuild: false
+
+protocols:
+  - name: Berean
+    schemes:
+      - berean
+
+mac:
+  category: public.app-category.reference
+  icon: ../public/berean-logo.png
+  target:
+    - dir

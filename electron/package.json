@@ -1,0 +1,23 @@
+{
+  "name": "berean-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Berean desktop shell",
+  "author": "Nathan Connor",
+  "homepage": "https://berean.nathanconnor.dev",
+  "main": "dist/main.js",
+  "packageManager": "pnpm@11.16.0+sha512.b767e9a98fc87aec0f42daefcd0e84941c2cdb45d73c4e1e68860fb2bdfdbe032ab592105479e5e05c237f740c8a5ffdbbb52385797ddc2296745a1bbb883e8d",
+  "scripts": {
+    "build": "esbuild main.ts preload.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outdir=dist",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "pnpm run build && electron .",
+    "pack": "pnpm run typecheck && pnpm run build && electron-builder --mac dir --config electron-builder.yml -c.mac.identity=null"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

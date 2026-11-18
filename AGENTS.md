@@ -20,13 +20,14 @@ This file is the canonical, repository-wide instruction set for coding agents.
 
 Validation is required, not optional. A Cursor **stop hook** (`.cursor/hooks/agent-check-on-stop.sh`) also runs `pnpm run agent:check` automatically when source files changed and will loop the agent back with failures until checks pass.
 
-- Main post-change command: `pnpm run agent:check` (format → lint → typecheck)
+- Main post-change command: `pnpm run agent:check` (format → lint → typecheck → desktop check)
 - CI also runs: `format:check`, `test`, and `build` — run these when the change is broad or touches build/test paths
 - Individual commands:
   - `pnpm run format` (Prettier, write)
   - `pnpm run format:check` (Prettier, CI parity)
   - `pnpm run lint`
   - `pnpm run typecheck`
+  - `pnpm run desktop:check` (typecheck + lint of `electron/`; skipped unless `pnpm --dir electron install` has been run — see `electron/README.md`)
   - `pnpm test`
 
 Run `pnpm test` when the change is risky, nearby tests already exist, or the user asks for them.

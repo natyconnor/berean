@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>Return to Berean</title>
+    <!--
+      Where the browser lands after a sign-in that started in the Berean
+      desktop app. It hands the one-time code back to the app through
+      berean://auth.
+
+      This page must stay static and must never load the app bundle. The app
+      would try to redeem the code here, in the browser, where the matching
+      verifier does not exist; the verifier only lives in the desktop app.
+    -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 0 24px;
+        background: #14110d;
+        color: rgba(255, 255, 255, 0.85);
+        font-family: Georgia, "Times New Roman", serif;
+        text-align: center;
+      }
+      h1 {
+        margin: 0;
+        font-size: 44px;
+        font-weight: 400;
+        letter-spacing: 0.2em;
+        color: rgba(255, 255, 255, 0.95);
+      }
+      p {
+        margin: 0;
+        max-width: 420px;
+        font-size: 18px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      p.hint {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      a.button {
+        margin-top: 10px;
+        padding: 10px 28px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 16px;
+        letter-spacing: 0.05em;
+        text-decoration: none;
+      }
+      a.button:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.16);
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>BEREAN</h1>
+
+    <p id="message">
+      Sign-in didn&rsquo;t finish. Go back to Berean and try again.
+    </p>
+    <a id="open-berean" class="button" hidden>Open Berean</a>
+    <p id="hint" class="hint" hidden>
+      If your browser asks, allow it to open Berean. You can close this tab
+      afterwards.
+    </p>
+
+    <script>
+      (function () {
+        // Mirrors the limit in shared/desktop-deep-link.ts.
+        var MAX_CODE_LENGTH = 512;
+        var code = new URLSearchParams(window.location.search).get("code");
+        if (!code || code.length > MAX_CODE_LENGTH) return;
+
+        var link = "berean://auth?code=" + encodeURIComponent(code);
+        // Keep the code out of the browser's history and address bar.
+        history.replaceState(null, "", window.location.pathname);
+
+        document.getElementById("message").textContent =
+          "Return to Berean to finish signing in.";
+        var button = document.getElementById("open-berean");
+        button.href = link;
+        button.hidden = false;
+        document.getElementById("hint").hidden = false;
+
+        // Hand back automatically. The button covers browsers that block this.
+        window.location.href = link;
+      })();
+    </script>
+  </body>
+</html>
