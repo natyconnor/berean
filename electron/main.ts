@@ -12,12 +12,15 @@ import {
 } from "electron";
 import {
   parseBereanOpenUrl,
+  toAppUrl,
   withAuthCode,
   type BereanAuthTarget,
+  type BereanRouteTarget,
 } from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
 import {
+  findBereanUrl,
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
@@ -60,6 +63,9 @@ const retryUrls = new WeakMap<WebContents, string>();
  * window. A new sign-in replaces it, and delivering its code clears it.
  */
 let pendingSignIn: PendingSignIn<WebContents> | null = null;
+
+/** The window the user was in last, for links that arrive in the background. */
+let lastFocusedWindow: BrowserWindow | null = null;
 
 /** A `berean:` link that arrived before the app finished starting. */
 let pendingOpenUrl: string | null = null;
@@ -213,6 +219,13 @@ function createWindow(initialUrl = `${appOrigin}/`): BrowserWindow {
     event.preventDefault();
   });
 
+  win.on("focus", () => {
+    lastFocusedWindow = win;
+  });
+  win.on("closed", () => {
+    if (lastFocusedWindow === win) lastFocusedWindow = null;
+  });
+
   const contents = win.webContents;
   contents.on(
     "did-fail-load",
@@ -234,8 +247,21 @@ function focusWindow(win: BrowserWindow): void {
   win.focus();
 }
 
+/**
+ * The window a link should use: the focused one, else the one used last
+ * (Berean is usually in the background when a link arrives), else any.
+ */
+function preferredWindow(): BrowserWindow | undefined {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused) return focused;
+  if (lastFocusedWindow && !lastFocusedWindow.isDestroyed()) {
+    return lastFocusedWindow;
+  }
+  return BrowserWindow.getAllWindows()[0];
+}
+
 function focusOrCreateWindow(): void {
-  const win = BrowserWindow.getAllWindows()[0];
+  const win = preferredWindow();
   if (win) {
     focusWindow(win);
   } else {
@@ -256,7 +282,7 @@ function finishSignIn(
     ? null
     : BrowserWindow.fromWebContents(startedFrom);
 
-  const win = startedIn ?? BrowserWindow.getAllWindows()[0];
+  const win = startedIn ?? preferredWindow();
   if (!win) {
     createWindow(withAuthCode(`${appOrigin}/`, target.code, target.attempt));
     return;
@@ -275,28 +301,50 @@ function finishSignIn(
   focusWindow(win);
 }
 
+/**
+ * Opens an app route from a `berean://` link, always in a window of its own.
+ * The link that launches the app opens its first window at the route; while
+ * running, a link opens a new window. It never reloads an existing window:
+ * notes do not autosave, and a reload would skip the app's "Discard unsaved
+ * notes?" prompt and silently lose a note in progress.
+ *
+ * Signed out, the web app shows its login page on that URL and renders the
+ * route once signed in; the sign-in hand-back reloads the same URL.
+ */
+function openRoute(target: BereanRouteTarget): void {
+  focusWindow(createWindow(toAppUrl(appOrigin, target)));
+}
+
 /** Handles a `berean:` link from the OS. Never log the link: it has a code. */
 function handleOpenUrl(rawUrl: string): void {
   const target = parseBereanOpenUrl(rawUrl);
-  if (target?.kind === "auth") {
-    const startedFrom = signInCodeTarget(
-      pendingSignIn,
-      target.attempt,
-      Date.now(),
-    );
-    if (startedFrom !== null) {
-      // Used up: a repeat or stray link must not reload the window again.
-      pendingSignIn = null;
-      console.info("[berean] Sign-in code received from the browser");
-      finishSignIn(target, startedFrom);
-    } else {
-      console.info(
-        "[berean] Ignoring a sign-in link: not for the pending sign-in",
-      );
-      focusOrCreateWindow();
-    }
+  if (target === null) {
+    console.info("[berean] Ignoring a berean: link that is not an app route");
+    return;
   }
-  // Route links (berean://passage/John-1) are PR 4 of the desktop plan.
+
+  if (target.kind === "route") {
+    console.info(`[berean] Opening ${target.pathname} from a link`);
+    openRoute(target);
+    return;
+  }
+
+  const startedFrom = signInCodeTarget(
+    pendingSignIn,
+    target.attempt,
+    Date.now(),
+  );
+  if (startedFrom !== null) {
+    // Used up: a repeat or stray link must not reload the window again.
+    pendingSignIn = null;
+    console.info("[berean] Sign-in code received from the browser");
+    finishSignIn(target, startedFrom);
+  } else {
+    console.info(
+      "[berean] Ignoring a sign-in link: not for the pending sign-in",
+    );
+    focusOrCreateWindow();
+  }
 }
 
 /** Reload, except on the offline page, where it means "try the app again". */
@@ -407,20 +455,37 @@ if (!app.requestSingleInstanceLock()) {
     guardNavigation(contents);
   });
 
-  app.on("second-instance", () => {
-    focusOrCreateWindow();
-  });
-
-  // macOS delivers berean: links here, including the one that launched the
-  // app, which can arrive before the app is ready to make windows.
-  app.on("open-url", (event, url) => {
-    event.preventDefault();
+  // A link can arrive before the app is ready to make windows (the one that
+  // launched it, on macOS); that one is handled once it is.
+  const receiveOpenUrl = (url: string): void => {
     if (hasLaunched) {
       handleOpenUrl(url);
     } else {
       pendingOpenUrl = url;
     }
+  };
+
+  // Starting Berean again (other platforms deliver berean: links this way,
+  // and so does running the binary with a link argument) reaches this
+  // instance instead.
+  app.on("second-instance", (_event, argv) => {
+    const url = findBereanUrl(argv);
+    if (url !== null) {
+      receiveOpenUrl(url);
+    } else {
+      focusOrCreateWindow();
+    }
   });
+
+  // macOS delivers berean: links here.
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    receiveOpenUrl(url);
+  });
+
+  // A link given on the command line of this, the first, instance.
+  const launchArgUrl = findBereanUrl(process.argv);
+  if (launchArgUrl !== null) receiveOpenUrl(launchArgUrl);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -443,7 +508,7 @@ if (!app.requestSingleInstanceLock()) {
         pendingOpenUrl = null;
         handleOpenUrl(launchUrl);
       }
-      // Unless a sign-in link already opened one.
+      // Unless the launching link already opened one.
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     })
     .catch((error: unknown) => {

@@ -98,6 +98,15 @@ export function signInCodeTarget<T>(
     : null;
 }
 
+/**
+ * The `berean:` link in a command line, if any. Used for `second-instance`
+ * argv and the app's own launch arguments. The link is still parsed and
+ * validated by `parseBereanOpenUrl` before anything opens.
+ */
+export function findBereanUrl(argv: readonly string[]): string | null {
+  return argv.find((arg) => /^berean:/i.test(arg)) ?? null;
+}
+
 /** Frames may show the app origin or an empty document, nothing else. */
 export function isAllowedFrameUrl(rawUrl: string, appOrigin: string): boolean {
   return (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findBereanUrl,
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
@@ -116,6 +117,28 @@ describe("signInCodeTarget", () => {
     );
     expect(
       signInCodeTarget(pending, ATTEMPT, 1_001 + SIGN_IN_WINDOW_MS),
+    ).toBeNull();
+  });
+});
+
+describe("findBereanUrl", () => {
+  it("finds the link among Electron and Chromium arguments", () => {
+    expect(
+      findBereanUrl([
+        "/Applications/Berean.app/Contents/MacOS/Berean",
+        "--allow-file-access-from-files",
+        "berean://passage/John-1",
+      ]),
+    ).toBe("berean://passage/John-1");
+    expect(findBereanUrl(["electron", ".", "BEREAN://settings"])).toBe(
+      "BEREAN://settings",
+    );
+  });
+
+  it("returns null when there is no link", () => {
+    expect(findBereanUrl([])).toBeNull();
+    expect(
+      findBereanUrl(["Berean", "--flag=berean://x", "https://example.com"]),
     ).toBeNull();
   });
 });
