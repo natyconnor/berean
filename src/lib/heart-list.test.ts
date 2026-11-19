@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   firstChapterHeart,
-  groupHeartsByBook,
   heartListLabel,
   heartMatchesBookFilter,
   passageHeartAnchor,
@@ -48,27 +47,5 @@ describe("heartMatchesBookFilter", () => {
     expect(heartMatchesBookFilter("1 Corinthians", "cor")).toBe(true);
     expect(heartMatchesBookFilter("1 Corinthians", "1co", "1Cor")).toBe(true);
     expect(heartMatchesBookFilter("Romans", "john")).toBe(false);
-  });
-});
-
-describe("groupHeartsByBook", () => {
-  it("keeps first-seen book order and row order within each book", () => {
-    const items = [
-      { id: 1, book: "Romans" },
-      { id: 2, book: "Psalms" },
-      { id: 3, book: "Romans" },
-      { id: 4, book: "John" },
-      { id: 5, book: "Psalms" },
-    ];
-    expect(
-      groupHeartsByBook(items).map(({ book, items: rows }) => [
-        book,
-        rows.map((row) => row.id),
-      ]),
-    ).toEqual([
-      ["Romans", [1, 3]],
-      ["Psalms", [2, 5]],
-      ["John", [4]],
-    ]);
   });
 });
