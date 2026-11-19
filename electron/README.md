@@ -15,6 +15,7 @@ All commands run from the repository root.
 pnpm run desktop:dev    # build main + preload, start Electron
 pnpm run desktop:pack   # build an unsigned Berean.app
 pnpm run desktop:check  # typecheck + lint electron/
+pnpm run desktop:dist   # signed release build (see Releasing)
 ```
 
 The first run installs this package's dependencies and downloads the Electron
@@ -91,14 +92,17 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
 
 ## What the shell does
 
-| File                   | Role                                                          |
-| ---------------------- | ------------------------------------------------------------- |
-| `main.ts`              | Windows, menu, navigation guard, offline, sign-in hand-back   |
-| `preload.ts`           | Exposes `window.bereanDesktop` (`{ isDesktop, platform }`)    |
-| `offline.html`         | Local "needs an internet connection" page with Retry          |
-| `ipc-channels.ts`      | IPC channel names shared by main and preload                  |
-| `shell-policy.ts`      | Pure URL checks used by main (sign-in, origins, frames)       |
-| `electron-builder.yml` | Packaging: app id, `berean://` scheme, icon, mac `dir` target |
+| File                           | Role                                                         |
+| ------------------------------ | ------------------------------------------------------------ |
+| `main.ts`                      | Windows, menu, navigation guard, offline, sign-in hand-back  |
+| `preload.ts`                   | Exposes `window.bereanDesktop` (`{ isDesktop, platform }`)   |
+| `offline.html`                 | Local "needs an internet connection" page with Retry         |
+| `ipc-channels.ts`              | IPC channel names shared by main and preload                 |
+| `shell-policy.ts`              | Pure URL checks used by main (sign-in, origins, frames)      |
+| `updater.ts`                   | Self-update from the GitHub releases, Check for Updates…     |
+| `electron-builder.yml`         | Packaging: app id, `berean://` scheme, icon, dmg/zip targets |
+| `electron-builder.release.yml` | Release builds: the above plus the update feed               |
+| `entitlements.mac.plist`       | Hardened-runtime entitlements (JIT only)                     |
 
 - **One session.** Every window uses the `persist:berean` partition, so File →
   New Window is already signed in and the session survives relaunch.
@@ -112,8 +116,10 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
   before any app page has shown, the window shows `offline.html`. Retry (or
   View → Reload, or the network coming back) asks main to load the app URL
   again.
-- **Menu.** File → New Window is Cmd+N. The web app owns Cmd+K, Cmd+G, Cmd+,,
-  Cmd+J and Cmd+Enter; do not bind those in the menu.
+- **Menu.** File → New Window is Cmd+N. Berean → Check for Updates… checks
+  the release feed. The web app owns Cmd+K, Cmd+G, Cmd+,, Cmd+J and
+  Cmd+Enter; do not bind those in the menu.
+- **Self-update.** See [Updates](#updates).
 - **Security defaults.** `contextIsolation: true`, `nodeIntegration: false`,
   `sandbox: true`, no `<webview>`. Every permission request and check
   (notifications, geolocation, clipboard read, camera, …) is denied: the web
@@ -123,8 +129,107 @@ The `berean://` scheme is declared in `electron-builder.yml`. macOS only
 honours a custom scheme for a packaged app, so anything involving `berean://`
 links has to be tested with `desktop:pack`, not `desktop:dev`.
 
-Signing, notarization, the `.dmg`, self-update and the release workflow are
-not here yet; they arrive with PR 6 of the plan.
+## Releasing
+
+A desktop release is a signed, notarized, universal (Apple silicon and Intel)
+`Berean.dmg`, published with a zip and `latest-mac.yml` as a release of the
+public repo [natyconnor/berean-desktop](https://github.com/natyconnor/berean-desktop).
+The download link never changes:
+
+<https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg>
+
+The desktop version is `version` in `electron/package.json`, independent of
+the web app's version. Web releases never build the desktop app, and most web
+changes need no desktop release at all: the shell loads the live site.
+
+### Secrets
+
+The `Desktop release` workflow (`.github/workflows/desktop-release.yml`) reads
+these repository secrets on `natyconnor/berean`:
+
+| Secret                   | What it is                                                        |
+| ------------------------ | ----------------------------------------------------------------- |
+| `CSC_LINK`               | The Developer ID Application certificate, `.p12`, base64-encoded  |
+| `CSC_KEY_PASSWORD`       | The password of that `.p12`                                       |
+| `APPLE_API_KEY`          | The **contents** of the App Store Connect API key (`.p8`)         |
+| `APPLE_API_KEY_ID`       | That key's ID                                                     |
+| `APPLE_API_ISSUER`       | Its issuer ID                                                     |
+| `DESKTOP_RELEASES_TOKEN` | Fine-grained token for `berean-desktop`, Contents: read and write |
+
+electron-builder 26 signs with `CSC_LINK` / `CSC_KEY_PASSWORD` and notarizes
+with `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, where
+`APPLE_API_KEY` must be a **path** to the `.p8` file. The workflow therefore
+writes the secret to a temporary file and passes that path, then deletes it.
+
+Without all six secrets the workflow still runs, but builds an unsigned
+`Berean.dmg`, uploads it as a workflow artifact (kept 14 days) and publishes
+nothing.
+
+### Making a release
+
+1. Bump `version` in `electron/package.json` (for example `1.0.0` → `1.0.1`)
+   in a PR, and merge it to `main`.
+2. In GitHub: **Actions → Desktop release → Run workflow** on `main`.
+3. The workflow:
+   - stops at once if `berean-desktop` already has release `v<version>`;
+   - builds with `pnpm run dist` (`electron-builder.release.yml`), signing
+     and notarizing the app;
+   - refuses to publish unless the app has a Developer ID signature with the
+     hardened runtime, a stapled notarization ticket, passes Gatekeeper
+     (`spctl`) and is universal (electron-builder skips signing silently if
+     it cannot use the certificate);
+   - creates release `v<version>` on `berean-desktop`, marked latest, with
+     `Berean.dmg`, `Berean-<version>-universal-mac.zip`, their `.blockmap`
+     files and `latest-mac.yml`.
+
+The workflow only runs from `main` for signed releases, and `workflow_dispatch`
+workflows can only be started once the file is on the default branch, so the
+first real run happens after this lands on `main`.
+
+Locally, `pnpm run desktop:dist` builds the same thing; it signs with a
+Developer ID certificate from your keychain, and notarizes only if the three
+`APPLE_API_*` variables are set. `pnpm --dir electron run dist:unsigned`
+builds the universal dmg and zip without signing (and without an update feed).
+Outputs land in `electron/release/`.
+
+## Updates
+
+Only the shell updates itself; the web app updates with each web deploy.
+`updater.ts` uses electron-updater with the GitHub releases of
+`berean-desktop` as its feed (`publish` in `electron-builder.release.yml`,
+built into the app as `app-update.yml`).
+
+- It runs only in a packaged app built with a feed: signed release builds.
+  `pack` and `dist:unsigned` builds carry no feed, because macOS refuses to
+  install an update into an unsigned app. Their Check for Updates… says the
+  copy does not update itself.
+- It checks 10 seconds after launch and every 4 hours, downloads in the
+  background, and installs on quit.
+- When a download is ready it asks: "A new version of Berean is ready." with
+  **Restart Now** and **Later** (Later installs on the next quit).
+- It never blocks startup and never shows an error on its own. No network or
+  no feed is logged (`[berean] Update failed: …`) and tried again later.
+- **Berean → Check for Updates…** reports the result: up to date, downloading
+  version N, ready to restart, or that it could not check.
+
+### Testing an update
+
+Needs two signed releases, so do it once the workflow has published one.
+
+1. Install version N: download `Berean.dmg` from the latest release, drag
+   Berean to Applications, open it (no Gatekeeper warning expected) and sign
+   in.
+2. Bump `electron/package.json` to N+1, merge, and run the workflow.
+3. In the running app choose **Berean → Check for Updates…**: it says it is
+   downloading N+1, then offers **Restart Now**. (Or wait: the app checks 10
+   seconds after launch and every 4 hours.)
+4. Choose **Restart Now**. Berean quits, comes back, and **Berean → About
+   Berean** shows N+1. You are still signed in.
+5. Repeat with **Later**, then quit Berean (Cmd+Q) and reopen it: it is on
+   the new version.
+
+Run `Berean.app/Contents/MacOS/Berean` from a terminal to see the updater's
+log lines.
 
 ## Links to app routes
 

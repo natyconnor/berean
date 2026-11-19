@@ -11,12 +11,15 @@
     "build": "esbuild main.ts preload.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outdir=dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "pnpm run build && electron .",
-    "pack": "pnpm run typecheck && pnpm run build && electron-builder --mac dir --config electron-builder.yml -c.mac.identity=null"
+    "pack": "pnpm run typecheck && pnpm run build && electron-builder --mac dir --config electron-builder.yml -c.mac.identity=null",
+    "dist": "pnpm run typecheck && pnpm run build && electron-builder --mac --config electron-builder.release.yml --publish never",
+    "dist:unsigned": "pnpm run typecheck && pnpm run build && electron-builder --mac --config electron-builder.yml --publish never -c.mac.identity=null"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "electron": "45.4.1",
     "electron-builder": "26.18.0",
+    "electron-updater": "6.8.11",
     "esbuild": "0.28.2",
     "typescript": "5.9.3"
   }

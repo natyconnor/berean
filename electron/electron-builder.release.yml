@@ -1,0 +1,13 @@
+# Signed release builds (`pnpm run dist`): electron-builder.yml plus the update
+# feed. Only builds made from this file update themselves.
+extends: electron-builder.yml
+
+# Where the updater looks for new versions. electron-builder writes it into
+# the app as app-update.yml and writes latest-mac.yml next to the dmg. Builds
+# run with --publish never: the desktop-release workflow uploads the files
+# itself, after checking the signature.
+publish:
+  provider: github
+  owner: natyconnor
+  repo: berean-desktop
+  releaseType: release

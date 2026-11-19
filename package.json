@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "desktop:dev": "pnpm --dir electron run dev",
     "desktop:pack": "pnpm --dir electron run pack",
+    "desktop:dist": "pnpm --dir electron run dist",
     "desktop:check": "bash scripts/desktop-check.sh"
   },
   "dependencies": {
