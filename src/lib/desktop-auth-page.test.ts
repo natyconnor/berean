@@ -87,6 +87,27 @@ describe("desktop-auth.html", () => {
     expect(window.location.search).toBe("?error=access_denied");
   });
 
+  it("passes the sign-in attempt id along", () => {
+    const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const { button } = loadPage(`?signInAttempt=${attempt}&code=abc123`);
+
+    expect(button.getAttribute("href")).toBe(
+      `berean://auth?code=abc123&signInAttempt=${attempt}`,
+    );
+    expect(parseBereanOpenUrl(button.getAttribute("href") ?? "")).toEqual({
+      kind: "auth",
+      code: "abc123",
+      attempt,
+    });
+    expect(window.location.search).toBe("");
+  });
+
+  it("drops a malformed attempt id rather than the code", () => {
+    const { button } = loadPage("?signInAttempt=bad%26x%3D1&code=abc123");
+
+    expect(button.getAttribute("href")).toBe("berean://auth?code=abc123");
+  });
+
   it("builds a link the app's parser accepts, whatever the code contains", () => {
     const code = "a/b+c=d&e f#g";
     const { button } = loadPage(`?code=${encodeURIComponent(code)}`);

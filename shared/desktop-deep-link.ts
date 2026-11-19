@@ -16,7 +16,16 @@ export type BereanRouteTarget = {
   hash: string;
 };
 
-export type BereanAuthTarget = { kind: "auth"; code: string };
+/**
+ * `attempt` identifies the sign-in the code belongs to (see
+ * `src/lib/desktop-sign-in-attempt.ts`). Absent on links from before it
+ * existed.
+ */
+export type BereanAuthTarget = {
+  kind: "auth";
+  code: string;
+  attempt?: string;
+};
 
 export type BereanOpenTarget = BereanRouteTarget | BereanAuthTarget;
 
@@ -25,6 +34,16 @@ const AUTH_PATHNAME = "/auth";
 const MAX_AUTH_CODE_LENGTH = 512;
 const MAX_URL_LENGTH = 4096;
 
+/** The query param that carries a sign-in attempt id, on every hop. */
+export const SIGN_IN_ATTEMPT_PARAM = "signInAttempt";
+
+/** A `crypto.randomUUID()` fits; so does anything URL-safe of similar size. */
+const SIGN_IN_ATTEMPT_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+
+export function isSignInAttemptId(value: string): boolean {
+  return SIGN_IN_ATTEMPT_PATTERN.test(value);
+}
+
 /** Only used to split path, query and hash; never appears in a result. */
 const PARSE_BASE = "https://berean.invalid";
 
@@ -32,6 +51,7 @@ const PARSE_BASE = "https://berean.invalid";
  * `berean://passage/John-1?startVerse=3` → route
  * `berean:///passage/John-1`             → route (some OSes add a slash)
  * `berean://auth?code=abc123`            → auth
+ * `berean://auth?code=abc&signInAttempt=…` → auth, with its attempt id
  *
  * Returns null for every other scheme and for anything that is not an app
  * route or a well-formed auth callback.
@@ -59,7 +79,10 @@ export function parseBereanOpenUrl(raw: string): BereanOpenTarget | null {
   if (parsed.pathname === AUTH_PATHNAME) {
     const code = parsed.searchParams.get("code");
     if (!code || code.length > MAX_AUTH_CODE_LENGTH) return null;
-    return { kind: "auth", code };
+    const attempt = parsed.searchParams.get(SIGN_IN_ATTEMPT_PARAM);
+    if (attempt === null) return { kind: "auth", code };
+    if (!isSignInAttemptId(attempt)) return null;
+    return { kind: "auth", code, attempt };
   }
 
   const pathname = resolveRoutePathname(parsed.pathname, parsed.search);
@@ -97,9 +120,21 @@ export function toAppUrl(
   return `${origin.replace(/\/+$/, "")}${target.pathname}${target.search}${target.hash}`;
 }
 
-/** Sets `?code=` on `currentUrl`, replacing any existing code param. */
-export function withAuthCode(currentUrl: string, code: string): string {
+/**
+ * Sets `?code=` (and the sign-in attempt id, when there is one) on
+ * `currentUrl`, replacing any existing values.
+ */
+export function withAuthCode(
+  currentUrl: string,
+  code: string,
+  attempt?: string,
+): string {
   const url = new URL(currentUrl);
   url.searchParams.set("code", code);
+  if (attempt === undefined) {
+    url.searchParams.delete(SIGN_IN_ATTEMPT_PARAM);
+  } else {
+    url.searchParams.set(SIGN_IN_ATTEMPT_PARAM, attempt);
+  }
   return url.toString();
 }

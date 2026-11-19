@@ -102,6 +102,24 @@ describe("parseBereanOpenUrl: auth callback", () => {
   it("rejects paths below the auth callback", () => {
     expect(parseBereanOpenUrl("berean://auth/extra?code=abc")).toBeNull();
   });
+
+  it("carries the sign-in attempt id", () => {
+    const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=abc&signInAttempt=${attempt}`),
+    ).toEqual({ kind: "auth", code: "abc", attempt });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["too short", "abc"],
+    ["too long", "a".repeat(65)],
+    ["not URL-safe", "0f8fad5b%2Fd9cb%2F469f%2Fa165"],
+  ])("rejects an attempt id that is %s", (_label, attempt) => {
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=abc&signInAttempt=${attempt}`),
+    ).toBeNull();
+  });
 });
 
 describe("parseBereanOpenUrl: rejection", () => {
@@ -230,5 +248,20 @@ describe("withAuthCode", () => {
   it("encodes the code", () => {
     const url = withAuthCode("https://berean.nathanconnor.dev/", "a/b=c&d");
     expect(new URL(url).searchParams.get("code")).toBe("a/b=c&d");
+  });
+
+  it("sets the attempt id, or removes a stale one", () => {
+    const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect(
+      withAuthCode("https://berean.nathanconnor.dev/", "abc", attempt),
+    ).toBe(
+      `https://berean.nathanconnor.dev/?code=abc&signInAttempt=${attempt}`,
+    );
+    expect(
+      withAuthCode(
+        `https://berean.nathanconnor.dev/?signInAttempt=${attempt}`,
+        "abc",
+      ),
+    ).toBe("https://berean.nathanconnor.dev/?code=abc");
   });
 });

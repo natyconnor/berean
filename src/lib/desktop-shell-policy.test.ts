@@ -5,6 +5,7 @@ import {
   isSameOrigin,
   isSignInPending,
   SIGN_IN_WINDOW_MS,
+  signInCodeTarget,
 } from "../../electron/shell-policy";
 
 const APP = "https://berean.nathanconnor.dev";
@@ -47,6 +48,32 @@ describe("isSignInPending", () => {
     expect(isSignInPending(pending, 1_000)).toBe(true);
     expect(isSignInPending(pending, 1_000 + SIGN_IN_WINDOW_MS)).toBe(true);
     expect(isSignInPending(pending, 1_001 + SIGN_IN_WINDOW_MS)).toBe(false);
+  });
+});
+
+describe("signInCodeTarget", () => {
+  const win = { id: "sign-in window" };
+  const pending = { contents: win, startedAt: 1_000 };
+
+  it("ignores a code when no sign-in was started", () => {
+    expect(signInCodeTarget(null, 1_000)).toBeNull();
+  });
+
+  it("sends a code to the window that started sign-in", () => {
+    expect(signInCodeTarget(pending, 2_000)).toBe(win);
+  });
+
+  it("is not used up by a code: a later code in the window still goes through", () => {
+    // "Open browser again", then the older tab finishes first: its code
+    // fails, and the newer tab's code must still reach the window.
+    expect(signInCodeTarget(pending, 2_000)).toBe(win);
+    expect(signInCodeTarget(pending, 60_000)).toBe(win);
+    expect(signInCodeTarget(pending, 1_000 + SIGN_IN_WINDOW_MS)).toBe(win);
+    expect(pending).toEqual({ contents: win, startedAt: 1_000 });
+  });
+
+  it("ignores every code once ten minutes have passed", () => {
+    expect(signInCodeTarget(pending, 1_001 + SIGN_IN_WINDOW_MS)).toBeNull();
   });
 });
 

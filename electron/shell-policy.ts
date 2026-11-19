@@ -44,6 +44,24 @@ export function isSignInPending(
   return pending !== null && now - pending.startedAt <= SIGN_IN_WINDOW_MS;
 }
 
+/**
+ * Where a `berean://auth` code goes: the window that started the pending
+ * sign-in, or null to ignore the code (no sign-in started, or it expired).
+ *
+ * Reading this does not use the sign-in up. After "Open browser again" the
+ * older tab's code can arrive first; the newer tab's code must still get
+ * through. The web app decides which code to redeem (see
+ * `src/lib/desktop-sign-in-attempt.ts`).
+ */
+export function signInCodeTarget<T>(
+  pending: PendingSignIn<T> | null,
+  now: number,
+): T | null {
+  return pending !== null && isSignInPending(pending, now)
+    ? pending.contents
+    : null;
+}
+
 /** Frames may show the app origin or an empty document, nothing else. */
 export function isAllowedFrameUrl(rawUrl: string, appOrigin: string): boolean {
   return (

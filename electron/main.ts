@@ -10,14 +10,18 @@ import {
   type MenuItemConstructorOptions,
   type WebContents,
 } from "electron";
-import { parseBereanOpenUrl, withAuthCode } from "../shared/desktop-deep-link";
+import {
+  parseBereanOpenUrl,
+  withAuthCode,
+  type BereanAuthTarget,
+} from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
 import {
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
-  isSignInPending,
+  signInCodeTarget,
   type PendingSignIn,
 } from "./shell-policy";
 
@@ -50,7 +54,8 @@ const retryUrls = new WeakMap<WebContents, string>();
 
 /**
  * The window that sent a sign-in to the browser. `berean://auth` is only
- * accepted while this is set and recent, and it goes back to this window.
+ * accepted while this is set and recent (10 minutes), and it goes back to
+ * this window. A code does not clear it; a new sign-in replaces it.
  */
 let pendingSignIn: PendingSignIn<WebContents> | null = null;
 
@@ -232,17 +237,17 @@ function focusOrCreateWindow(): void {
  * web app exchanges the code using the verifier it stored (in this session's
  * localStorage) when sign-in started, then strips the param.
  */
-function finishSignIn(code: string): void {
-  const startedFrom = pendingSignIn?.contents;
-  pendingSignIn = null;
-  const startedIn =
-    startedFrom && !startedFrom.isDestroyed()
-      ? BrowserWindow.fromWebContents(startedFrom)
-      : null;
+function finishSignIn(
+  target: BereanAuthTarget,
+  startedFrom: WebContents,
+): void {
+  const startedIn = startedFrom.isDestroyed()
+    ? null
+    : BrowserWindow.fromWebContents(startedFrom);
 
   const win = startedIn ?? BrowserWindow.getAllWindows()[0];
   if (!win) {
-    createWindow(withAuthCode(`${appOrigin}/`, code));
+    createWindow(withAuthCode(`${appOrigin}/`, target.code, target.attempt));
     return;
   }
 
@@ -252,7 +257,10 @@ function finishSignIn(code: string): void {
     ? currentUrl
     : (retryUrls.get(contents) ?? `${appOrigin}/`);
 
-  loadAppUrl(contents, withAuthCode(currentAppUrl, code));
+  loadAppUrl(
+    contents,
+    withAuthCode(currentAppUrl, target.code, target.attempt),
+  );
   focusWindow(win);
 }
 
@@ -260,9 +268,11 @@ function finishSignIn(code: string): void {
 function handleOpenUrl(rawUrl: string): void {
   const target = parseBereanOpenUrl(rawUrl);
   if (target?.kind === "auth") {
-    if (isSignInPending(pendingSignIn, Date.now())) {
+    // Not cleared here: every code inside the window is delivered.
+    const startedFrom = signInCodeTarget(pendingSignIn, Date.now());
+    if (startedFrom !== null) {
       console.info("[berean] Sign-in code received from the browser");
-      finishSignIn(target.code);
+      finishSignIn(target, startedFrom);
     } else {
       console.info("[berean] Ignoring a sign-in link: no sign-in is pending");
       focusOrCreateWindow();

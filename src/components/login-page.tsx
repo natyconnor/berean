@@ -2,10 +2,8 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { Link } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LoginPageAtmosphere } from "@/components/login-page-atmosphere";
-import {
-  DESKTOP_AUTH_REDIRECT_PATH,
-  isBereanDesktop,
-} from "@/lib/desktop-platform";
+import { isBereanDesktop } from "@/lib/desktop-platform";
+import { startDesktopSignInAttempt } from "@/lib/desktop-sign-in-attempt";
 import { devLog, logInteraction } from "@/lib/dev-log";
 import {
   heroBackgroundLayerStyle,
@@ -91,7 +89,7 @@ export function LoginPage({
         // the system browser, so this page stays put. The browser hands the
         // result back through berean://auth, and the shell reloads this
         // window with the sign-in code.
-        await signIn("google", { redirectTo: DESKTOP_AUTH_REDIRECT_PATH });
+        await signIn("google", { redirectTo: startDesktopSignInAttempt() });
         logInteraction("auth", "sign-in-handed-off-to-browser", {
           provider: "google",
         });

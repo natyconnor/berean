@@ -133,10 +133,11 @@ Google does not allow sign-in from an embedded browser, and the shell never
 renders a third-party page anyway. Sign-in happens in the user's default
 browser and comes back through `berean://auth`:
 
-1. **Login page** (`src/components/login-page.tsx`, desktop only) calls
-   `signIn("google", { redirectTo: "/desktop-auth.html" })`. Convex Auth stores
-   a _verifier_ in the app's `localStorage`, then points the window at
-   `{CONVEX_SITE_URL}/api/auth/signin/google?…`.
+1. **Login page** (`src/components/login-page.tsx`, desktop only) starts a
+   _sign-in attempt_ with a random id, remembers it in `localStorage`, and
+   calls `signIn("google", { redirectTo: "/desktop-auth.html?signInAttempt=…" })`.
+   Convex Auth stores a _verifier_ in the app's `localStorage`, then points
+   the window at `{CONVEX_SITE_URL}/api/auth/signin/google?…`.
 2. **Main** sees that navigation leave the app origin, cancels it and opens it
    in the system browser. Because it is a Convex sign-in URL
    (`https://*.convex.site/api/auth/signin/…`), main records a pending
@@ -144,22 +145,43 @@ browser and comes back through `berean://auth`:
    page stays put and shows "Finish signing in in your browser" with an **Open
    browser again** button, which simply starts over.
 3. **The browser** goes through Google. Convex then redirects to
-   `{SITE_URL}/desktop-auth.html?code=…`.
-4. **`public/desktop-auth.html`** navigates to `berean://auth?code=…` and shows
-   an **Open Berean** button with the same link, for browsers that block the
-   automatic hand-back. Browsers ask the user to allow opening Berean; that
-   prompt is expected. It removes `?code=` from the address bar and history
-   once the link is built.
+   `{SITE_URL}/desktop-auth.html?signInAttempt=…&code=…`.
+4. **`public/desktop-auth.html`** navigates to
+   `berean://auth?code=…&signInAttempt=…` and shows an **Open Berean** button
+   with the same link, for browsers that block the automatic hand-back.
+   Browsers ask the user to allow opening Berean; that prompt is expected. It
+   removes the query from the address bar and history once the link is built.
 5. **macOS** delivers the link to main as `open-url`. Main parses it with
-   `parseBereanOpenUrl`. If a sign-in is pending, it clears it, reloads the
-   window that started sign-in at its current URL with `?code=…` added, and
-   brings it to the front. If that window is gone it uses the first window, or
-   opens a new one. With no pending sign-in (none started, it expired, or a
-   code was already used, including a link that launches the app) the link is
-   ignored and Berean just comes to the front, so another site cannot reload
-   the app with a code of its choosing.
-6. **The web app** loads, finds `?code=`, exchanges it using the stored
-   verifier, and strips the param. The user is signed in, in every window.
+   `parseBereanOpenUrl`. If a sign-in is pending, it reloads the window that
+   started sign-in at its current URL with `?code=…&signInAttempt=…` added,
+   and brings it to the front. If that window is gone it uses the first
+   window, or opens a new one. The pending sign-in is **not** used up: every
+   code inside the 10 minutes is delivered (see below). With no pending
+   sign-in (none started, or it expired, including a link that launches the
+   app) the link is ignored and Berean just comes to the front, so another
+   site cannot reload the app with a code of its choosing.
+6. **The web app** loads and finds `?code=`. Its `shouldHandleCode`
+   (`src/lib/desktop-sign-in-attempt.ts`) lets Convex Auth redeem the code
+   only if its attempt id is the latest one started in this app, and uses the
+   attempt up. Convex Auth exchanges the code using the stored verifier and
+   strips the param. The user is signed in, in every window. A code that is
+   not redeemed is just removed from the URL.
+
+### Why codes carry an attempt id
+
+Convex Auth keeps one verifier, which every `signIn` overwrites, and it
+deletes the verifier _before_ it tries a code. A failed exchange also clears
+the session (`tokens: null`). So, without the attempt check:
+
+- after **Open browser again**, finishing the older tab spends the newer
+  verifier on a code that cannot match it, and the newer tab then fails too;
+- a code that arrives after sign-in succeeded (the hand-back page opening
+  Berean twice, or a second tab finished later) signs the user out.
+
+With it, only the newest attempt's code is redeemed, once, whichever order the
+tabs finish in. That is also why main no longer consumes the pending sign-in
+on the first code. A code without an attempt id (from an older hand-back page)
+is redeemed as before.
 
 Nothing under `convex/` changed for this: Convex Auth's default redirect
 callback already accepts a `redirectTo` that starts with `/` and resolves it
@@ -204,7 +226,10 @@ open "berean://auth?code=test"
 
 The window reloads at `…/?code=test`, the app strips the param, the exchange
 fails (the code is fake) and the login page comes back. Run the same `open`
-again and nothing reloads: the pending sign-in was used. If `open` starts a
+again and the window reloads again: codes keep being delivered for 10 minutes.
+A link with an attempt id the app did not start
+(`open "berean://auth?code=test&signInAttempt=0000000000000000"`) reloads the
+window, but the app drops the code without trying it. If `open` starts a
 different copy of Berean, or nothing, re-register the packed app:
 
 ```bash
