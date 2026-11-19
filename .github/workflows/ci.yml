@@ -47,3 +47,46 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  # The desktop shell in electron/ is a standalone package with its own
+  # lockfile, so the job above never installs or checks it. No packaging here;
+  # that needs a Mac and happens in desktop-release.yml.
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            electron/pnpm-lock.yaml
+
+      # The root install provides ESLint for the shell's lint step.
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        run: pnpm --dir electron install --frozen-lockfile
+        env:
+          # Typecheck and build never run Electron itself.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Typecheck and lint the shell
+        run: pnpm run desktop:check
+        env:
+          DESKTOP_CHECK_REQUIRED: "1"
+
+      - name: Build the shell
+        run: pnpm --dir electron run build
