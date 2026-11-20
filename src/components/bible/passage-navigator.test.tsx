@@ -46,7 +46,10 @@ describe("PassageNavigator", () => {
   it("opens on the book list with no Hearted toggle", () => {
     renderNavigator();
 
-    expect(screen.getByPlaceholderText("Search books…")).toHaveFocus();
+    const searchBox = screen.getByPlaceholderText("Search books…");
+    expect(searchBox).toHaveFocus();
+    // The dialog's Close button sits top-right; the row keeps room for it.
+    expect(searchBox.parentElement).toHaveClass("pr-12");
     expectNoHeartedView();
   });
 

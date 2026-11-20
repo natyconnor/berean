@@ -176,7 +176,8 @@ export function PassageNavigator({
               exit="exitToLeft"
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              <div className="border-b p-2">
+              {/* pr-12 keeps the search box clear of the dialog's Close button. */}
+              <div className="border-b p-2 pr-12">
                 <Input
                   placeholder="Search books…"
                   value={search}
