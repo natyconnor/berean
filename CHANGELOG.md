@@ -30,6 +30,18 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.22.0](https://github.com/natyconnor/berean/compare/v1.21.1...v1.22.0) (2026-11-20)
+
+
+### Features
+
+* **desktop:** add Mac desktop shell with browser sign-in ([#419](https://github.com/natyconnor/berean/issues/419)) ([58782e1](https://github.com/natyconnor/berean/commit/58782e19903fb6d3a0b8d11a1e02827fe58740cb))
+
+
+### Bug Fixes
+
+* Remove the Hearted tab from Go to passage ([#425](https://github.com/natyconnor/berean/issues/425)) ([4049485](https://github.com/natyconnor/berean/commit/4049485f0568e715f79a393415bcee9df23a01ed))
+
 ## [1.21.1](https://github.com/natyconnor/berean/compare/v1.21.0...v1.21.1) (2026-11-13)
 
 
