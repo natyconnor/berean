@@ -73,20 +73,3 @@ export function heartMatchesBookFilter(
     name.toLowerCase().includes(query),
   );
 }
-
-/**
- * Hearts grouped by book. Groups keep the order their book first appears in
- * and rows keep their order within a group, so a newest-first list stays
- * newest first and loading another page never moves rows already shown.
- */
-export function groupHeartsByBook<T extends { book: string }>(
-  items: readonly T[],
-): { book: string; items: T[] }[] {
-  const groups = new Map<string, T[]>();
-  for (const item of items) {
-    const group = groups.get(item.book);
-    if (group) group.push(item);
-    else groups.set(item.book, [item]);
-  }
-  return [...groups].map(([book, rows]) => ({ book, items: rows }));
-}
