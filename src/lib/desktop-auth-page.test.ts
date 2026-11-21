@@ -65,17 +65,23 @@ describe("desktop-auth.html", () => {
     ).toBe("noindex");
   });
 
-  it("hands a code back to the app through berean://auth", () => {
-    const { message, button } = loadPage("?code=abc123");
+  const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
-    expect(button.getAttribute("href")).toBe("berean://auth?code=abc123");
+  it("hands a code and its attempt id back to the app through berean://auth", () => {
+    const { message, button } = loadPage(
+      `?signInAttempt=${attempt}&code=abc123`,
+    );
+
+    expect(button.getAttribute("href")).toBe(
+      `berean://auth?code=abc123&signInAttempt=${attempt}`,
+    );
     expect(button.hidden).toBe(false);
     expect(button.textContent).toBe("Open Berean");
     expect(message).toBe("Return to Berean to finish signing in.");
   });
 
   it("removes the code from the address bar and history", () => {
-    loadPage("?code=abc123");
+    loadPage(`?signInAttempt=${attempt}&code=abc123`);
 
     expect(window.location.pathname).toBe(DESKTOP_AUTH_REDIRECT_PATH);
     expect(window.location.search).toBe("");
@@ -87,42 +93,26 @@ describe("desktop-auth.html", () => {
     expect(window.location.search).toBe("?error=access_denied");
   });
 
-  it("passes the sign-in attempt id along", () => {
-    const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
-    const { button } = loadPage(`?signInAttempt=${attempt}&code=abc123`);
-
-    expect(button.getAttribute("href")).toBe(
-      `berean://auth?code=abc123&signInAttempt=${attempt}`,
-    );
-    expect(parseBereanOpenUrl(button.getAttribute("href") ?? "")).toEqual({
-      kind: "auth",
-      code: "abc123",
-      attempt,
-    });
-    expect(window.location.search).toBe("");
-  });
-
-  it("drops a malformed attempt id rather than the code", () => {
-    const { button } = loadPage("?signInAttempt=bad%26x%3D1&code=abc123");
-
-    expect(button.getAttribute("href")).toBe("berean://auth?code=abc123");
-  });
-
   it("builds a link the app's parser accepts, whatever the code contains", () => {
     const code = "a/b+c=d&e f#g";
-    const { button } = loadPage(`?code=${encodeURIComponent(code)}`);
+    const { button } = loadPage(
+      `?signInAttempt=${attempt}&code=${encodeURIComponent(code)}`,
+    );
 
     expect(parseBereanOpenUrl(button.getAttribute("href") ?? "")).toEqual({
       kind: "auth",
       code,
+      attempt,
     });
   });
 
   it.each([
     ["no query", ""],
-    ["an empty code", "?code="],
+    ["an empty code", `?signInAttempt=${attempt}&code=`],
     ["an unrelated param", "?error=access_denied"],
-    ["an oversized code", `?code=${"a".repeat(513)}`],
+    ["an oversized code", `?signInAttempt=${attempt}&code=${"a".repeat(513)}`],
+    ["a code without an attempt id", "?code=abc123"],
+    ["a malformed attempt id", "?signInAttempt=bad%26x%3D1&code=abc123"],
   ])("shows the failure message for %s", (_label, search) => {
     const { message, button } = loadPage(search);
 

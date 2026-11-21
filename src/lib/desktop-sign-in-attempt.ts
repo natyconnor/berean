@@ -61,21 +61,22 @@ function replaceSearch(url: URL): void {
  * `ConvexAuthProvider`'s `shouldHandleCode`. Called once on load when the URL
  * has `?code=`.
  *
- * On the web, and for a code without an attempt id, it keeps Convex Auth's
- * default (redeem it). In the desktop app a code with an attempt id is
- * redeemed only if that id is the pending attempt, which is then used up.
- * A code that is not redeemed is removed from the URL, and the current
- * session (signed in or not) is left alone.
+ * On the web it keeps Convex Auth's default (redeem it). In the desktop app a
+ * code is redeemed only if its attempt id is the pending attempt, which is
+ * then used up; a code without one is never redeemed. A code that is not
+ * redeemed is removed from the URL, and the current session (signed in or
+ * not) is left alone.
  */
 export function shouldHandleSignInCode(): boolean {
+  if (!isBereanDesktop()) return true;
+
   const url = new URL(window.location.href);
   const attempt = url.searchParams.get(SIGN_IN_ATTEMPT_PARAM);
-  if (attempt === null || !isBereanDesktop()) return true;
-
   url.searchParams.delete(SIGN_IN_ATTEMPT_PARAM);
   const storage = safeStorage();
   const pending = storage?.getItem(STORAGE_KEY) ?? null;
-  const isPending = isSignInAttemptId(attempt) && attempt === pending;
+  const isPending =
+    attempt !== null && isSignInAttemptId(attempt) && attempt === pending;
 
   if (isPending) {
     storage?.removeItem(STORAGE_KEY);

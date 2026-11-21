@@ -3,11 +3,23 @@
  * (`src/lib/desktop-shell-policy.test.ts`).
  */
 
+import {
+  isSignInAttemptId,
+  SIGN_IN_ATTEMPT_PARAM,
+} from "../shared/desktop-deep-link";
+
 /** How long a `berean://auth` link is accepted after sign-in starts. */
 export const SIGN_IN_WINDOW_MS = 10 * 60 * 1000;
 
-/** A sign-in that went to the browser and has not come back yet. */
-export type PendingSignIn<T> = { contents: T; startedAt: number };
+/**
+ * A sign-in that went to the browser and has not come back yet. `attempt` is
+ * the id the web app gave it (see `src/lib/desktop-sign-in-attempt.ts`).
+ */
+export type PendingSignIn<T> = {
+  contents: T;
+  attempt: string;
+  startedAt: number;
+};
 
 function parseUrl(rawUrl: string): URL | null {
   try {
@@ -45,19 +57,43 @@ export function isSignInPending(
 }
 
 /**
+ * The attempt id a Convex sign-in URL carries, or null. The web app passes
+ * `redirectTo: "/desktop-auth.html?signInAttempt=…"` to `signIn`, and Convex
+ * Auth copies `redirectTo` onto the sign-in URL as a query param.
+ */
+export function signInAttemptFromUrl(rawUrl: string): string | null {
+  if (!isConvexSignInUrl(rawUrl)) return null;
+  const redirectTo = parseUrl(rawUrl)?.searchParams.get("redirectTo");
+  if (!redirectTo) return null;
+  let attempt: string | null;
+  try {
+    attempt = new URL(redirectTo, "https://berean.invalid").searchParams.get(
+      SIGN_IN_ATTEMPT_PARAM,
+    );
+  } catch {
+    return null;
+  }
+  return attempt !== null && isSignInAttemptId(attempt) ? attempt : null;
+}
+
+/**
  * Where a `berean://auth` code goes: the window that started the pending
- * sign-in, or null to ignore the code (no sign-in started, or it expired).
+ * sign-in, or null to ignore the code. A code is only for the latest sign-in
+ * (same attempt id) while it is pending.
  *
- * Reading this does not use the sign-in up. After "Open browser again" the
- * older tab's code can arrive first; the newer tab's code must still get
- * through. The web app decides which code to redeem (see
- * `src/lib/desktop-sign-in-attempt.ts`).
+ * After "Open browser again" the older tab's code has the older id and is
+ * ignored without touching the window; the newer tab's code still gets
+ * through. The caller clears the pending sign-in once its code is delivered,
+ * so a repeat or stray link cannot reload the window afterwards.
  */
 export function signInCodeTarget<T>(
   pending: PendingSignIn<T> | null,
+  attempt: string,
   now: number,
 ): T | null {
-  return pending !== null && isSignInPending(pending, now)
+  return pending !== null &&
+    pending.attempt === attempt &&
+    isSignInPending(pending, now)
     ? pending.contents
     : null;
 }

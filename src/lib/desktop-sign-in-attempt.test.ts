@@ -108,10 +108,19 @@ describe("shouldHandleSignInCode in the desktop app", () => {
     expect(currentUrl()).toBe("/passage/John-1#v3");
   });
 
-  it("redeems a code that carries no attempt id (older hand-back page)", () => {
+  it("never redeems a code that carries no attempt id", () => {
     startDesktopSignInAttempt();
     landWith("?code=abc");
+    expect(shouldHandleSignInCode()).toBe(false);
+    expect(currentUrl()).toBe("/passage/John-1#v3");
+  });
+
+  it("does not use up the pending attempt on a code it ignores", () => {
+    const attempt = attemptFrom(startDesktopSignInAttempt());
+    landWith("?code=stray");
+    expect(shouldHandleSignInCode()).toBe(false);
+
+    landWith(`?code=abc&signInAttempt=${attempt}`);
     expect(shouldHandleSignInCode()).toBe(true);
-    expect(currentUrl()).toBe("/passage/John-1?code=abc#v3");
   });
 });

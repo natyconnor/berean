@@ -21,6 +21,7 @@ import {
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
+  signInAttemptFromUrl,
   signInCodeTarget,
   type PendingSignIn,
 } from "./shell-policy";
@@ -53,9 +54,10 @@ const appOrigin = resolveAppOrigin();
 const retryUrls = new WeakMap<WebContents, string>();
 
 /**
- * The window that sent a sign-in to the browser. `berean://auth` is only
- * accepted while this is set and recent (10 minutes), and it goes back to
- * this window. A code does not clear it; a new sign-in replaces it.
+ * The window that sent a sign-in to the browser, and that sign-in's attempt
+ * id. `berean://auth` is only accepted while this is set and recent
+ * (10 minutes), and only with the same attempt id; it goes back to this
+ * window. A new sign-in replaces it, and delivering its code clears it.
  */
 let pendingSignIn: PendingSignIn<WebContents> | null = null;
 
@@ -133,7 +135,16 @@ function guardNavigation(contents: WebContents): void {
     if (isAppUrl(details.url)) return;
     details.preventDefault();
     if (openInBrowser(details.url) && isConvexSignInUrl(details.url)) {
-      pendingSignIn = { contents, startedAt: Date.now() };
+      // A new sign-in overwrites the web app's verifier, so it always
+      // replaces the pending one.
+      const attempt = signInAttemptFromUrl(details.url);
+      pendingSignIn =
+        attempt === null ? null : { contents, attempt, startedAt: Date.now() };
+      if (attempt === null) {
+        console.warn(
+          "[berean] Sign-in has no attempt id; its code will be ignored",
+        );
+      }
     }
   });
 
@@ -268,13 +279,20 @@ function finishSignIn(
 function handleOpenUrl(rawUrl: string): void {
   const target = parseBereanOpenUrl(rawUrl);
   if (target?.kind === "auth") {
-    // Not cleared here: every code inside the window is delivered.
-    const startedFrom = signInCodeTarget(pendingSignIn, Date.now());
+    const startedFrom = signInCodeTarget(
+      pendingSignIn,
+      target.attempt,
+      Date.now(),
+    );
     if (startedFrom !== null) {
+      // Used up: a repeat or stray link must not reload the window again.
+      pendingSignIn = null;
       console.info("[berean] Sign-in code received from the browser");
       finishSignIn(target, startedFrom);
     } else {
-      console.info("[berean] Ignoring a sign-in link: no sign-in is pending");
+      console.info(
+        "[berean] Ignoring a sign-in link: not for the pending sign-in",
+      );
       focusOrCreateWindow();
     }
   }

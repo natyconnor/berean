@@ -18,13 +18,12 @@ export type BereanRouteTarget = {
 
 /**
  * `attempt` identifies the sign-in the code belongs to (see
- * `src/lib/desktop-sign-in-attempt.ts`). Absent on links from before it
- * existed.
+ * `src/lib/desktop-sign-in-attempt.ts`). Every auth link must carry one.
  */
 export type BereanAuthTarget = {
   kind: "auth";
   code: string;
-  attempt?: string;
+  attempt: string;
 };
 
 export type BereanOpenTarget = BereanRouteTarget | BereanAuthTarget;
@@ -50,11 +49,11 @@ const PARSE_BASE = "https://berean.invalid";
 /**
  * `berean://passage/John-1?startVerse=3` → route
  * `berean:///passage/John-1`             → route (some OSes add a slash)
- * `berean://auth?code=abc123`            → auth
- * `berean://auth?code=abc&signInAttempt=…` → auth, with its attempt id
+ * `berean://auth?code=abc&signInAttempt=…` → auth
  *
  * Returns null for every other scheme and for anything that is not an app
- * route or a well-formed auth callback.
+ * route or a well-formed auth callback. An auth callback without a valid
+ * attempt id is not well-formed.
  */
 export function parseBereanOpenUrl(raw: string): BereanOpenTarget | null {
   if (raw.length > MAX_URL_LENGTH) return null;
@@ -80,8 +79,7 @@ export function parseBereanOpenUrl(raw: string): BereanOpenTarget | null {
     const code = parsed.searchParams.get("code");
     if (!code || code.length > MAX_AUTH_CODE_LENGTH) return null;
     const attempt = parsed.searchParams.get(SIGN_IN_ATTEMPT_PARAM);
-    if (attempt === null) return { kind: "auth", code };
-    if (!isSignInAttemptId(attempt)) return null;
+    if (attempt === null || !isSignInAttemptId(attempt)) return null;
     return { kind: "auth", code, attempt };
   }
 
@@ -121,20 +119,16 @@ export function toAppUrl(
 }
 
 /**
- * Sets `?code=` (and the sign-in attempt id, when there is one) on
- * `currentUrl`, replacing any existing values.
+ * Sets `?code=` and the sign-in attempt id on `currentUrl`, replacing any
+ * existing values.
  */
 export function withAuthCode(
   currentUrl: string,
   code: string,
-  attempt?: string,
+  attempt: string,
 ): string {
   const url = new URL(currentUrl);
   url.searchParams.set("code", code);
-  if (attempt === undefined) {
-    url.searchParams.delete(SIGN_IN_ATTEMPT_PARAM);
-  } else {
-    url.searchParams.set(SIGN_IN_ATTEMPT_PARAM, attempt);
-  }
+  url.searchParams.set(SIGN_IN_ATTEMPT_PARAM, attempt);
   return url.toString();
 }

@@ -141,7 +141,8 @@ browser and comes back through `berean://auth`:
 2. **Main** sees that navigation leave the app origin, cancels it and opens it
    in the system browser. Because it is a Convex sign-in URL
    (`https://*.convex.site/api/auth/signin/…`), main records a pending
-   sign-in for that window, good for 10 minutes. The login
+   sign-in for that window, with the attempt id from the URL's `redirectTo`,
+   good for 10 minutes. A new sign-in replaces it. The login
    page stays put and shows "Finish signing in in your browser" with an **Open
    browser again** button, which simply starts over.
 3. **The browser** goes through Google. Convex then redirects to
@@ -152,20 +153,24 @@ browser and comes back through `berean://auth`:
    Browsers ask the user to allow opening Berean; that prompt is expected. It
    removes the query from the address bar and history once the link is built.
 5. **macOS** delivers the link to main as `open-url`. Main parses it with
-   `parseBereanOpenUrl`. If a sign-in is pending, it reloads the window that
-   started sign-in at its current URL with `?code=…&signInAttempt=…` added,
-   and brings it to the front. If that window is gone it uses the first
-   window, or opens a new one. The pending sign-in is **not** used up: every
-   code inside the 10 minutes is delivered (see below). With no pending
-   sign-in (none started, or it expired, including a link that launches the
-   app) the link is ignored and Berean just comes to the front, so another
-   site cannot reload the app with a code of its choosing.
+   `parseBereanOpenUrl`, which rejects an auth link without a valid attempt
+   id. If the link's attempt id is the pending sign-in's, main clears the
+   pending sign-in, reloads the window that started it at its current URL
+   with `?code=…&signInAttempt=…` added, and brings it to the front. If that
+   window is gone it uses the first window, or opens a new one. Any other
+   auth link (no sign-in pending, it expired, a different or missing attempt
+   id, or a repeat of a code already delivered, including a link that
+   launches the app) is ignored and Berean just comes to the front. So no
+   window reloads, and no unsaved note is lost, for a code that is not the
+   one the app is waiting for, and another site cannot reload the app with a
+   code of its choosing.
 6. **The web app** loads and finds `?code=`. Its `shouldHandleCode`
    (`src/lib/desktop-sign-in-attempt.ts`) lets Convex Auth redeem the code
    only if its attempt id is the latest one started in this app, and uses the
    attempt up. Convex Auth exchanges the code using the stored verifier and
    strips the param. The user is signed in, in every window. A code that is
-   not redeemed is just removed from the URL.
+   not redeemed (including one with no attempt id) is just removed from the
+   URL. This repeats main's check inside the page.
 
 ### Why codes carry an attempt id
 
@@ -179,9 +184,9 @@ the session (`tokens: null`). So, without the attempt check:
   Berean twice, or a second tab finished later) signs the user out.
 
 With it, only the newest attempt's code is redeemed, once, whichever order the
-tabs finish in. That is also why main no longer consumes the pending sign-in
-on the first code. A code without an attempt id (from an older hand-back page)
-is redeemed as before.
+tabs finish in. Main makes the same check before it reloads anything, so the
+older tab's code, a repeat, or a stray link never reloads a window. A code
+without an attempt id is never used.
 
 Nothing under `convex/` changed for this: Convex Auth's default redirect
 callback already accepts a `redirectTo` that starts with `/` and resolves it
@@ -217,20 +222,29 @@ Click **Sign in with Google**: the default browser opens, and after choosing an
 account it shows the hand-back page and Berean comes to the front signed in.
 
 To exercise the hand-back without Google, with the app running as above, click
-**Sign in with Google** (close the browser tab it opens), then within 10
+**Sign in with Google** and close the browser tab it opens. Get the attempt id
+from View → Toggle Developer Tools → Console:
+`localStorage.getItem("berean.desktopSignInAttempt")`. Then, within 10
 minutes:
 
 ```bash
-open "berean://auth?code=test"
+ATTEMPT=…   # the id from the console
+open "berean://auth?code=test&signInAttempt=$ATTEMPT"
 ```
 
-The window reloads at `…/?code=test`, the app strips the param, the exchange
-fails (the code is fake) and the login page comes back. Run the same `open`
-again and the window reloads again: codes keep being delivered for 10 minutes.
-A link with an attempt id the app did not start
-(`open "berean://auth?code=test&signInAttempt=0000000000000000"`) reloads the
-window, but the app drops the code without trying it. If `open` starts a
-different copy of Berean, or nothing, re-register the packed app:
+The window reloads at `…/?code=test&signInAttempt=…`, the app strips the
+params, the exchange fails (the code is fake) and the login page comes back.
+Each of these is ignored, with no reload:
+
+- the same `open` again (the pending sign-in was used up);
+- `open "berean://auth?code=test"` (no attempt id);
+- `open "berean://auth?code=test&signInAttempt=0000000000000000"` (not the
+  pending attempt).
+
+To check **Open browser again**, click Sign in, note the id, click Open
+browser again, and `open` a link with the first id: nothing reloads. A link
+with the new id reloads. If `open` starts a different copy of Berean, or
+nothing, re-register the packed app:
 
 ```bash
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
