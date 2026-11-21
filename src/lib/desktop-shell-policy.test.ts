@@ -5,6 +5,8 @@ import {
   isSameOrigin,
   isSignInPending,
   SIGN_IN_WINDOW_MS,
+  signInAttemptFromUrl,
+  signInCodeTarget,
 } from "../../electron/shell-policy";
 
 const APP = "https://berean.nathanconnor.dev";
@@ -36,7 +38,11 @@ describe("isConvexSignInUrl", () => {
 });
 
 describe("isSignInPending", () => {
-  const pending = { contents: {}, startedAt: 1_000 };
+  const pending = {
+    contents: {},
+    attempt: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    startedAt: 1_000,
+  };
 
   it("is false when nothing is pending", () => {
     expect(isSignInPending(null, 1_000)).toBe(false);
@@ -47,6 +53,70 @@ describe("isSignInPending", () => {
     expect(isSignInPending(pending, 1_000)).toBe(true);
     expect(isSignInPending(pending, 1_000 + SIGN_IN_WINDOW_MS)).toBe(true);
     expect(isSignInPending(pending, 1_001 + SIGN_IN_WINDOW_MS)).toBe(false);
+  });
+});
+
+describe("signInAttemptFromUrl", () => {
+  const ATTEMPT = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const signInUrl = (redirectTo: string) => {
+    const url = new URL(
+      "https://happy-otter-123.convex.site/api/auth/signin/google",
+    );
+    url.searchParams.set("code", "verifier");
+    url.searchParams.set("redirectTo", redirectTo);
+    return url.toString();
+  };
+
+  it("reads the attempt id from Convex Auth's redirectTo", () => {
+    expect(
+      signInAttemptFromUrl(
+        signInUrl(`/desktop-auth.html?signInAttempt=${ATTEMPT}`),
+      ),
+    ).toBe(ATTEMPT);
+  });
+
+  it.each([
+    [
+      "no redirectTo",
+      "https://happy-otter-123.convex.site/api/auth/signin/google?code=v",
+    ],
+    ["a redirectTo without an id", signInUrl("/desktop-auth.html")],
+    ["a malformed id", signInUrl("/desktop-auth.html?signInAttempt=short")],
+    [
+      "a URL that is not a Convex sign-in",
+      `${APP}/desktop-auth.html?redirectTo=${encodeURIComponent(`/x?signInAttempt=${ATTEMPT}`)}`,
+    ],
+  ])("returns null for %s", (_label, url) => {
+    expect(signInAttemptFromUrl(url)).toBeNull();
+  });
+});
+
+describe("signInCodeTarget", () => {
+  const win = { id: "sign-in window" };
+  const ATTEMPT = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const pending = { contents: win, attempt: ATTEMPT, startedAt: 1_000 };
+
+  it("ignores a code when no sign-in was started", () => {
+    expect(signInCodeTarget(null, ATTEMPT, 1_000)).toBeNull();
+  });
+
+  it("sends the pending sign-in's code to the window that started it", () => {
+    expect(signInCodeTarget(pending, ATTEMPT, 2_000)).toBe(win);
+  });
+
+  it("ignores a code from another sign-in (the older tab after Open browser again)", () => {
+    expect(
+      signInCodeTarget(pending, "11111111-2222-4333-8444-555555555555", 2_000),
+    ).toBeNull();
+  });
+
+  it("ignores every code once ten minutes have passed", () => {
+    expect(signInCodeTarget(pending, ATTEMPT, 1_000 + SIGN_IN_WINDOW_MS)).toBe(
+      win,
+    );
+    expect(
+      signInCodeTarget(pending, ATTEMPT, 1_001 + SIGN_IN_WINDOW_MS),
+    ).toBeNull();
   });
 });
 

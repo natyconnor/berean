@@ -39,6 +39,9 @@ vi.mock("@/lib/dev-log", () => ({
 }));
 
 const WAITING_TEXT = "Finish signing in in your browser";
+const DESKTOP_REDIRECT = new RegExp(
+  `^${DESKTOP_AUTH_REDIRECT_PATH.replace(".", "\\.")}\\?signInAttempt=[\\w-]{16,64}$`,
+);
 
 function loggedActions(): string[] {
   return mocks.logInteraction.mock.calls.map(([, action]) => action);
@@ -94,7 +97,7 @@ describe("LoginPage sign-in in the desktop app", () => {
 
     expect(mocks.signIn).toHaveBeenCalledTimes(1);
     expect(mocks.signIn).toHaveBeenCalledWith("google", {
-      redirectTo: DESKTOP_AUTH_REDIRECT_PATH,
+      redirectTo: expect.stringMatching(DESKTOP_REDIRECT) as unknown,
     });
     expect(await screen.findByText(WAITING_TEXT)).toBeInTheDocument();
     expect(
@@ -119,9 +122,12 @@ describe("LoginPage sign-in in the desktop app", () => {
     await user.click(again);
 
     expect(mocks.signIn).toHaveBeenCalledTimes(2);
-    expect(mocks.signIn).toHaveBeenLastCalledWith("google", {
-      redirectTo: DESKTOP_AUTH_REDIRECT_PATH,
-    });
+    // Each attempt gets its own id, so only the newest tab's code is redeemed.
+    const redirects = mocks.signIn.mock.calls.map(
+      (call) => (call[1] as { redirectTo: string }).redirectTo,
+    );
+    expect(redirects[1]).toMatch(DESKTOP_REDIRECT);
+    expect(redirects[1]).not.toBe(redirects[0]);
     expect(screen.getByText(WAITING_TEXT)).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Open browser again" }),

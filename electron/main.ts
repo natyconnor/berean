@@ -10,14 +10,19 @@ import {
   type MenuItemConstructorOptions,
   type WebContents,
 } from "electron";
-import { parseBereanOpenUrl, withAuthCode } from "../shared/desktop-deep-link";
+import {
+  parseBereanOpenUrl,
+  withAuthCode,
+  type BereanAuthTarget,
+} from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
 import {
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
-  isSignInPending,
+  signInAttemptFromUrl,
+  signInCodeTarget,
   type PendingSignIn,
 } from "./shell-policy";
 
@@ -49,8 +54,10 @@ const appOrigin = resolveAppOrigin();
 const retryUrls = new WeakMap<WebContents, string>();
 
 /**
- * The window that sent a sign-in to the browser. `berean://auth` is only
- * accepted while this is set and recent, and it goes back to this window.
+ * The window that sent a sign-in to the browser, and that sign-in's attempt
+ * id. `berean://auth` is only accepted while this is set and recent
+ * (10 minutes), and only with the same attempt id; it goes back to this
+ * window. A new sign-in replaces it, and delivering its code clears it.
  */
 let pendingSignIn: PendingSignIn<WebContents> | null = null;
 
@@ -128,7 +135,16 @@ function guardNavigation(contents: WebContents): void {
     if (isAppUrl(details.url)) return;
     details.preventDefault();
     if (openInBrowser(details.url) && isConvexSignInUrl(details.url)) {
-      pendingSignIn = { contents, startedAt: Date.now() };
+      // A new sign-in overwrites the web app's verifier, so it always
+      // replaces the pending one.
+      const attempt = signInAttemptFromUrl(details.url);
+      pendingSignIn =
+        attempt === null ? null : { contents, attempt, startedAt: Date.now() };
+      if (attempt === null) {
+        console.warn(
+          "[berean] Sign-in has no attempt id; its code will be ignored",
+        );
+      }
     }
   });
 
@@ -232,17 +248,17 @@ function focusOrCreateWindow(): void {
  * web app exchanges the code using the verifier it stored (in this session's
  * localStorage) when sign-in started, then strips the param.
  */
-function finishSignIn(code: string): void {
-  const startedFrom = pendingSignIn?.contents;
-  pendingSignIn = null;
-  const startedIn =
-    startedFrom && !startedFrom.isDestroyed()
-      ? BrowserWindow.fromWebContents(startedFrom)
-      : null;
+function finishSignIn(
+  target: BereanAuthTarget,
+  startedFrom: WebContents,
+): void {
+  const startedIn = startedFrom.isDestroyed()
+    ? null
+    : BrowserWindow.fromWebContents(startedFrom);
 
   const win = startedIn ?? BrowserWindow.getAllWindows()[0];
   if (!win) {
-    createWindow(withAuthCode(`${appOrigin}/`, code));
+    createWindow(withAuthCode(`${appOrigin}/`, target.code, target.attempt));
     return;
   }
 
@@ -252,7 +268,10 @@ function finishSignIn(code: string): void {
     ? currentUrl
     : (retryUrls.get(contents) ?? `${appOrigin}/`);
 
-  loadAppUrl(contents, withAuthCode(currentAppUrl, code));
+  loadAppUrl(
+    contents,
+    withAuthCode(currentAppUrl, target.code, target.attempt),
+  );
   focusWindow(win);
 }
 
@@ -260,11 +279,20 @@ function finishSignIn(code: string): void {
 function handleOpenUrl(rawUrl: string): void {
   const target = parseBereanOpenUrl(rawUrl);
   if (target?.kind === "auth") {
-    if (isSignInPending(pendingSignIn, Date.now())) {
+    const startedFrom = signInCodeTarget(
+      pendingSignIn,
+      target.attempt,
+      Date.now(),
+    );
+    if (startedFrom !== null) {
+      // Used up: a repeat or stray link must not reload the window again.
+      pendingSignIn = null;
       console.info("[berean] Sign-in code received from the browser");
-      finishSignIn(target.code);
+      finishSignIn(target, startedFrom);
     } else {
-      console.info("[berean] Ignoring a sign-in link: no sign-in is pending");
+      console.info(
+        "[berean] Ignoring a sign-in link: not for the pending sign-in",
+      );
       focusOrCreateWindow();
     }
   }
