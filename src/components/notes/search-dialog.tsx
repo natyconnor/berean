@@ -22,6 +22,7 @@ import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { HighlightedText } from "@/components/search/highlighted-text";
 import { TagFilterControl } from "@/components/search/tag-filter-control";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { useCloseOnHistoryNavigation } from "@/hooks/use-close-on-history-navigation";
 
 interface SearchDialogProps {
   showTrigger?: boolean;
@@ -51,6 +52,8 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
     },
     [open],
   );
+
+  useCloseOnHistoryNavigation(open, () => setDialogOpen(false, "history"));
 
   // Keyboard shortcut
   useEffect(() => {

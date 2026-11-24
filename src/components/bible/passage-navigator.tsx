@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   Dialog,
@@ -17,6 +17,7 @@ import type { PassageNavigationSearch } from "@/lib/tab-context-internal";
 import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { useCloseOnHistoryNavigation } from "@/hooks/use-close-on-history-navigation";
 
 const slideVariants = {
   enterFromRight: { x: 20, opacity: 0 },
@@ -102,6 +103,16 @@ export function PassageNavigator({
   const chapterInputInvalid =
     chapterDigits.length > 0 && highlightedChapter === null;
 
+  const highlightedChapterRef = useRef<HTMLButtonElement>(null);
+  const reduceMotion = useReducedMotion();
+  useEffect(() => {
+    if (highlightedChapter === null) return;
+    highlightedChapterRef.current?.scrollIntoView({
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [highlightedChapter, reduceMotion]);
+
   function selectBook(book: BookInfo) {
     if (book.chapters === 1) {
       selectChapter(book, 1);
@@ -140,6 +151,8 @@ export function PassageNavigator({
     }
   }
 
+  useCloseOnHistoryNavigation(open, () => handleOpenChange(false));
+
   const resolvedTrigger =
     trigger === undefined ? (
       <TooltipButton
@@ -160,7 +173,7 @@ export function PassageNavigator({
         <DialogTrigger asChild>{resolvedTrigger}</DialogTrigger>
       ) : null}
       <DialogContent
-        className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md"
+        className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col overflow-hidden p-0 sm:max-w-md"
         data-passage-dismiss-exempt
       >
         <DialogHeader className="sr-only">
@@ -204,43 +217,52 @@ export function PassageNavigator({
                 />
               </div>
               <ScrollArea className="h-80">
-                <div className="p-1">
-                  {(["OT", "NT"] as const).map((testament) => {
-                    const books = filteredBooks.filter(
-                      (b) => b.testament === testament,
-                    );
-                    if (books.length === 0) return null;
-                    return (
-                      <div key={testament}>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
-                          {testament === "OT"
-                            ? "Old Testament"
-                            : "New Testament"}
+                {filteredBooks.length === 0 ? (
+                  <div
+                    role="status"
+                    className="p-6 text-center text-sm text-muted-foreground"
+                  >
+                    No books found.
+                  </div>
+                ) : (
+                  <div className="p-1">
+                    {(["OT", "NT"] as const).map((testament) => {
+                      const books = filteredBooks.filter(
+                        (b) => b.testament === testament,
+                      );
+                      if (books.length === 0) return null;
+                      return (
+                        <div key={testament}>
+                          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                            {testament === "OT"
+                              ? "Old Testament"
+                              : "New Testament"}
+                          </div>
+                          {books.map((book) => {
+                            const globalIndex = filteredBooks.indexOf(book);
+                            return (
+                              <button
+                                key={book.name}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-sm rounded-sm transition-colors cursor-pointer",
+                                  globalIndex === highlightedIndex
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-muted",
+                                )}
+                                onMouseEnter={() =>
+                                  setHighlightedIndex(globalIndex)
+                                }
+                                onClick={() => selectBook(book)}
+                              >
+                                {book.name}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {books.map((book) => {
-                          const globalIndex = filteredBooks.indexOf(book);
-                          return (
-                            <button
-                              key={book.name}
-                              className={cn(
-                                "w-full text-left px-2 py-1.5 text-sm rounded-sm transition-colors cursor-pointer",
-                                globalIndex === highlightedIndex
-                                  ? "bg-primary text-primary-foreground"
-                                  : "hover:bg-muted",
-                              )}
-                              onMouseEnter={() =>
-                                setHighlightedIndex(globalIndex)
-                              }
-                              onClick={() => selectBook(book)}
-                            >
-                              {book.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </ScrollArea>
             </motion.div>
           ) : (
@@ -251,8 +273,9 @@ export function PassageNavigator({
               animate="center"
               exit="exitToRight"
               transition={{ duration: 0.15, ease: "easeOut" }}
+              className="flex min-h-0 flex-col"
             >
-              <div className="border-b p-2 space-y-2">
+              <div className="shrink-0 border-b p-2 space-y-2">
                 <button
                   className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
                   type="button"
@@ -302,28 +325,37 @@ export function PassageNavigator({
                   ) : null}
                 </div>
               </div>
-              <div className="p-3">
-                <div className="grid grid-cols-6 gap-1">
-                  {Array.from(
-                    { length: selectedBook.chapters },
-                    (_, i) => i + 1,
-                  ).map((ch) => (
-                    <button
-                      key={ch}
-                      type="button"
-                      className={cn(
-                        "h-9 w-full rounded-sm text-sm font-medium transition-colors cursor-pointer",
-                        ch === highlightedChapter
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted hover:bg-primary hover:text-primary-foreground",
-                      )}
-                      onClick={() => selectChapter(selectedBook, ch)}
-                    >
-                      {ch}
-                    </button>
-                  ))}
+              {/* flex-col lets the viewport shrink to the cap; with only
+                  max-h it grows to the full grid and never scrolls. */}
+              <ScrollArea className="flex min-h-0 max-h-80 flex-col">
+                <div className="p-3">
+                  <div className="grid grid-cols-6 gap-1">
+                    {Array.from(
+                      { length: selectedBook.chapters },
+                      (_, i) => i + 1,
+                    ).map((ch) => (
+                      <button
+                        key={ch}
+                        ref={
+                          ch === highlightedChapter
+                            ? highlightedChapterRef
+                            : undefined
+                        }
+                        type="button"
+                        className={cn(
+                          "h-9 w-full scroll-my-3 rounded-sm text-sm font-medium transition-colors cursor-pointer",
+                          ch === highlightedChapter
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted hover:bg-primary hover:text-primary-foreground",
+                        )}
+                        onClick={() => selectChapter(selectedBook, ch)}
+                      >
+                        {ch}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </ScrollArea>
             </motion.div>
           )}
         </AnimatePresence>
