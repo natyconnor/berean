@@ -4,6 +4,7 @@ import {
   isLearningLocked,
   isLearningPhase,
   isReviewPhase,
+  requiredRepsFor,
   type MemoryStatus,
 } from "./memory-scheduler";
 
@@ -25,6 +26,48 @@ export function isPracticeSessionCandidate(
   candidate: MemorySessionCandidate,
 ): boolean {
   return candidate.status !== undefined && isReviewPhase(candidate.status);
+}
+
+/**
+ * Practice more: a single or pack verse in Learning whose step for today is
+ * done (soft-locked). It is practice only, on the step it just cleared
+ * ({@link practiceMoreStage}). Passages are not verse candidates, so they
+ * never reach this.
+ */
+export function offersPracticeMore(
+  candidate: MemorySessionCandidate,
+  now: number,
+): boolean {
+  return (
+    candidate.status === "learning" &&
+    candidate.dueAt !== undefined &&
+    isLearningLocked(
+      {
+        status: candidate.status,
+        dueAt: candidate.dueAt,
+        lastReviewedAt: candidate.lastReviewedAt,
+      },
+      now,
+    )
+  );
+}
+
+/**
+ * The step a locked Learning verse cleared today: clearing a step moves the
+ * verse up one, so it is the one below its current step.
+ */
+export function practiceMoreStage(learnStage: number): number {
+  return Math.max(0, learnStage - 1);
+}
+
+/**
+ * Banked reps behind Practice more's hints: those of the verse's last scored
+ * try of that step today. Reps rise one pass at a time and the pass that
+ * reaches the full count clears the step and locks the day, so that last try
+ * was always made with one pass to go.
+ */
+export function practiceMoreReps(stage: number, wordCount?: number): number {
+  return Math.max(0, requiredRepsFor(stage, wordCount) - 1);
 }
 
 /**

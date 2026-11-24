@@ -18,6 +18,7 @@ import {
   PRACTICE_PASS_LINE,
   REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
+  SESSION_COMPLETE_TITLE,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
 } from "@/lib/memory-copy";
@@ -28,10 +29,16 @@ import {
   MIN_LEARNING_LOCK_MS,
   REVIEW_LAPSE_LEARN_STAGE,
   planVerseAttemptSchedule,
+  requiredRepsFor,
   type MemorySchedule,
   type VerseAttemptPlanInput,
 } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
+import {
+  countVerseWords,
+  hintForProgress,
+  maskVerseText,
+} from "@/lib/verse-hint";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
@@ -4181,6 +4188,217 @@ describe("PracticeBoard not-due Practice", () => {
     });
     expect(counted).not.toHaveProperty("holdSchedule");
     expect(counted).not.toHaveProperty("hint");
+  });
+});
+
+describe("PracticeBoard Practice more", () => {
+  // Cleared Fill in the blanks today: From memory opens tomorrow.
+  const lockedVerse: PracticeVerse = {
+    verseRefId: VERSE_REF_ID,
+    reference: span(1, 1),
+    learnStage: 3,
+    stageReps: 0,
+    status: "learning",
+    dueAt: getSessionNow() + DAY_MS,
+    lastReviewedAt: getSessionNow() - 60_000,
+    ease: 2.3,
+    intervalDays: 0,
+    consecutiveCorrect: 4,
+    lapses: 0,
+  };
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  function renderPracticeMore(
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[lockedVerse]}
+          scopeLabel="Psalm 23:1"
+          onExit={() => {}}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  function expectNoWrite() {
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
+  }
+
+  /** The card fades in from opacity 0 on mount; wait until the text shows. */
+  async function expectShown(text: string) {
+    const element = await screen.findByText(text);
+    await waitFor(() => {
+      expect(element).toBeVisible();
+    });
+  }
+
+  it("practices the step just finished, with no count or journey bar (M1-M3)", async () => {
+    renderPracticeMore();
+
+    await expectShown("Practice · Fill in the blanks");
+    expect(screen.getByText("Verse 1 of 1")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
+    expect(screen.queryByText(/ today$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Learning journey/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+  });
+
+  it("records nothing, ends each try with the practice line, and runs again any number of times (M8)", async () => {
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    const { unmount } = renderPracticeMore({ onRunStateChange });
+
+    await recite(PASSAGE_ONE);
+    await expectShown(PRACTICE_ONLY_CLOSING);
+    expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+
+    await recite(BAD_MISS);
+    await expectShown(PRACTICE_ONLY_CLOSING);
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    await expectShown("Practice · Fill in the blanks");
+    expect(screen.queryByText(SESSION_COMPLETE_TITLE)).not.toBeInTheDocument();
+
+    expectNoWrite();
+    const [state, result] = onRunStateChange.mock.lastCall ?? [];
+    expect(state?.attempts).toEqual([]);
+    expect(state?.progress[FIRST_ID]).toMatchObject({
+      status: "learning",
+      dueAt: lockedVerse.dueAt,
+      lastReviewedAt: lockedVerse.lastReviewedAt,
+    });
+    expect(result?.attempts).toEqual([]);
+
+    // Leave mid-session, then start it again: same step, still nothing saved.
+    await userEvent.type(await screen.findByLabelText("Your verse"), "The");
+    unmount();
+    renderPracticeMore();
+    await expectShown("Practice · Fill in the blanks");
+    await recite(PASSAGE_ONE);
+    await expectShown(PRACTICE_ONLY_CLOSING);
+    expectNoWrite();
+  });
+
+  /** The step's hint text at this many banked reps, as the card renders it. */
+  function hintText(stage: number, reps: number): string {
+    const wordCount = countVerseWords(PASSAGE_ONE);
+    const hint = hintForProgress(stage, reps, wordCount);
+    return maskVerseText(PASSAGE_ONE, hint.stage, {
+      density: hint.density,
+      seed: hint.seed,
+    })
+      .map((token) => token.text)
+      .join("");
+  }
+
+  function shownHint(text: string): HTMLElement {
+    return screen.getByText(
+      (_content, element) =>
+        element?.tagName === "P" && element.textContent === text,
+    );
+  }
+
+  it("uses the hints of the last try of the day, and keeps them on Try again", async () => {
+    // Fill in the blanks was cleared by its final pass, one rep to go.
+    const required = requiredRepsFor(2, countVerseWords(PASSAGE_ONE));
+    const lastTry = hintText(2, required - 1);
+    expect(lastTry).not.toBe(hintText(2, 0));
+    renderPracticeMore();
+
+    await expectShown("Practice · Fill in the blanks");
+    expect(shownHint(lastTry)).toBeInTheDocument();
+    await recite(BAD_MISS);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    await screen.findByLabelText("Your verse");
+    expect(shownHint(lastTry)).toBeInTheDocument();
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    await screen.findByLabelText("Your verse");
+    expect(shownHint(lastTry)).toBeInTheDocument();
+    expectNoWrite();
+  });
+
+  it("ends each result with Try again and Done, and Done leaves for where it started", async () => {
+    const onExit = vi.fn();
+    renderPracticeMore({ onExit });
+
+    await recite(PASSAGE_ONE);
+    await expectShown(PRACTICE_ONLY_CLOSING);
+    const done = screen.getByRole("button", { name: "Done" });
+    const tryAgain = screen.getByRole("button", { name: /Try again/ });
+    expect(done).toHaveAttribute("data-variant", "outline");
+    expect(tryAgain).toHaveAttribute("data-variant", "default");
+    // Same order as the footer's other two-button results: secondary first.
+    expect(done.nextElementSibling).toBe(tryAgain);
+    expect(
+      screen.queryByRole("button", { name: /Continue/ }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(done);
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expectNoWrite();
+  });
+
+  it("offers Done only on Practice more results, not on a not-due Memorized practice", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[{ ...reviewingVerse, dueAt: getSessionNow() + 3 * DAY_MS }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await recite(PASSAGE_ONE);
+    await screen.findByRole("button", { name: /Try again/ });
+    expect(
+      screen.queryByRole("button", { name: "Done" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("practices First letters on a verse that cleared it today", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[{ ...lockedVerse, learnStage: 2 }]}
+          scopeLabel="Psalm 23:1"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await expectShown("Practice · First letters");
   });
 });
 

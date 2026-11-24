@@ -7,6 +7,7 @@ import {
   AccuracyScore,
   ReviewResultRows,
 } from "@/components/memory/review-summary";
+import { useLiveNow } from "@/hooks/use-live-now";
 import {
   SESSION_COMPLETE_FOOTER,
   SESSION_COMPLETE_TITLE,
@@ -18,6 +19,7 @@ import {
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 
+import { practiceMoreLink } from "./practice-more-link";
 import {
   SessionCompleteRows,
   SessionSummaryActions,
@@ -50,7 +52,15 @@ export function TodaySessionSummary({
   extraPracticeHref,
   returnTo,
 }: TodaySessionSummaryProps): JSX.Element {
+  const now = useLiveNow();
   const reviews = groupReviewSessionAttempts(attempts).length;
+  // A card that covers one verse offers Practice more in the footer; a card
+  // that covers more, on each row.
+  const single =
+    passages.length === 0 && reviews === 0 && learned.length === 1
+      ? learned[0]
+      : undefined;
+  const practiceMoreReturnTo = returnTo ?? "/memory";
   // Every unhinted counted try; First letters and practice never reach here.
   const averageAccuracy = averageReviewAccuracy(attempts);
   return (
@@ -100,7 +110,12 @@ export function TodaySessionSummary({
             ))}
           </ul>
         ) : null}
-        {learned.length > 0 ? <SessionCompleteRows verses={learned} /> : null}
+        {learned.length > 0 ? (
+          <SessionCompleteRows
+            verses={learned}
+            practiceMoreReturnTo={single ? undefined : practiceMoreReturnTo}
+          />
+        ) : null}
         {attempts.length > 0 ? (
           <ReviewResultRows
             attempts={attempts}
@@ -121,6 +136,9 @@ export function TodaySessionSummary({
         exitLabel="Done"
         onExit={onDone}
         extraPracticeHref={extraPracticeHref}
+        practiceMore={
+          single ? practiceMoreLink(single, now, practiceMoreReturnTo) : null
+        }
         className="mt-6"
       />
     </MemoryDashboardCard>

@@ -296,25 +296,66 @@ describe("learning phase grades", () => {
     expect(next.dueAt).toBe(NOW);
   });
 
-  it("off at 0 reps drops one band, landing at requiredRepsFor(prev) - 1", () => {
-    // Guided (stage 1) at 0 reps → Read (stage 0) at max(0, 1-1) = 0
+  it("off at 0 reps on Guided drops to Read at 0 reps", () => {
     const next = scheduleNext(learningAt(1, 0), review({ quality: "off" }));
     expect(next.learnStage).toBe(0);
     expect(next.stageReps).toBe(0);
     expect(next.consecutiveCorrect).toBe(0);
   });
 
-  it("off at 0 reps uses wordCount when computing the landing stageReps", () => {
-    // Challenge (stage 2) at 0 reps, long verse: drop to Guided (stage 1).
-    // requiredRepsFor(1, 24) = 5, so landing reps = max(0, 5-1) = 4.
+  it("off at 0 reps on From memory drops to Fill in the blanks at 0 of N, same day (P1)", () => {
+    const next = scheduleNext(
+      learningAt(3, 0),
+      review({ quality: "off", wordCount: LONG_VERSE_WORDS }),
+    );
+    expect(next.status).toBe("learning");
+    expect(next.learnStage).toBe(2);
+    expect(next.stageReps).toBe(0);
+    expect(next.consecutiveCorrect).toBe(0);
+    expect(isDueForLearning(next, NOW)).toBe(true);
+  });
+
+  it("off at 0 reps on Fill in the blanks drops to First letters at 0 of N (P3)", () => {
     const next = scheduleNext(
       learningAt(2, 0),
       review({ quality: "off", wordCount: LONG_VERSE_WORDS }),
     );
     expect(next.learnStage).toBe(1);
-    expect(next.stageReps).toBe(4);
+    expect(next.stageReps).toBe(0);
     expect(next.consecutiveCorrect).toBe(0);
+    expect(isDueForLearning(next, NOW)).toBe(true);
   });
+
+  it.each([
+    [3, 2],
+    [2, 1],
+  ])(
+    "after a drop from stage %i, all N passes on stage %i lock the day and tomorrow starts at the next step (P2, P3)",
+    (from, dropped) => {
+      let s = scheduleNext(
+        learningAt(from, 0),
+        review({ quality: "off", wordCount: LONG_VERSE_WORDS }),
+      );
+      const required = requiredRepsFor(dropped, LONG_VERSE_WORDS);
+      for (let rep = 1; rep < required; rep += 1) {
+        s = scheduleNext(
+          s,
+          review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+        );
+        expect(s.learnStage).toBe(dropped);
+        expect(s.stageReps).toBe(rep);
+        expect(isDueForLearning(s, NOW)).toBe(true);
+      }
+      s = scheduleNext(
+        s,
+        review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+      );
+      expect(s.learnStage).toBe(from);
+      expect(s.stageReps).toBe(0);
+      expect(s.dueAt).toBe(nextLearningSessionDueAt(NOW));
+      expect(isLearningLocked(s, NOW)).toBe(true);
+    },
+  );
 
   it("off at Read 0/0 stays at 0/0 (floor)", () => {
     const next = scheduleNext(learningAt(0, 0), review({ quality: "off" }));

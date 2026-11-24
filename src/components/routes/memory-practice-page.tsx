@@ -22,6 +22,7 @@ import {
 import {
   hasMemorizedVerses,
   isMemorySessionCandidate,
+  offersPracticeMore,
   type MemorySessionKind,
 } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -178,17 +179,17 @@ function scopeMemorySessionVerses(
       return [];
     }
 
+    const candidate = {
+      status: verse.memory?.status,
+      dueAt: verse.memory?.dueAt,
+      lastReviewedAt: verse.memory?.lastReviewedAt,
+    };
+    // One verse's Practice also opens Practice more on a locked Learning verse.
+    const practiceMore =
+      kind === "practice" && scoped && offersPracticeMore(candidate, now);
     if (
-      !isMemorySessionCandidate(
-        {
-          status: verse.memory?.status,
-          dueAt: verse.memory?.dueAt,
-          lastReviewedAt: verse.memory?.lastReviewedAt,
-        },
-        kind,
-        now,
-        scoped,
-      )
+      !practiceMore &&
+      !isMemorySessionCandidate(candidate, kind, now, scoped)
     ) {
       return [];
     }

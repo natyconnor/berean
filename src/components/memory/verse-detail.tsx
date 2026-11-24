@@ -17,6 +17,7 @@ import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
   learnActionLabel,
   memorizeTitleLabel,
+  PRACTICE_MORE_LABEL,
   statusLabel,
   stepShortLabel,
 } from "@/lib/memory-copy";
@@ -24,10 +25,10 @@ import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { withReturn } from "@/lib/memory-return";
 import {
   isDueForReview,
-  isLearningLocked,
   isReviewPhase,
   MAX_LEARN_STAGE,
 } from "@/lib/memory-scheduler";
+import { offersPracticeMore } from "@/lib/memory-session";
 import {
   memoryVerseSessionHref,
   type MemorySessionKind,
@@ -246,7 +247,7 @@ export function VerseDetailBody({
   const sessionHref = (kind: MemorySessionKind) =>
     withReturn(memoryVerseSessionHref(kind, reference), returnTo);
 
-  let actions: ReactNode = null;
+  let actions: ReactNode;
   if (reviewPhase && isDueForReview(detail, now)) {
     actions = (
       <>
@@ -278,7 +279,19 @@ export function VerseDetailBody({
         </InternalLink>
       </Button>
     );
-  } else if (!isLearningLocked(detail, now)) {
+  } else if (offersPracticeMore(detail, now)) {
+    actions = (
+      <Button asChild size="sm" variant="outline" className="max-sm:h-11">
+        <InternalLink
+          href={sessionHref("practice")}
+          aria-label={`${PRACTICE_MORE_LABEL} ${formatVerseRefTitle(reference)}`}
+        >
+          <Dumbbell aria-hidden />
+          {PRACTICE_MORE_LABEL}
+        </InternalLink>
+      </Button>
+    );
+  } else {
     actions = (
       <Button asChild size="sm" className="max-sm:h-11">
         <InternalLink href={sessionHref("learn")}>

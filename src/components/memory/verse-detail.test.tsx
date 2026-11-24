@@ -242,6 +242,49 @@ describe("VerseDetailBody", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers an outline Practice more once today's step is done, keeping the unlock line below (M2)", () => {
+    const { unmount } = renderBody(
+      detail({
+        status: "learning",
+        learnStage: 2,
+        intervalDays: 0,
+        dueAt: NOW + 12 * 60 * 60 * 1000,
+        lastReviewedAt: NOW - 60_000,
+      }),
+    );
+    const practiceMore = screen.getByRole("link", {
+      name: "Practice more Romans 8:28",
+    });
+    expect(practiceMore).toHaveTextContent("Practice more");
+    expect(practiceMore).toHaveAttribute("data-variant", "outline");
+    expect(practiceMore).toHaveAttribute(
+      "href",
+      "/memory/practice?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%2Fverse%2Fv1",
+    );
+    const caption = screen.getByTitle(/^Unlocks tomorrow at/);
+    expect(practiceMore.parentElement).toContainElement(caption);
+    unmount();
+
+    // Open step (M5) and Memorized (M7): no Practice more.
+    const open = renderBody(
+      detail({
+        status: "learning",
+        learnStage: 2,
+        intervalDays: 0,
+        dueAt: NOW - 1000,
+        lastReviewedAt: undefined,
+      }),
+    );
+    expect(
+      screen.queryByRole("link", { name: /^Practice more/ }),
+    ).not.toBeInTheDocument();
+    open.unmount();
+    renderBody(detail());
+    expect(
+      screen.queryByRole("link", { name: /^Practice more/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("names a same-day spring-forward lock Later today with the unlock time", () => {
     const now = new Date(2026, 2, 8, 0, 30).getTime();
     const dueAt = new Date(2026, 2, 8, 5, 57).getTime();

@@ -6,7 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EXTRA_PRACTICE_TOOLTIP, learnActionLabel } from "@/lib/memory-copy";
+import {
+  EXTRA_PRACTICE_TOOLTIP,
+  learnActionLabel,
+  PRACTICE_MORE_LABEL,
+} from "@/lib/memory-copy";
 import { libraryRowAction } from "@/lib/memory-library-row";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
@@ -18,9 +22,9 @@ const ROW_BUTTON_CLASS = "shrink-0 max-sm:h-11 max-sm:px-3";
 
 /**
  * A Library row's one quiet session control so a specific verse can be
- * picked without opening its detail: an outline Learn or Review, or a ghost
- * Practice on memorized verses. A verse whose step for today is done shows
- * nothing; its status line says when it opens.
+ * picked without opening its detail: an outline Learn or Review, a ghost
+ * Practice on memorized verses, or a ghost Practice more once a learning
+ * verse's step for today is done (its status line says when it opens).
  */
 export function MemoryVerseListAction({
   status,
@@ -46,9 +50,23 @@ export function MemoryVerseListAction({
     },
     now,
   );
-  if (action === null) return null;
-
   const reference = formatVerseRefTitle(verse.reference);
+
+  if (action === "practice-more") {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className={cn(ROW_BUTTON_CLASS, "text-muted-foreground")}
+        aria-label={`${PRACTICE_MORE_LABEL} ${reference}`}
+        onClick={() => onPractice(verse)}
+      >
+        <Dumbbell aria-hidden />
+        {PRACTICE_MORE_LABEL}
+      </Button>
+    );
+  }
 
   if (action === "practice") {
     return (

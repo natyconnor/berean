@@ -1,10 +1,6 @@
 import { nextStepCopy, type NextStepSchedule } from "./memorize-plan";
-import {
-  isDueForLibrary,
-  isLearningLocked,
-  isLearningPhase,
-} from "./memory-scheduler";
-import { reviewPhaseListAction } from "./memory-session";
+import { isDueForLibrary, isLearningPhase } from "./memory-scheduler";
+import { offersPracticeMore, reviewPhaseListAction } from "./memory-session";
 import {
   todaySessionMinutes,
   todayWorkCount,
@@ -16,24 +12,27 @@ import {
  * and the one session it offers. Pure; the row holds the verse's schedule.
  */
 
-export type LibraryRowAction = "learn" | "review" | "practice";
+export type LibraryRowAction =
+  "learn" | "review" | "practice" | "practice-more";
 
 export interface LibraryRow {
   /** "Fill in the blanks", "Next review Thu". */
   line: string;
   /** A learning step or review is open today. */
   dueToday: boolean;
-  /** `null` while today's step is done; the line says when it opens. */
-  action: LibraryRowAction | null;
+  action: LibraryRowAction;
 }
 
-/** Learn (Up next or learning), Review when due, else Practice. */
+/**
+ * Learn (Up next or learning), Practice more once today's step is done,
+ * Review when due, else Practice.
+ */
 export function libraryRowAction(
   schedule: NextStepSchedule,
   now: number,
-): LibraryRowAction | null {
+): LibraryRowAction {
   if (isLearningPhase(schedule.status)) {
-    return isLearningLocked(schedule, now) ? null : "learn";
+    return offersPracticeMore(schedule, now) ? "practice-more" : "learn";
   }
   return reviewPhaseListAction(schedule, now);
 }

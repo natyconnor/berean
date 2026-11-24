@@ -213,6 +213,42 @@ describe("MemoryAllSessionPage", () => {
     expect(screen.getByText("0 verses")).toBeInTheDocument();
   });
 
+  it("opens Practice more on a locked Learning verse every time its URL loads, and never an open one (M8, M5)", () => {
+    const now = 1_700_000_000_000;
+    const lockedRomans = {
+      ...romans828,
+      memory: {
+        ...romans828.memory,
+        learnStage: 2,
+        dueAt: now + 12 * 60 * 60 * 1000,
+        lastReviewedAt: now - 60_000,
+      },
+    };
+    const search = {
+      book: "Romans",
+      chapter: 8,
+      startVerse: 28,
+      endVerse: 28,
+    };
+    frozenResults.set("verseMemory.getInMemory", lockedRomans);
+
+    // A reload mounts the page again; nothing was recorded, so it opens again.
+    for (let load = 0; load < 2; load += 1) {
+      const { unmount } = render(
+        <MemoryAllSessionPage kind="practice" search={search} />,
+      );
+      expect(screen.getByText("1 verses")).toBeInTheDocument();
+      unmount();
+    }
+
+    frozenResults.set("verseMemory.getInMemory", {
+      ...romans828,
+      memory: { ...romans828.memory, learnStage: 2, dueAt: now - 1000 },
+    });
+    render(<MemoryAllSessionPage kind="practice" search={search} />);
+    expect(screen.getByText("0 verses")).toBeInTheDocument();
+  });
+
   it("snapshots the in-Memory verses for unscoped practice", () => {
     frozenResults.set("verseMemory.listInMemory", [
       psalm46,
