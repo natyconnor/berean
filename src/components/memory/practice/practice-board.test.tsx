@@ -4243,12 +4243,18 @@ describe("PracticeBoard Practice more", () => {
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
   }
 
+  /** The card fades in from opacity 0 on mount; wait until the text shows. */
+  async function expectShown(text: string) {
+    const element = await screen.findByText(text);
+    await waitFor(() => {
+      expect(element).toBeVisible();
+    });
+  }
+
   it("practices the step just finished, with no count or journey bar (M1-M3)", async () => {
     renderPracticeMore();
 
-    expect(
-      await screen.findByText("Practice · Fill in the blanks"),
-    ).toBeInTheDocument();
+    await expectShown("Practice · Fill in the blanks");
     expect(screen.getByText("Verse 1 of 1")).toBeInTheDocument();
     expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
     expect(screen.queryByText(/ today$/)).not.toBeInTheDocument();
@@ -4263,16 +4269,14 @@ describe("PracticeBoard Practice more", () => {
     const { unmount } = renderPracticeMore({ onRunStateChange });
 
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await expectShown(PRACTICE_ONLY_CLOSING);
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
 
     await recite(BAD_MISS);
-    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await expectShown(PRACTICE_ONLY_CLOSING);
     await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
-    expect(
-      await screen.findByText("Practice · Fill in the blanks"),
-    ).toBeVisible();
+    await expectShown("Practice · Fill in the blanks");
     expect(screen.queryByText(SESSION_COMPLETE_TITLE)).not.toBeInTheDocument();
 
     expectNoWrite();
@@ -4289,11 +4293,9 @@ describe("PracticeBoard Practice more", () => {
     await userEvent.type(await screen.findByLabelText("Your verse"), "The");
     unmount();
     renderPracticeMore();
-    expect(
-      await screen.findByText("Practice · Fill in the blanks"),
-    ).toBeVisible();
+    await expectShown("Practice · Fill in the blanks");
     await recite(PASSAGE_ONE);
-    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await expectShown(PRACTICE_ONLY_CLOSING);
     expectNoWrite();
   });
 
@@ -4308,9 +4310,7 @@ describe("PracticeBoard Practice more", () => {
         />
       </TooltipProvider>,
     );
-    expect(
-      await screen.findByText("Practice · First letters"),
-    ).toBeInTheDocument();
+    await expectShown("Practice · First letters");
   });
 });
 
