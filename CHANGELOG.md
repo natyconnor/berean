@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.22.1](https://github.com/natyconnor/berean/compare/v1.22.0...v1.22.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* Full lower step after a slip, plus practice-only Practice more ([#435](https://github.com/natyconnor/berean/issues/435)) ([b27e731](https://github.com/natyconnor/berean/commit/b27e7318aa55a4b98987c59b5193933ad3745155))
+
 ## [1.22.0](https://github.com/natyconnor/berean/compare/v1.21.1...v1.22.0) (2026-11-24)
 
 
