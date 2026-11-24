@@ -281,7 +281,12 @@ describe("MemoryLibrary rows", () => {
     expect(
       within(waiting).getByText("Later today you'll fill in the blanks."),
     ).toBeInTheDocument();
-    expect(within(waiting).getAllByRole("button")).toHaveLength(1);
+    await userEvent.click(
+      within(waiting).getByRole("button", {
+        name: "Practice more Psalm 23:3",
+      }),
+    );
+    expect(handlers.onPracticeVerse).toHaveBeenCalledTimes(1);
 
     expect(within(mastered).getByText("Mastered")).toBeInTheDocument();
     expect(within(mastered).getByText("Next review Thu")).toBeInTheDocument();

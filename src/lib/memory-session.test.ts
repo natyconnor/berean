@@ -8,11 +8,41 @@ import {
   isMemorySessionCandidate,
   isPracticeSessionCandidate,
   isReviewSessionCandidate,
+  offersPracticeMore,
+  practiceMoreStage,
   remainingDueAfterQueue,
   reviewPhaseListAction,
 } from "./memory-session";
 
 const NOW = 1_700_000_000_000;
+
+describe("Practice more", () => {
+  it("is offered only on a Learning verse whose step for today is done", () => {
+    const lockedAt = { dueAt: NOW + DAY_MS, lastReviewedAt: NOW - 60_000 };
+    expect(offersPracticeMore({ status: "learning", ...lockedAt }, NOW)).toBe(
+      true,
+    );
+    // Today's step still open (M5).
+    expect(
+      offersPracticeMore({ status: "learning", dueAt: NOW - 1000 }, NOW),
+    ).toBe(false);
+    // Up next, Memorized, and mastered (M7).
+    expect(offersPracticeMore({ status: "new", ...lockedAt }, NOW)).toBe(false);
+    expect(offersPracticeMore({ status: "reviewing", ...lockedAt }, NOW)).toBe(
+      false,
+    );
+    expect(offersPracticeMore({ status: "mastered", ...lockedAt }, NOW)).toBe(
+      false,
+    );
+    expect(offersPracticeMore({ status: "learning" }, NOW)).toBe(false);
+  });
+
+  it("practices the step just cleared: the one below the current step", () => {
+    expect(practiceMoreStage(3)).toBe(2);
+    expect(practiceMoreStage(2)).toBe(1);
+    expect(practiceMoreStage(0)).toBe(0);
+  });
+});
 
 describe("hasMemorizedVerses", () => {
   it("is true once any verse is memorized or mastered", () => {

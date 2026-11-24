@@ -22,7 +22,7 @@ describe("libraryRow", () => {
     });
   });
 
-  it("waits without a button once today's step is done", () => {
+  it("offers Practice more once today's step is done (M3)", () => {
     expect(
       libraryRow(
         {
@@ -37,11 +37,11 @@ describe("libraryRow", () => {
     ).toEqual({
       line: "Later today you'll fill in the blanks.",
       dueToday: false,
-      action: null,
+      action: "practice-more",
     });
   });
 
-  it("waits until tomorrow when the lock is the next local day", () => {
+  it("offers Practice more until tomorrow when the lock is the next local day", () => {
     expect(
       libraryRow(
         {
@@ -56,7 +56,7 @@ describe("libraryRow", () => {
     ).toEqual({
       line: "Tomorrow you'll fill in the blanks.",
       dueToday: false,
-      action: null,
+      action: "practice-more",
     });
   });
 

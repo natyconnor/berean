@@ -22,6 +22,8 @@ export const START_TODAY_LABEL = "Start today";
 export const EXTRA_PRACTICE_LABEL = "Extra practice";
 export const EXTRA_PRACTICE_TOOLTIP =
   "Go over anything you've memorized, any time.";
+/** Practice-only run of the step a locked Learning verse cleared today. */
+export const PRACTICE_MORE_LABEL = "Practice more";
 /** Practice for one passage or pack; shares the Extra practice tooltip. */
 export const PRACTICE_ANYTIME_LABEL = "Practice anytime";
 export const YOUR_VERSES_LABEL = "Your verses";

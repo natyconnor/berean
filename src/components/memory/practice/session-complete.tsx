@@ -1,13 +1,16 @@
 import type { JSX } from "react";
-import { Sparkles } from "lucide-react";
+import { Dumbbell, Sparkles } from "lucide-react";
 
 import { FirstMemorizedBanner } from "@/components/memory/celebrate/first-memorized-banner";
+import { InternalLink } from "@/components/memory/internal-link";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import {
+  PRACTICE_MORE_LABEL,
   SESSION_COMPLETE_FOOTER,
   SESSION_COMPLETE_TITLE,
   statusLabel,
@@ -17,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import { ExtraPracticeLink } from "./extra-practice-link";
+import { practiceMoreLink, type PracticeMoreLink } from "./practice-more-link";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 export interface SessionCompleteVerse {
@@ -26,6 +30,9 @@ export interface SessionCompleteVerse {
   status: MemoryStatus;
   /** Moved from learning into review during this session. */
   justMemorized?: boolean;
+  /** Where it landed; with these, a locked Learning verse offers Practice more. */
+  dueAt?: number;
+  lastReviewedAt?: number;
 }
 
 interface SessionCompleteProps {
@@ -36,6 +43,8 @@ interface SessionCompleteProps {
   onExit: () => void;
   /** Shows a ghost Extra practice beside Done. */
   extraPracticeHref?: string;
+  /** Where Done goes; Practice more returns there too. */
+  returnTo?: string;
 }
 
 /**
@@ -47,8 +56,12 @@ export function SessionComplete({
   exitLabel,
   onExit,
   extraPracticeHref,
+  returnTo = "/memory",
 }: SessionCompleteProps): JSX.Element {
+  const now = useLiveNow();
   const graduated = verses.filter((verse) => isReviewPhase(verse.status));
+  // One verse offers Practice more in the footer; several, on each row.
+  const single = verses.length === 1 ? verses[0] : undefined;
 
   return (
     <MemoryDashboardCard className="mx-auto w-full max-w-md p-6 text-center">
@@ -71,12 +84,17 @@ export function SessionComplete({
 
       <FirstMemorizedBanner verses={verses} className="mt-5" />
 
-      <SessionCompleteRows verses={verses} className="mt-6" />
+      <SessionCompleteRows
+        verses={verses}
+        practiceMoreReturnTo={single ? undefined : returnTo}
+        className="mt-6"
+      />
 
       <SessionSummaryActions
         exitLabel={exitLabel}
         onExit={onExit}
         extraPracticeHref={extraPracticeHref}
+        practiceMore={single ? practiceMoreLink(single, now, returnTo) : null}
         className="mt-6"
       />
     </MemoryDashboardCard>
@@ -89,9 +107,12 @@ export function SessionComplete({
  */
 export function SessionCompleteRows({
   verses,
+  practiceMoreReturnTo,
   className,
 }: {
   verses: ReadonlyArray<SessionCompleteVerse>;
+  /** Set, each locked Learning row offers a Practice more icon that returns here. */
+  practiceMoreReturnTo?: string;
   className?: string;
 }): JSX.Element {
   const now = useLiveNow();
@@ -101,6 +122,10 @@ export function SessionCompleteRows({
         const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
         const chrome = practiceChromeFor(verse.learnStage, verse.status);
         const reviewing = isReviewPhase(verse.status);
+        const practiceMore =
+          practiceMoreReturnTo === undefined
+            ? null
+            : practiceMoreLink(verse, now, practiceMoreReturnTo);
         return (
           <li
             key={verse.id}
@@ -124,6 +149,22 @@ export function SessionCompleteRows({
                   ? statusLabel("reviewing")
                   : `Tomorrow: ${stage.label}`}
               </span>
+              {practiceMore ? (
+                <TooltipButton
+                  asChild
+                  tooltip={PRACTICE_MORE_LABEL}
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-muted-foreground"
+                >
+                  <InternalLink
+                    href={practiceMore.href}
+                    aria-label={practiceMore.label}
+                  >
+                    <Dumbbell aria-hidden />
+                  </InternalLink>
+                </TooltipButton>
+              ) : null}
               <AddToPack reference={verse.reference} now={now} variant="icon" />
             </div>
           </li>
@@ -133,12 +174,16 @@ export function SessionCompleteRows({
   );
 }
 
-/** A summary's footer: primary Done, with a ghost Extra practice beside it. */
+/**
+ * A summary's footer: primary Done, with a ghost Extra practice beside it
+ * and, on a one-verse card, an outline Practice more between them.
+ */
 export function SessionSummaryActions({
   exitLabel,
   onExit,
   exitVariant = "default",
   extraPracticeHref,
+  practiceMore,
   className,
 }: {
   exitLabel: string;
@@ -146,6 +191,7 @@ export function SessionSummaryActions({
   /** Outline when another action (Keep reviewing) leads. */
   exitVariant?: "default" | "outline";
   extraPracticeHref?: string;
+  practiceMore?: PracticeMoreLink | null;
   className?: string;
 }): JSX.Element {
   return (
@@ -157,6 +203,17 @@ export function SessionSummaryActions({
     >
       {extraPracticeHref ? (
         <ExtraPracticeLink href={extraPracticeHref} />
+      ) : null}
+      {practiceMore ? (
+        <Button asChild variant="outline" className="max-sm:h-11">
+          <InternalLink
+            href={practiceMore.href}
+            aria-label={practiceMore.label}
+          >
+            <Dumbbell aria-hidden />
+            {PRACTICE_MORE_LABEL}
+          </InternalLink>
+        </Button>
       ) : null}
       <Button
         variant={exitVariant}

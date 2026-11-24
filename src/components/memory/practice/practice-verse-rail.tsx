@@ -58,6 +58,8 @@ interface PracticeVerseRailProps {
   currentLocked?: boolean;
   /** Saved fill to animate from when the header bar is previewing a miss. */
   currentFrom?: JourneyBarFill;
+  /** Off for Practice more: nothing counts, so no progress shows. */
+  showProgress?: boolean;
   /**
    * Whether the Shuffle / In-order toggle may appear. A composite recitation
    * is one card in passage order, so it turns reordering off entirely.
@@ -88,6 +90,7 @@ export function PracticeVerseRail({
   currentWordCount,
   currentLocked = false,
   currentFrom,
+  showProgress = true,
   allowReorder = true,
   className,
 }: PracticeVerseRailProps) {
@@ -163,32 +166,34 @@ export function PracticeVerseRail({
           </div>
         )}
 
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Progress
-          </p>
-          <div
-            className={cn(
-              "rounded-lg border px-3 py-2.5",
-              currentChrome.railActive,
-            )}
-          >
-            <LearningJourneyBar
-              learnStage={currentLearnStage}
-              stageReps={currentStageReps}
-              wordCount={currentWordCount}
-              status={currentStatus}
-              intervalDays={currentIntervalDays}
-              ease={currentEase}
-              from={currentFrom}
-            />
-            {currentLocked ? (
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                {UP_NEXT_TOMORROW_LABEL}
-              </p>
-            ) : null}
+        {showProgress ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Progress
+            </p>
+            <div
+              className={cn(
+                "rounded-lg border px-3 py-2.5",
+                currentChrome.railActive,
+              )}
+            >
+              <LearningJourneyBar
+                learnStage={currentLearnStage}
+                stageReps={currentStageReps}
+                wordCount={currentWordCount}
+                status={currentStatus}
+                intervalDays={currentIntervalDays}
+                ease={currentEase}
+                from={currentFrom}
+              />
+              {currentLocked ? (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  {UP_NEXT_TOMORROW_LABEL}
+                </p>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

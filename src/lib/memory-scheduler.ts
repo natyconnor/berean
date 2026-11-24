@@ -619,7 +619,8 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
 
   // off (soft step-back): lose one banked rep before dropping a band.
   // mid-band: stageReps -= 1, stay on band.
-  // at 0 reps with a band above Read: drop one band, land at requiredRepsFor(prev) - 1.
+  // at 0 reps with a band above Read: drop one band and start it at 0 reps, so
+  //   the full requiredRepsFor(prev) passes before today's step clears.
   // already at Read 0/0: stay (floor).
   if (s.stageReps > 0) {
     return {
@@ -635,11 +636,10 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     };
   }
   if (s.learnStage > 0) {
-    const prevStage = s.learnStage - 1;
     return {
       status: "learning",
-      learnStage: prevStage,
-      stageReps: Math.max(0, requiredRepsFor(prevStage, r.wordCount) - 1),
+      learnStage: s.learnStage - 1,
+      stageReps: 0,
       ease: s.ease,
       intervalDays: 0,
       dueAt: inProgressLearningDueAt(s.dueAt, r.now),

@@ -18,6 +18,7 @@ import {
   PRACTICE_PASS_LINE,
   REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
+  SESSION_COMPLETE_TITLE,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
 } from "@/lib/memory-copy";
@@ -4181,6 +4182,135 @@ describe("PracticeBoard not-due Practice", () => {
     });
     expect(counted).not.toHaveProperty("holdSchedule");
     expect(counted).not.toHaveProperty("hint");
+  });
+});
+
+describe("PracticeBoard Practice more", () => {
+  // Cleared Fill in the blanks today: From memory opens tomorrow.
+  const lockedVerse: PracticeVerse = {
+    verseRefId: VERSE_REF_ID,
+    reference: span(1, 1),
+    learnStage: 3,
+    stageReps: 0,
+    status: "learning",
+    dueAt: getSessionNow() + DAY_MS,
+    lastReviewedAt: getSessionNow() - 60_000,
+    ease: 2.3,
+    intervalDays: 0,
+    consecutiveCorrect: 4,
+    lapses: 0,
+  };
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  function renderPracticeMore(
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[lockedVerse]}
+          scopeLabel="Psalm 23:1"
+          onExit={() => {}}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  function expectNoWrite() {
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
+  }
+
+  it("practices the step just finished, with no count or journey bar (M1-M3)", async () => {
+    renderPracticeMore();
+
+    expect(
+      await screen.findByText("Practice · Fill in the blanks"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Verse 1 of 1")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Your verse")).toBeInTheDocument();
+    expect(screen.queryByText(/ today$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Learning journey/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+  });
+
+  it("records nothing, ends each try with the practice line, and runs again any number of times (M8)", async () => {
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    const { unmount } = renderPracticeMore({ onRunStateChange });
+
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+
+    await recite(BAD_MISS);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(
+      await screen.findByText("Practice · Fill in the blanks"),
+    ).toBeVisible();
+    expect(screen.queryByText(SESSION_COMPLETE_TITLE)).not.toBeInTheDocument();
+
+    expectNoWrite();
+    const [state, result] = onRunStateChange.mock.lastCall ?? [];
+    expect(state?.attempts).toEqual([]);
+    expect(state?.progress[FIRST_ID]).toMatchObject({
+      status: "learning",
+      dueAt: lockedVerse.dueAt,
+      lastReviewedAt: lockedVerse.lastReviewedAt,
+    });
+    expect(result?.attempts).toEqual([]);
+
+    // Leave mid-session, then start it again: same step, still nothing saved.
+    await userEvent.type(await screen.findByLabelText("Your verse"), "The");
+    unmount();
+    renderPracticeMore();
+    expect(
+      await screen.findByText("Practice · Fill in the blanks"),
+    ).toBeVisible();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expectNoWrite();
+  });
+
+  it("practices First letters on a verse that cleared it today", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[{ ...lockedVerse, learnStage: 2 }]}
+          scopeLabel="Psalm 23:1"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    expect(
+      await screen.findByText("Practice · First letters"),
+    ).toBeInTheDocument();
   });
 });
 

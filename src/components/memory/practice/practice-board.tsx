@@ -61,6 +61,7 @@ import {
   LEARN_PROGRESS_ACCURACY,
   isDueForReview,
   isLearningLocked,
+  isLearningPhase,
   isLearningProgressAttempt,
   isReviewPhase,
   MAX_LEARN_STAGE,
@@ -74,6 +75,7 @@ import {
 } from "@/lib/memory-schedule-preview";
 import {
   hasSessionWorkLeft,
+  practiceMoreStage,
   type MemorySessionKind,
   type MemorySessionLabel,
 } from "@/lib/memory-session";
@@ -563,20 +565,27 @@ export function PracticeBoard({
   // the live `verses` prop) from swapping the verse at the current index —
   // especially dangerous under Shuffle, where the order would silently shift.
   const [baseVerses] = useState<OrderedVerse[]>(() =>
-    verses.map((verse) => ({
-      id: verse.composite
-        ? `unified:${verse.composite.packId}`
-        : verseRefKey(verse.reference),
-      verseRefId: verse.verseRefId,
-      reference: verse.reference,
-      composite: verse.composite,
-      learnStage: normalizeStageIndex(verse.learnStage),
-      stageReps: normalizeReps(verse.stageReps ?? 0),
-      status: normalizeStatus(verse.status),
-      dueAt: verse.dueAt ?? now,
-      lastReviewedAt: verse.lastReviewedAt,
-      ...scheduleFieldsFrom(verse),
-    })),
+    verses.map((verse) => {
+      const status = normalizeStatus(verse.status);
+      const learnStage = normalizeStageIndex(verse.learnStage);
+      // Practice more: a Learning verse in Practice runs the step it cleared
+      // today from its start. Nothing records, so this never moves.
+      const practiceMore = kind === "practice" && isLearningPhase(status);
+      return {
+        id: verse.composite
+          ? `unified:${verse.composite.packId}`
+          : verseRefKey(verse.reference),
+        verseRefId: verse.verseRefId,
+        reference: verse.reference,
+        composite: verse.composite,
+        learnStage: practiceMore ? practiceMoreStage(learnStage) : learnStage,
+        stageReps: practiceMore ? 0 : normalizeReps(verse.stageReps ?? 0),
+        status,
+        dueAt: verse.dueAt ?? now,
+        lastReviewedAt: verse.lastReviewedAt,
+        ...scheduleFieldsFrom(verse),
+      };
+    }),
   );
 
   // Live per-verse learning progress. Seeded from the frozen snapshot, then
@@ -681,6 +690,8 @@ export function PracticeBoard({
       reference: verse.reference,
       learnStage: verse.learnStage,
       status: verse.status,
+      dueAt: verse.dueAt,
+      lastReviewedAt: verse.lastReviewedAt,
       justMemorized:
         isReviewPhase(verse.status) && !startedInReview.has(verse.id),
     }));
@@ -707,9 +718,18 @@ export function PracticeBoard({
         dueAt: now,
       };
 
+  // The active card's passage: a unified pack is one concatenated recitation,
+  // even when it sits next to ordinary verses in the global review queue.
+  const composite = currentVerse?.composite ?? null;
+  // Practice more on a locked Learning verse: practice only, and the lock
+  // that ended today's step does not apply.
+  const practiceMore =
+    kind === "practice" &&
+    composite === null &&
+    isLearningPhase(currentProgress.status);
   // Soft lock drives the card's "up next tomorrow" chrome; work-left drives
   // navigation, so a verse that graduates mid-session also hands off cleanly.
-  const currentLocked = isLearningLocked(currentProgress, now);
+  const currentLocked = !practiceMore && isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
   // A pending retry is still due, so only a review that rescheduled (or
   // lapsed) locks; Practice stays repeatable.
@@ -723,9 +743,6 @@ export function PracticeBoard({
     to: JourneyBarFill;
   } | null>(null);
 
-  // The active card's passage: a unified pack is one concatenated recitation,
-  // even when it sits next to ordinary verses in the global review queue.
-  const composite = currentVerse?.composite ?? null;
   // A Practice try on a Memorized verse counts as its review only when the
   // verse is due; otherwise it changes nothing (R44). A ••• Refresh counts
   // only on a due verse in Review (R18, R19), so a reload after it counted
@@ -736,9 +753,12 @@ export function PracticeBoard({
     composite === null &&
     isReviewPhase(currentProgress.status);
   const practiceOnly =
-    composite === null &&
-    isReviewPhase(currentProgress.status) &&
-    (refresh ? kind === "practice" || notDue : kind === "practice" && notDue);
+    practiceMore ||
+    (composite === null &&
+      isReviewPhase(currentProgress.status) &&
+      (refresh
+        ? kind === "practice" || notDue
+        : kind === "practice" && notDue));
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -1114,6 +1134,7 @@ export function PracticeBoard({
             exitLabel={exitLabel}
             onExit={onExit}
             extraPracticeHref={extraPracticeHref}
+            returnTo={returnTo}
           />
         )}
       </PracticeShell>
@@ -1456,6 +1477,7 @@ export function PracticeBoard({
                     currentWordCount={currentWordCount}
                     currentLocked={currentLocked}
                     currentFrom={journeyPreview?.from}
+                    showProgress={!practiceMore}
                     allowReorder={sessionClusterCount(baseVerses) > 1}
                   />
                 </>
@@ -1662,6 +1684,9 @@ function PracticeCard({
   onJourneyPreview,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
+  // Practice more: a practice-only Learning card. Nothing counts, so it shows
+  // no today count or journey bar.
+  const practiceMore = practiceOnly && !isReviewPhase(status);
   const refresher = useVerseRefresher(
     onRefreshDone ? (practiceOnly ? "practice" : "pre-try") : undefined,
   );
@@ -1853,7 +1878,7 @@ function PracticeCard({
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
   const liveGoalLabel =
-    status === "reviewing" || status === "mastered"
+    isReviewPhase(status) || practiceMore
       ? null
       : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
@@ -1916,10 +1941,10 @@ function PracticeCard({
   // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances. Review
   // spends every graded due try (`advancesOnContinue`), so this path is Learn
-  // steps, passage frontier, and not-due Practice.
+  // steps, passage frontier, not-due Practice, and Practice more.
   const offerPracticeAgain =
     !advancesOnContinue &&
-    (status === "reviewing" || status === "mastered" || !madeLearningProgress);
+    (isReviewPhase(status) || practiceMore || !madeLearningProgress);
 
   function recordFlags(): RecordOptions {
     const hold = refresher.firstLetters;
@@ -2001,11 +2026,7 @@ function PracticeCard({
                   : undefined,
             })
           : null;
-      if (status !== "reviewing" && status !== "mastered") {
-        setHeldGoalLabel(
-          `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
-        );
-      }
+      setHeldGoalLabel(liveGoalLabel);
       setChecked(true);
       setCheckedPracticeOnly(practiceOnly);
       setCheckedCounted(countedFromMemory);
@@ -2287,7 +2308,8 @@ function PracticeCard({
     refresher.phase === "step2" &&
     checked &&
     !practiceRound;
-  const showJourneyBar = !refresher.isOpen || afterMissCountedResult;
+  const showJourneyBar =
+    !practiceMore && (!refresher.isOpen || afterMissCountedResult);
   const barSchedule =
     checked && nextSchedule && (showHeldOffer || afterMissCountedResult)
       ? nextSchedule
@@ -2622,7 +2644,7 @@ function PracticeCard({
                     bannerId={bannerId}
                     errorId={errorId}
                     closingLine={
-                      practiceFromMemory
+                      practiceFromMemory || practiceMore
                         ? PRACTICE_ONLY_CLOSING
                         : dateOnlyClosing
                     }

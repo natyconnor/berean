@@ -47,8 +47,8 @@ function renderAction(
 }
 
 describe("MemoryVerseListAction", () => {
-  it("shows no button while today's step is done", () => {
-    const { container } = renderAction({
+  it("offers a quiet Practice more, with no tooltip, once today's step is done (M3)", async () => {
+    const { onLearn, onPractice } = renderAction({
       status: "learning",
       verse: {
         ...verse("learning", NOW + MIN_LEARNING_LOCK_MS, 2),
@@ -56,7 +56,35 @@ describe("MemoryVerseListAction", () => {
       },
     });
 
-    expect(container).toBeEmptyDOMElement();
+    const practiceMore = screen.getByRole("button", {
+      name: "Practice more Romans 5:6–8",
+    });
+    expect(practiceMore).toHaveTextContent("Practice more");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    await userEvent.hover(practiceMore);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await userEvent.click(practiceMore);
+    expect(onPractice).toHaveBeenCalledTimes(1);
+    expect(onLearn).not.toHaveBeenCalled();
+  });
+
+  it("shows no Practice more while today's step is open or on a Memorized verse (M5, M7)", () => {
+    const open = renderAction({
+      status: "learning",
+      verse: verse("learning", NOW, 2),
+    });
+    expect(
+      screen.queryByRole("button", { name: /^Practice more/ }),
+    ).not.toBeInTheDocument();
+    open.unmount();
+
+    renderAction({
+      status: "reviewing",
+      verse: verse("reviewing", NOW + 4 * DAY_MS),
+    });
+    expect(
+      screen.queryByRole("button", { name: /^Practice more/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("continues an open learning step and learns an Up next verse", async () => {

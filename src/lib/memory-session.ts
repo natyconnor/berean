@@ -28,6 +28,38 @@ export function isPracticeSessionCandidate(
 }
 
 /**
+ * Practice more: a single or pack verse in Learning whose step for today is
+ * done (soft-locked). It is practice only, on the step it just cleared
+ * ({@link practiceMoreStage}). Passages are not verse candidates, so they
+ * never reach this.
+ */
+export function offersPracticeMore(
+  candidate: MemorySessionCandidate,
+  now: number,
+): boolean {
+  return (
+    candidate.status === "learning" &&
+    candidate.dueAt !== undefined &&
+    isLearningLocked(
+      {
+        status: candidate.status,
+        dueAt: candidate.dueAt,
+        lastReviewedAt: candidate.lastReviewedAt,
+      },
+      now,
+    )
+  );
+}
+
+/**
+ * The step a locked Learning verse cleared today: clearing a step moves the
+ * verse up one, so it is the one below its current step.
+ */
+export function practiceMoreStage(learnStage: number): number {
+  return Math.max(0, learnStage - 1);
+}
+
+/**
  * Review is the due queue: graduated verses whose `dueAt` has arrived.
  */
 export function isReviewSessionCandidate(

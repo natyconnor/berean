@@ -114,10 +114,10 @@ export function predictLearning(
       };
     }
     if (stage > 0) {
-      const prevStage = stage - 1;
+      // Drop one band and start it fresh, matching the scheduler.
       return {
-        learnStage: prevStage,
-        stageReps: Math.max(0, requiredRepsFor(prevStage, wordCount) - 1),
+        learnStage: stage - 1,
+        stageReps: 0,
         status: "learning",
         ...(now !== undefined ? { dueAt: now } : {}),
       };
