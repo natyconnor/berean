@@ -64,43 +64,61 @@ describe("parseBereanOpenUrl: route links", () => {
 });
 
 describe("parseBereanOpenUrl: auth callback", () => {
-  it("parses the sign-in code", () => {
-    expect(parseBereanOpenUrl("berean://auth?code=abc123")).toEqual({
-      kind: "auth",
-      code: "abc123",
-    });
-    expect(parseBereanOpenUrl("berean:///auth?code=abc123")).toEqual({
-      kind: "auth",
-      code: "abc123",
-    });
+  const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const withAttempt = `&signInAttempt=${attempt}`;
+
+  it("parses the sign-in code and its attempt id", () => {
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=abc123${withAttempt}`),
+    ).toEqual({ kind: "auth", code: "abc123", attempt });
+    expect(
+      parseBereanOpenUrl(`berean:///auth?code=abc123${withAttempt}`),
+    ).toEqual({ kind: "auth", code: "abc123", attempt });
   });
 
   it("decodes an encoded code", () => {
-    expect(parseBereanOpenUrl("berean://auth?code=a%2Fb%3Dc")).toEqual({
-      kind: "auth",
-      code: "a/b=c",
-    });
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=a%2Fb%3Dc${withAttempt}`),
+    ).toEqual({ kind: "auth", code: "a/b=c", attempt });
   });
 
   it("accepts a code of exactly 512 characters", () => {
     const code = "a".repeat(512);
-    expect(parseBereanOpenUrl(`berean://auth?code=${code}`)).toEqual({
-      kind: "auth",
-      code,
-    });
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=${code}${withAttempt}`),
+    ).toEqual({ kind: "auth", code, attempt });
   });
 
   it("rejects a missing, empty or oversized code", () => {
     expect(parseBereanOpenUrl("berean://auth")).toBeNull();
-    expect(parseBereanOpenUrl("berean://auth?code=")).toBeNull();
-    expect(parseBereanOpenUrl("berean://auth?other=1")).toBeNull();
+    expect(parseBereanOpenUrl(`berean://auth?code=${withAttempt}`)).toBeNull();
     expect(
-      parseBereanOpenUrl(`berean://auth?code=${"a".repeat(513)}`),
+      parseBereanOpenUrl(`berean://auth?other=1${withAttempt}`),
+    ).toBeNull();
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=${"a".repeat(513)}${withAttempt}`),
     ).toBeNull();
   });
 
   it("rejects paths below the auth callback", () => {
-    expect(parseBereanOpenUrl("berean://auth/extra?code=abc")).toBeNull();
+    expect(
+      parseBereanOpenUrl(`berean://auth/extra?code=abc${withAttempt}`),
+    ).toBeNull();
+  });
+
+  it("rejects a code without an attempt id", () => {
+    expect(parseBereanOpenUrl("berean://auth?code=abc123")).toBeNull();
+  });
+
+  it.each([
+    ["empty", ""],
+    ["too short", "abc"],
+    ["too long", "a".repeat(65)],
+    ["not URL-safe", "0f8fad5b%2Fd9cb%2F469f%2Fa165"],
+  ])("rejects an attempt id that is %s", (_label, attempt) => {
+    expect(
+      parseBereanOpenUrl(`berean://auth?code=abc&signInAttempt=${attempt}`),
+    ).toBeNull();
   });
 });
 
@@ -206,9 +224,13 @@ describe("toAppUrl", () => {
 });
 
 describe("withAuthCode", () => {
-  it("adds the code to a URL with no query", () => {
-    expect(withAuthCode("https://berean.nathanconnor.dev/", "abc")).toBe(
-      "https://berean.nathanconnor.dev/?code=abc",
+  const attempt = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+  it("adds the code and attempt id to a URL with no query", () => {
+    expect(
+      withAuthCode("https://berean.nathanconnor.dev/", "abc", attempt),
+    ).toBe(
+      `https://berean.nathanconnor.dev/?code=abc&signInAttempt=${attempt}`,
     );
   });
 
@@ -217,18 +239,31 @@ describe("withAuthCode", () => {
       withAuthCode(
         "http://localhost:5173/passage/John-1?startVerse=3#note",
         "abc",
+        attempt,
       ),
-    ).toBe("http://localhost:5173/passage/John-1?startVerse=3&code=abc#note");
+    ).toBe(
+      `http://localhost:5173/passage/John-1?startVerse=3&code=abc&signInAttempt=${attempt}#note`,
+    );
   });
 
-  it("replaces an existing code", () => {
+  it("replaces an existing code and attempt id", () => {
     expect(
-      withAuthCode("https://berean.nathanconnor.dev/?code=old&x=1", "new"),
-    ).toBe("https://berean.nathanconnor.dev/?code=new&x=1");
+      withAuthCode(
+        "https://berean.nathanconnor.dev/?code=old&signInAttempt=stale-attempt-id-0000&x=1",
+        "new",
+        attempt,
+      ),
+    ).toBe(
+      `https://berean.nathanconnor.dev/?code=new&signInAttempt=${attempt}&x=1`,
+    );
   });
 
   it("encodes the code", () => {
-    const url = withAuthCode("https://berean.nathanconnor.dev/", "a/b=c&d");
+    const url = withAuthCode(
+      "https://berean.nathanconnor.dev/",
+      "a/b=c&d",
+      attempt,
+    );
     expect(new URL(url).searchParams.get("code")).toBe("a/b=c&d");
   });
 });

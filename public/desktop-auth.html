@@ -90,12 +90,22 @@
 
     <script>
       (function () {
-        // Mirrors the limit in shared/desktop-deep-link.ts.
+        // Mirror the limits in shared/desktop-deep-link.ts.
         var MAX_CODE_LENGTH = 512;
-        var code = new URLSearchParams(window.location.search).get("code");
+        var ATTEMPT_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+        var params = new URLSearchParams(window.location.search);
+        var code = params.get("code");
         if (!code || code.length > MAX_CODE_LENGTH) return;
+        // Which sign-in this code belongs to. Berean ignores a code without
+        // one, so there is nothing to hand back.
+        var attempt = params.get("signInAttempt");
+        if (!attempt || !ATTEMPT_PATTERN.test(attempt)) return;
 
-        var link = "berean://auth?code=" + encodeURIComponent(code);
+        var link =
+          "berean://auth?code=" +
+          encodeURIComponent(code) +
+          "&signInAttempt=" +
+          attempt;
         // Keep the code out of the browser's history and address bar.
         history.replaceState(null, "", window.location.pathname);
 

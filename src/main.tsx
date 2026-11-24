@@ -6,6 +6,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache";
 import { routeTree } from "./routeTree.gen";
 import { DevLogRoot } from "@/components/dev/dev-log-root";
+import { shouldHandleSignInCode } from "@/lib/desktop-sign-in-attempt";
 import { discardPassageStepMarkerIfLandedElsewhere } from "@/lib/passage-step-resume";
 import { initDevSelectionLogger } from "./lib/dev-selection-logger";
 import "./index.css";
@@ -28,7 +29,10 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ConvexAuthProvider client={convex}>
+    <ConvexAuthProvider
+      client={convex}
+      shouldHandleCode={shouldHandleSignInCode}
+    >
       <ConvexQueryCacheProvider>
         {import.meta.env.DEV ? <DevLogRoot /> : null}
         <RouterProvider router={router} />
