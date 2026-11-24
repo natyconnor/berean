@@ -75,6 +75,7 @@ import {
 } from "@/lib/memory-schedule-preview";
 import {
   hasSessionWorkLeft,
+  practiceMoreReps,
   practiceMoreStage,
   type MemorySessionKind,
   type MemorySessionLabel,
@@ -1199,6 +1200,7 @@ export function PracticeBoard({
               practiceOnly={practiceOnly}
               onRefreshDone={refresh ? shellProps.onExit : undefined}
               practiceReview={practiceMemorized && !practiceOnly}
+              onDone={practiceMore ? shellProps.onExit : undefined}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               passageHint={passageHint}
@@ -1564,6 +1566,8 @@ interface PracticeCardProps {
    * shows the review's Next review line and save error.
    */
   practiceReview?: boolean;
+  /** Practice more: a result's Done leaves for where the run started. */
+  onDone?: () => void;
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1669,6 +1673,7 @@ function PracticeCard({
   practiceOnly = false,
   onRefreshDone,
   practiceReview = false,
+  onDone,
   leaveHeldRef,
   onSavingChange,
   passageHint,
@@ -1851,7 +1856,11 @@ function PracticeCard({
         wordCount: wc,
       };
     }
-    const hint = hintForProgress(learnStage, stageReps, wc);
+    const hint = hintForProgress(
+      learnStage,
+      practiceMore ? practiceMoreReps(learnStage, wc) : stageReps,
+      wc,
+    );
     return {
       hintStage: hint.stage,
       tokens: maskVerseText(versePlainText, hint.stage, {
@@ -1865,6 +1874,7 @@ function PracticeCard({
     data,
     learnStage,
     stageReps,
+    practiceMore,
     refresher.phase,
     refresher.firstLetters,
     refresher.seed,
@@ -2746,6 +2756,16 @@ function PracticeCard({
                     onClick={() => openRefresher("practice")}
                     disabled={submitPending}
                   />
+                ) : null}
+                {onDone ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    onClick={onDone}
+                  >
+                    Done
+                  </Button>
                 ) : null}
                 <Button
                   ref={reviewActionRef}

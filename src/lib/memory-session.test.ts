@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { DAY_MS, MIN_LEARNING_LOCK_MS } from "./memory-scheduler";
+import {
+  DAY_MS,
+  LONG_VERSE_WORDS,
+  MIN_LEARNING_LOCK_MS,
+  requiredRepsFor,
+  SHORT_VERSE_WORDS,
+} from "./memory-scheduler";
 import {
   hasMemorizedVerses,
   hasSessionWorkLeft,
@@ -9,6 +15,7 @@ import {
   isPracticeSessionCandidate,
   isReviewSessionCandidate,
   offersPracticeMore,
+  practiceMoreReps,
   practiceMoreStage,
   remainingDueAfterQueue,
   reviewPhaseListAction,
@@ -41,6 +48,15 @@ describe("Practice more", () => {
     expect(practiceMoreStage(3)).toBe(2);
     expect(practiceMoreStage(2)).toBe(1);
     expect(practiceMoreStage(0)).toBe(0);
+  });
+
+  it("hints at the last try of the day: one pass short of the full count", () => {
+    for (const words of [SHORT_VERSE_WORDS, LONG_VERSE_WORDS]) {
+      expect(practiceMoreReps(1, words)).toBe(requiredRepsFor(1, words) - 1);
+      expect(practiceMoreReps(2, words)).toBe(requiredRepsFor(2, words) - 1);
+    }
+    // Read is one pass, so its hints are the start of the step.
+    expect(practiceMoreReps(0)).toBe(0);
   });
 });
 
