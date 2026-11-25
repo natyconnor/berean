@@ -26,7 +26,13 @@ const DOWNLOADING_DETAIL =
 export function createUpdateFlow(deps: UpdateFlowDeps) {
   let state: DesktopUpdateState["state"] = "idle";
   let downloadingVersion: string | null = null;
+  /**
+   * The downloaded version. It stays while a newer one is checked for or
+   * downloads, so the page's arrow stays too.
+   */
   let readyVersion: string | null = null;
+  let isChecking = false;
+  let installRequested = false;
   /** Callers waiting for the check in progress to find something. */
   let checkWaiters: ((result: DesktopUpdateCheckResult) => void)[] = [];
   const stateListeners = new Set<(state: DesktopUpdateState) => void>();
@@ -46,10 +52,23 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
     for (const listener of stateListeners) listener(snapshot);
   }
 
+  /** Where a check that found nothing to download leaves the state. */
+  function settledState(): DesktopUpdateState["state"] {
+    return readyVersion !== null ? "downloaded" : "idle";
+  }
+
+  /** What a check that found nothing to download resolves with. */
+  function nothingNewer(): DesktopUpdateCheckResult {
+    return readyVersion !== null
+      ? { kind: "ready", version: readyVersion }
+      : { kind: "up-to-date" };
+  }
+
   function finishCheck(
     next: DesktopUpdateState["state"],
     result: DesktopUpdateCheckResult,
   ): void {
+    isChecking = false;
     setState(next);
     const waiters = checkWaiters;
     checkWaiters = [];
@@ -102,13 +121,11 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
 
   /**
    * Checks for an update, or joins the check in progress, and resolves with
-   * what it found. A found update starts downloading on its own.
+   * what it found. A found update starts downloading on its own. Checks go on
+   * after a download, so a newer version replaces the one that is ready.
    */
   function checkForUpdates(): Promise<DesktopUpdateCheckResult> {
     if (!deps.canUpdate()) return Promise.resolve({ kind: "unsupported" });
-    if (state === "downloaded" && readyVersion !== null) {
-      return Promise.resolve({ kind: "ready", version: readyVersion });
-    }
     if (state === "downloading" && downloadingVersion !== null) {
       return Promise.resolve({
         kind: "downloading",
@@ -119,12 +136,16 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
     const result = new Promise<DesktopUpdateCheckResult>((resolve) => {
       checkWaiters.push(resolve);
     });
-    if (state !== "checking") {
-      setState("checking");
+    if (!isChecking) {
+      isChecking = true;
+      // With an update ready, the state stays "downloaded" while checking.
+      if (readyVersion === null) setState("checking");
       deps.startCheck().then(
         (found) => {
           // electron-updater considers itself inactive; nothing was checked.
-          if (found === null) finishCheck("idle", { kind: "unsupported" });
+          if (found === null) {
+            finishCheck(settledState(), { kind: "unsupported" });
+          }
         },
         () => {
           // Reported through `handleError`.
@@ -146,10 +167,6 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
 
     /** Berean → Check for Updates…: the same check, shown in a window. */
     checkForUpdatesFromMenu: (): void => {
-      if (state === "downloaded" && readyVersion !== null) {
-        tellUserUpdateAlreadyReady(readyVersion);
-        return;
-      }
       if (state === "downloading") {
         deps.tellUser("An update is downloading.", DOWNLOADING_DETAIL);
         return;
@@ -157,20 +174,31 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
       void checkForUpdates().then(tellUserCheckResult);
     },
 
-    /** Quits and installs. False when no update is downloaded. */
+    /**
+     * Quits and installs, once: a repeat request does nothing. False when no
+     * update is downloaded.
+     */
     installDownloadedUpdate: (): boolean => {
-      if (state !== "downloaded") return false;
+      if (readyVersion === null) return false;
+      if (installRequested) return true;
+      installRequested = true;
       deps.quitAndInstall();
       return true;
     },
 
     handleUpdateAvailable: (version: string): void => {
+      // electron-updater compares with the running version, so it finds the
+      // update that is already downloaded again: nothing newer.
+      if (version === readyVersion) {
+        finishCheck("downloaded", { kind: "ready", version });
+        return;
+      }
       downloadingVersion = version;
       finishCheck("downloading", { kind: "downloading", version });
     },
 
     handleUpdateNotAvailable: (): void => {
-      finishCheck("idle", { kind: "up-to-date" });
+      finishCheck(settledState(), nothingNewer());
     },
 
     /** Opens no window: the page shows its arrow. */
@@ -183,9 +211,7 @@ export function createUpdateFlow(deps: UpdateFlowDeps) {
     /** Logged by the caller; shown only to a check the user started. */
     handleError: (): void => {
       downloadingVersion = null;
-      finishCheck(state === "downloaded" ? "downloaded" : "idle", {
-        kind: "error",
-      });
+      finishCheck(settledState(), { kind: "error" });
     },
   };
 }

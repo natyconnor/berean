@@ -482,7 +482,7 @@ function registerIpc(): void {
 
   // The page has already asked about unsaved notes in every window.
   ipcMain.on(UPDATE_INSTALL_CHANNEL, (event) => {
-    if (!isFromApp(event) || getUpdateState().state !== "downloaded") return;
+    if (!isFromApp(event) || getUpdateState().readyVersion === null) return;
     quitConfirmed = true;
     installDownloadedUpdate();
   });

@@ -60,23 +60,111 @@ describe("update flow", () => {
     );
   });
 
-  it("answers a menu check after the download with an OK window, never a restart", async () => {
+  it("checks again from the menu after a download; nothing newer gets an OK window, never a restart", async () => {
     const { deps, flow, download, messages } = setup();
     download();
 
     flow.checkForUpdatesFromMenu();
-    await Promise.resolve();
+    expect(deps.startCheck).toHaveBeenCalledOnce();
+    expect(messages()).toEqual([]);
+    flow.handleUpdateNotAvailable();
 
     // tellUser windows have one button, OK.
-    expect(messages()).toEqual([
-      {
-        message: "Berean 1.0.2 is ready.",
-        detail:
-          "Click the arrow at the top of the window to restart and update.",
-      },
-    ]);
-    expect(deps.startCheck).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(messages()).toEqual([
+        {
+          message: "Berean 1.0.2 is ready.",
+          detail:
+            "Click the arrow at the top of the window to restart and update.",
+        },
+      ]),
+    );
     expect(deps.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it("tells a menu check after a download when a newer version is downloading", async () => {
+    const { flow, download, messages } = setup();
+    download("1.0.3");
+
+    flow.checkForUpdatesFromMenu();
+    flow.handleUpdateAvailable("1.0.4");
+
+    await vi.waitFor(() =>
+      expect(messages()).toEqual([
+        { message: "Downloading Berean 1.0.4.", detail: ARROW_DETAIL },
+      ]),
+    );
+  });
+
+  it("keeps checking after a download and replaces it with a newer version", async () => {
+    const { deps, flow, download } = setup();
+    download("1.0.3");
+
+    const check = flow.checkForUpdates();
+    expect(deps.startCheck).toHaveBeenCalledOnce();
+    // The arrow stays while checking and while the newer one downloads.
+    expect(flow.getUpdateState()).toMatchObject({
+      state: "downloaded",
+      readyVersion: "1.0.3",
+    });
+
+    flow.handleUpdateAvailable("1.0.4");
+    await expect(check).resolves.toEqual({
+      kind: "downloading",
+      version: "1.0.4",
+    });
+    expect(flow.getUpdateState()).toMatchObject({
+      state: "downloading",
+      downloadingVersion: "1.0.4",
+      readyVersion: "1.0.3",
+    });
+
+    flow.handleUpdateDownloaded("1.0.4");
+    expect(flow.getUpdateState()).toMatchObject({
+      state: "downloaded",
+      readyVersion: "1.0.4",
+    });
+  });
+
+  it("stays ready when a check after a download finds nothing newer", async () => {
+    const { deps, flow, download } = setup();
+    download("1.0.3");
+
+    const notAvailable = flow.checkForUpdates();
+    flow.handleUpdateNotAvailable();
+    await expect(notAvailable).resolves.toEqual({
+      kind: "ready",
+      version: "1.0.3",
+    });
+
+    // electron-updater compares with the running version, so it reports the
+    // downloaded one as available again.
+    const sameAgain = flow.checkForUpdates();
+    flow.handleUpdateAvailable("1.0.3");
+    await expect(sameAgain).resolves.toEqual({
+      kind: "ready",
+      version: "1.0.3",
+    });
+
+    expect(deps.startCheck).toHaveBeenCalledTimes(2);
+    expect(flow.getUpdateState()).toMatchObject({
+      state: "downloaded",
+      downloadingVersion: null,
+      readyVersion: "1.0.3",
+    });
+  });
+
+  it("keeps the ready version when a check after a download fails", async () => {
+    const { flow, download } = setup();
+    download("1.0.3");
+
+    const check = flow.checkForUpdates();
+    flow.handleError();
+    await expect(check).resolves.toEqual({ kind: "error" });
+    expect(flow.getUpdateState()).toMatchObject({
+      state: "downloaded",
+      readyVersion: "1.0.3",
+    });
   });
 
   it("points a menu check that finds an update at the arrow", async () => {
@@ -151,7 +239,7 @@ describe("update flow", () => {
   });
 
   it("gives Settings the download and the ready version", async () => {
-    const { flow, download } = setup();
+    const { flow } = setup();
     const check = flow.checkForUpdates();
     flow.handleUpdateAvailable("1.0.2");
     await expect(check).resolves.toEqual({
@@ -163,8 +251,10 @@ describe("update flow", () => {
       version: "1.0.2",
     });
 
-    download();
-    await expect(flow.checkForUpdates()).resolves.toEqual({
+    flow.handleUpdateDownloaded("1.0.2");
+    const afterDownload = flow.checkForUpdates();
+    flow.handleUpdateNotAvailable();
+    await expect(afterDownload).resolves.toEqual({
       kind: "ready",
       version: "1.0.2",
     });
@@ -197,6 +287,16 @@ describe("update flow", () => {
 
     download();
     expect(flow.installDownloadedUpdate()).toBe(true);
+    expect(deps.quitAndInstall).toHaveBeenCalledOnce();
+  });
+
+  it("asks electron-updater to install only once", () => {
+    const { deps, flow, download } = setup();
+    download();
+
+    flow.installDownloadedUpdate();
+    flow.installDownloadedUpdate();
+    flow.installDownloadedUpdate();
     expect(deps.quitAndInstall).toHaveBeenCalledOnce();
   });
 });

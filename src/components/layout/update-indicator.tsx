@@ -55,6 +55,7 @@ export function UpdateIndicator({
   const [dismissed, setDismissed] = useState(readDotDismissed);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => subscribeToDotDismissed(setDismissed), []);
@@ -78,15 +79,22 @@ export function UpdateIndicator({
   };
 
   const handleUpdate = async () => {
+    // Pending from the first click: repeat clicks while it asks are ignored.
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
     // A restart quits every window; a refresh reloads only this one.
     const askFirst = isRestart
       ? await hasUnsavedNotesInAnyWindow()
       : hasUnsavedNotes();
     if (askFirst) {
       setOpen(false);
-      if (!(await requestDiscardUnsavedNotes())) return;
+      if (!(await requestDiscardUnsavedNotes())) {
+        pendingRef.current = false;
+        setPending(false);
+        return;
+      }
     }
-    setPending(true);
     setOpen(false);
     if (isRestart) {
       window.bereanDesktop?.installUpdate?.();

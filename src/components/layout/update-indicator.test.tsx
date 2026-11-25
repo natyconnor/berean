@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -237,6 +243,35 @@ describe("UpdateIndicator", () => {
     await waitFor(() => expect(bridge.installUpdate).toHaveBeenCalledOnce());
     expect(screen.queryByText("Discard unsaved notes?")).toBeNull();
     expect(arrow()).toBeDisabled();
+  });
+
+  it("requests the install once however often Restart is clicked", async () => {
+    const user = userEvent.setup();
+    const { bridge } = installShell(SHELL_READY);
+    let answerUnsavedCheck: (hasUnsaved: boolean) => void = () => {};
+    bridge.hasUnsavedNotes.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answerUnsavedCheck = resolve;
+      }),
+    );
+    renderIndicator();
+
+    await user.click(arrow()!);
+    const restart = await screen.findByRole("button", {
+      name: "Restart to update",
+    });
+    fireEvent.click(restart);
+    fireEvent.click(restart);
+    fireEvent.click(restart);
+    // Disabled while it asks the other windows about unsaved notes.
+    expect(restart).toBeDisabled();
+    expect(bridge.hasUnsavedNotes).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      answerUnsavedCheck(false);
+      await Promise.resolve();
+    });
+    expect(bridge.installUpdate).toHaveBeenCalledOnce();
   });
 
   it("asks before restarting when another window has unsaved notes", async () => {
