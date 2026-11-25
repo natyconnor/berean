@@ -258,7 +258,7 @@ export const removeCustomTagAndDetach = mutation({
         tags: nextTags,
         updatedAt: now,
       });
-      await recordNoteChange(ctx, userId, note.tags, nextTags);
+      await recordNoteChange(ctx, userId, note, note.tags, nextTags);
       notesUpdated += 1;
     }
 

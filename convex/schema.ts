@@ -273,6 +273,8 @@ export default defineSchema({
    * Per-user note totals for tutorial milestones, so the app shell can gate
    * stages from one row instead of reading note documents. `tagCounts` holds
    * how many notes use each tag, so removing a tag can drop the distinct count.
+   * A row without `builtAt` is a recount in progress: its totals cover notes
+   * up to `scannedThrough` (a note `_creationTime`) and are not shown yet.
    */
   userOnboardingMilestones: defineTable({
     userId: v.id("users"),
@@ -280,6 +282,8 @@ export default defineSchema({
     taggedNotesCount: v.number(),
     tagCounts: v.array(v.object({ tag: v.string(), count: v.number() })),
     updatedAt: v.number(),
+    builtAt: v.optional(v.number()),
+    scannedThrough: v.optional(v.number()),
   }).index("by_userId", ["userId"]),
 
   /**

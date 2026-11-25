@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getCurrentUserId } from "./lib/auth";
-import { rebuildNoteMilestones } from "./lib/onboarding";
+import { resetNoteMilestones } from "./lib/onboarding";
 import {
   assertDevOnlySeedAllowed,
   buildVerseAnchorsForChapter,
@@ -2068,7 +2068,7 @@ export const seedDevChapterNotes = mutation({
       (chapter) => chapter.testament === "NT",
     ).length;
 
-    await rebuildNoteMilestones(ctx, userId);
+    await resetNoteMilestones(ctx, userId);
 
     return {
       seed,

@@ -1,3 +1,4 @@
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -76,12 +77,16 @@ export function applyNoteChange(
 
 export function countNotes(
   notes: readonly { tags: readonly string[] }[],
+  start: NoteMilestoneCounts = EMPTY_NOTE_COUNTS,
 ): NoteMilestoneCounts {
   return notes.reduce(
     (counts, note) => applyNoteChange(counts, null, note.tags),
-    EMPTY_NOTE_COUNTS,
+    start,
   );
 }
+
+/** Notes counted per recount transaction, to stay under read limits. */
+export const NOTE_RECOUNT_PAGE_SIZE = 500;
 
 async function loadNoteMilestonesRow(
   ctx: QueryCtx,
@@ -93,46 +98,90 @@ async function loadNoteMilestonesRow(
     .unique();
 }
 
-/** Recount every note and write the user's row. Run after the note writes. */
-export async function rebuildNoteMilestones(
+/**
+ * Count the next page of the user's notes into their row, creating an
+ * unfinished row (no `builtAt`) if there is none. Returns true once the row is
+ * complete.
+ *
+ * Notes are walked in `by_userId` order (by `_creationTime`, unique per table)
+ * from `scannedThrough`, the last note counted. Writers only apply their own
+ * change to an unfinished row when the note is at or behind that mark, so each
+ * note is counted once, in its latest state, however writes and pages
+ * interleave.
+ */
+export async function recountNoteMilestonesPage(
   ctx: MutationCtx,
   userId: Id<"users">,
-): Promise<void> {
+): Promise<boolean> {
+  const row = await loadNoteMilestonesRow(ctx, userId);
+  if (row?.builtAt !== undefined) return true;
+
+  const scannedThrough = row?.scannedThrough ?? 0;
   const notes = await ctx.db
     .query("notes")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .collect();
-  const row = await loadNoteMilestonesRow(ctx, userId);
-  const next = { ...countNotes(notes), updatedAt: Date.now() };
+    .withIndex("by_userId", (q) =>
+      q.eq("userId", userId).gt("_creationTime", scannedThrough),
+    )
+    .take(NOTE_RECOUNT_PAGE_SIZE);
+  const done = notes.length < NOTE_RECOUNT_PAGE_SIZE;
+  const now = Date.now();
+  const next = {
+    ...countNotes(notes, row ?? EMPTY_NOTE_COUNTS),
+    updatedAt: now,
+    builtAt: done ? now : undefined,
+    scannedThrough: done ? undefined : notes[notes.length - 1]._creationTime,
+  };
   if (row) await ctx.db.patch(row._id, next);
   else await ctx.db.insert("userOnboardingMilestones", { userId, ...next });
+  return done;
 }
 
-/** Build the row once for users who had notes before it existed. */
+/**
+ * Build the user's row if it is missing or unfinished: count one page now and
+ * schedule the rest. Safe to call repeatedly; extra calls only repeat pages
+ * from the saved mark.
+ */
 export async function ensureNoteMilestonesRow(
   ctx: MutationCtx,
   userId: Id<"users">,
 ): Promise<void> {
-  if (await loadNoteMilestonesRow(ctx, userId)) return;
-  await rebuildNoteMilestones(ctx, userId);
+  if (await recountNoteMilestonesPage(ctx, userId)) return;
+  await ctx.scheduler.runAfter(0, internal.onboarding.recountNoteMilestones, {
+    userId,
+  });
+}
+
+/** Drop the row and count again, after a bulk rewrite of the user's notes. */
+export async function resetNoteMilestones(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<void> {
+  const row = await loadNoteMilestonesRow(ctx, userId);
+  if (row) await ctx.db.delete(row._id);
+  await ensureNoteMilestonesRow(ctx, userId);
 }
 
 /**
- * Keep the row in step with one note write. Call after the write: a missing
- * row is rebuilt from the notes, which already include this change.
+ * Keep the row in step with one note write. Call after the write, with the
+ * note as it was before (or as inserted). Without a row, starts a recount,
+ * which counts the note in its current state.
  */
 export async function recordNoteChange(
   ctx: MutationCtx,
   userId: Id<"users">,
+  note: Doc<"notes">,
   before: readonly string[] | null,
   after: readonly string[] | null,
 ): Promise<void> {
   if (before && after && sameTags(before, after)) return;
   const row = await loadNoteMilestonesRow(ctx, userId);
   if (!row) {
-    await rebuildNoteMilestones(ctx, userId);
+    await ensureNoteMilestonesRow(ctx, userId);
     return;
   }
+  const aheadOfRecount =
+    row.builtAt === undefined && note._creationTime > (row.scannedThrough ?? 0);
+  if (aheadOfRecount) return;
   await ctx.db.patch(row._id, {
     ...applyNoteChange(row, before, after),
     updatedAt: Date.now(),
@@ -157,7 +206,7 @@ export async function computeOnboardingMilestones(
   userId: Id<"users">,
 ): Promise<OnboardingMilestonesSnapshot | null> {
   const noteCounts = await loadNoteMilestonesRow(ctx, userId);
-  if (!noteCounts) return null;
+  if (noteCounts?.builtAt === undefined) return null;
 
   const inlineLink = await ctx.db
     .query("noteInlineVerseLinks")

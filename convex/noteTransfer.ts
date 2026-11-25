@@ -126,7 +126,8 @@ export const importNotesBatch = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      await recordNoteChange(ctx, userId, null, tags);
+      const created = await ctx.db.get(noteId);
+      if (created) await recordNoteChange(ctx, userId, created, null, tags);
 
       const verseRefId = await findOrCreateVerseRefId(ctx, userId, {
         book: importedNote.book,

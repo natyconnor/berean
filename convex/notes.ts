@@ -378,7 +378,8 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await recordNoteChange(ctx, userId, null, tags);
+    const created = await ctx.db.get(noteId);
+    if (created) await recordNoteChange(ctx, userId, created, null, tags);
     await syncInlineVerseLinksForNote(ctx, userId, noteId, args.body);
     await syncUserTagsFromNote(ctx, userId, tags, now);
     return noteId;
@@ -477,7 +478,7 @@ export const update = mutation({
     }
 
     if (patch.tags) {
-      await recordNoteChange(ctx, userId, note.tags, patch.tags);
+      await recordNoteChange(ctx, userId, note, note.tags, patch.tags);
       await syncUserTagsFromNote(ctx, userId, patch.tags, now);
     }
     return null;
@@ -508,7 +509,7 @@ export const remove = mutation({
       await ctx.db.delete(link._id);
     }
     await ctx.db.delete(args.id);
-    await recordNoteChange(ctx, userId, note.tags, null);
+    await recordNoteChange(ctx, userId, note, note.tags, null);
     return null;
   },
 });

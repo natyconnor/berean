@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -7,6 +8,7 @@ import {
   EMPTY_MILESTONES,
   computeOnboardingMilestones,
   ensureNoteMilestonesRow,
+  recountNoteMilestonesPage,
   summarizeHints,
 } from "./lib/onboarding";
 import { resolveTutorialStatus } from "./lib/tutorial";
@@ -76,13 +78,31 @@ export const getOnboardingStatus = query({
   },
 });
 
-/** Idempotent: builds the note totals row for users who do not have one yet. */
+/**
+ * Idempotent: builds the note totals row for users who do not have one yet
+ * (first page now, the rest via `recountNoteMilestones`).
+ */
 export const ensureNoteMilestones = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
     const userId = await getCurrentUserId(ctx);
     await ensureNoteMilestonesRow(ctx, userId);
+    return null;
+  },
+});
+
+/** Count the next page of one user's notes; reschedules until complete. */
+export const recountNoteMilestones = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // The account may have been deleted since this was scheduled.
+    if (!(await ctx.db.get(args.userId))) return null;
+    if (await recountNoteMilestonesPage(ctx, args.userId)) return null;
+    await ctx.scheduler.runAfter(0, internal.onboarding.recountNoteMilestones, {
+      userId: args.userId,
+    });
     return null;
   },
 });
