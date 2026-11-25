@@ -52,3 +52,4 @@ coverage
 docs/*
 !docs/proposals/
 !docs/proposals/**
+.vercel
