@@ -7,6 +7,8 @@ import {
   Menu,
   session,
   shell,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
   type WebContents,
 } from "electron";
@@ -18,13 +20,30 @@ import {
   type BereanRouteTarget,
 } from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
-import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
-import { checkForUpdatesFromMenu, startUpdater } from "./updater";
+import {
+  ANY_UNSAVED_NOTES_CHANNEL,
+  DISCARD_REQUEST_CHANNEL,
+  RETRY_LOAD_CHANNEL,
+  SHELL_VERSION_ARG,
+  UNSAVED_NOTES_CHANNEL,
+  UPDATE_CHECK_CHANNEL,
+  UPDATE_INSTALL_CHANNEL,
+  UPDATE_STATE_CHANNEL,
+} from "./ipc-channels";
+import {
+  checkForUpdates,
+  checkForUpdatesFromMenu,
+  getUpdateState,
+  installDownloadedUpdate,
+  onUpdateStateChange,
+  startUpdater,
+} from "./updater";
 import {
   findBereanUrl,
   isAllowedFrameUrl,
   isConvexSignInUrl,
   isSameOrigin,
+  pickDiscardPromptTarget,
   signInAttemptFromUrl,
   signInCodeTarget,
   type PendingSignIn,
@@ -71,6 +90,15 @@ let lastFocusedWindow: BrowserWindow | null = null;
 /** A `berean:` link that arrived before the app finished starting. */
 let pendingOpenUrl: string | null = null;
 let hasLaunched = false;
+
+/** Windows whose page says it has unsaved notes. */
+const unsavedNotes = new WeakSet<WebContents>();
+/** "Discard unsaved notes?" questions sent to a page, by request id. */
+const discardRequests = new Map<number, (discard: boolean) => void>();
+let nextDiscardRequestId = 1;
+/** Set once the user agreed to quit (or restart) despite unsaved notes. */
+let quitConfirmed = false;
+let isAskingBeforeQuit = false;
 
 function resolveAppOrigin(): string {
   const override = process.env.BEREAN_DESKTOP_URL;
@@ -212,6 +240,7 @@ function createWindow(initialUrl = `${appOrigin}/`): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      additionalArguments: [`${SHELL_VERSION_ARG}=${app.getVersion()}`],
     },
   });
 
@@ -228,6 +257,10 @@ function createWindow(initialUrl = `${appOrigin}/`): BrowserWindow {
   });
 
   const contents = win.webContents;
+  // A new page starts with nothing unsaved; it reports its own notes.
+  contents.on("did-navigate", () => {
+    unsavedNotes.delete(contents);
+  });
   contents.on(
     "did-fail-load",
     (_event, errorCode, _errorDescription, validatedURL, isMainFrame) => {
@@ -372,12 +405,108 @@ function denyPermissions(): void {
   appSession.setPermissionCheckHandler(() => false);
 }
 
+function isFromApp(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  const url = event.senderFrame?.url;
+  return url !== undefined && isAppUrl(url);
+}
+
+function hasUnsavedNotes(win: BrowserWindow): boolean {
+  return unsavedNotes.has(win.webContents);
+}
+
+/**
+ * Shows the page's own "Discard unsaved notes?" dialog in `win` and resolves
+ * true for Discard, false for Keep editing (or if the window goes away).
+ */
+function askToDiscardUnsavedNotes(win: BrowserWindow): Promise<boolean> {
+  focusWindow(win);
+  const contents = win.webContents;
+  const requestId = nextDiscardRequestId++;
+  return new Promise((resolve) => {
+    const onDestroyed = (): void => {
+      finish(false);
+    };
+    const finish = (discard: boolean): void => {
+      discardRequests.delete(requestId);
+      contents.off("destroyed", onDestroyed);
+      resolve(discard);
+    };
+    discardRequests.set(requestId, finish);
+    contents.once("destroyed", onDestroyed);
+    contents.send(DISCARD_REQUEST_CHANNEL, requestId);
+  });
+}
+
+/**
+ * ⌘Q, menu Quit and Dock Quit. With unsaved notes in any window, asks once,
+ * in the focused window if it has some, else the first window that does.
+ * Closing the last window is not a quit and never comes here.
+ */
+function guardQuit(event: Electron.Event): void {
+  if (quitConfirmed) return;
+  const target = pickDiscardPromptTarget(
+    BrowserWindow.getFocusedWindow(),
+    BrowserWindow.getAllWindows(),
+    hasUnsavedNotes,
+  );
+  if (target === null) return;
+  event.preventDefault();
+  if (isAskingBeforeQuit) return;
+  isAskingBeforeQuit = true;
+  void askToDiscardUnsavedNotes(target).then((discard) => {
+    isAskingBeforeQuit = false;
+    if (!discard) return;
+    // A downloaded update still installs on this quit.
+    quitConfirmed = true;
+    app.quit();
+  });
+}
+
 function registerIpc(): void {
   ipcMain.on(RETRY_LOAD_CHANNEL, (event) => {
     if (!isOfflinePageUrl(event.senderFrame?.url)) return;
     const retryUrl = retryUrls.get(event.sender);
     if (retryUrl !== undefined) loadAppUrl(event.sender, retryUrl);
   });
+
+  ipcMain.handle(UPDATE_STATE_CHANNEL, () => getUpdateState());
+  onUpdateStateChange((state) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(UPDATE_STATE_CHANNEL, state);
+    }
+  });
+
+  ipcMain.handle(UPDATE_CHECK_CHANNEL, (event) =>
+    isFromApp(event) ? checkForUpdates() : null,
+  );
+
+  // The page has already asked about unsaved notes in every window.
+  ipcMain.on(UPDATE_INSTALL_CHANNEL, (event) => {
+    if (!isFromApp(event) || getUpdateState().state !== "downloaded") return;
+    quitConfirmed = true;
+    installDownloadedUpdate();
+  });
+
+  ipcMain.on(UNSAVED_NOTES_CHANNEL, (event, hasUnsaved: unknown) => {
+    if (!isFromApp(event)) return;
+    if (hasUnsaved === true) {
+      unsavedNotes.add(event.sender);
+    } else {
+      unsavedNotes.delete(event.sender);
+    }
+  });
+
+  ipcMain.handle(ANY_UNSAVED_NOTES_CHANNEL, () =>
+    BrowserWindow.getAllWindows().some(hasUnsavedNotes),
+  );
+
+  ipcMain.on(
+    DISCARD_REQUEST_CHANNEL,
+    (event, requestId: unknown, discard: unknown) => {
+      if (!isFromApp(event) || typeof requestId !== "number") return;
+      discardRequests.get(requestId)?.(discard === true);
+    },
+  );
 }
 
 /**
@@ -501,6 +630,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
+
+  app.on("before-quit", guardQuit);
 
   app
     .whenReady()

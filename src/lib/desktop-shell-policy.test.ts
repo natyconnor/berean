@@ -5,6 +5,7 @@ import {
   isConvexSignInUrl,
   isSameOrigin,
   isSignInPending,
+  pickDiscardPromptTarget,
   SIGN_IN_WINDOW_MS,
   signInAttemptFromUrl,
   signInCodeTarget,
@@ -118,6 +119,27 @@ describe("signInCodeTarget", () => {
     expect(
       signInCodeTarget(pending, ATTEMPT, 1_001 + SIGN_IN_WINDOW_MS),
     ).toBeNull();
+  });
+});
+
+describe("pickDiscardPromptTarget", () => {
+  const unsaved = new Set(["b", "c"]);
+  const hasUnsaved = (window: string) => unsaved.has(window);
+
+  it("asks in the focused window when it has unsaved notes", () => {
+    expect(pickDiscardPromptTarget("c", ["a", "b", "c"], hasUnsaved)).toBe("c");
+  });
+
+  it("otherwise asks once, in the first window with unsaved notes", () => {
+    expect(pickDiscardPromptTarget("a", ["a", "b", "c"], hasUnsaved)).toBe("b");
+    expect(pickDiscardPromptTarget(null, ["a", "b", "c"], hasUnsaved)).toBe(
+      "b",
+    );
+  });
+
+  it("does not ask when no window has unsaved notes", () => {
+    expect(pickDiscardPromptTarget("a", ["a", "d"], hasUnsaved)).toBeNull();
+    expect(pickDiscardPromptTarget(null, [], hasUnsaved)).toBeNull();
   });
 });
 

@@ -1,10 +1,18 @@
 import { useEffect, type ReactNode } from "react";
 import { FeedbackFab } from "@/components/feedback/feedback-fab";
+import { UnsavedNotesDiscardDialog } from "@/components/unsaved-notes-discard-dialog";
 import { GRAIN_CONFIG } from "@/lib/candlelight-grain";
 import { ModeDock } from "./mode-dock";
 import { TabBar } from "./tab-bar";
+import type { WebUpdate } from "./update-indicator";
 
-function AppShellSurface({ children }: { children: ReactNode }) {
+type AppShellProps = {
+  children: ReactNode;
+  /** A new web build, shown as the desktop app's update arrow. */
+  webUpdate?: WebUpdate | null;
+};
+
+function AppShellSurface({ children, webUpdate }: AppShellProps) {
   useEffect(() => {
     if (!GRAIN_CONFIG.grainLightFalloff) return;
 
@@ -53,15 +61,16 @@ function AppShellSurface({ children }: { children: ReactNode }) {
         } as React.CSSProperties
       }
     >
-      <TabBar />
+      <TabBar webUpdate={webUpdate} />
       <FeedbackFab />
       {/* Mode Dock is position:fixed and floats over content; pages add their own scroll padding. */}
       <div className="flex-1 overflow-hidden">{children}</div>
       <ModeDock />
+      <UnsavedNotesDiscardDialog />
     </div>
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
-  return <AppShellSurface>{children}</AppShellSurface>;
+export function AppShell({ children, webUpdate }: AppShellProps) {
+  return <AppShellSurface webUpdate={webUpdate}>{children}</AppShellSurface>;
 }
