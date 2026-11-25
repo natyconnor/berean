@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useId, useMemo } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { setUnsavedNotes } from "@/lib/unsaved-notes";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import {
@@ -302,9 +303,19 @@ export function usePassageNotesInteraction(
     closeChapterPanel,
   ]);
 
+  const hasDirtyEditors = uiState.hasDirtyEditors || chapterNotesDirty;
+
+  // Let a restart, refresh or quit started outside the passage view ask
+  // "Discard unsaved notes?" too.
+  const unsavedNotesOwner = useId();
+  useEffect(() => {
+    setUnsavedNotes(unsavedNotesOwner, hasDirtyEditors);
+    return () => setUnsavedNotes(unsavedNotesOwner, false);
+  }, [hasDirtyEditors, unsavedNotesOwner]);
+
   return {
     ...uiState,
-    hasDirtyEditors: uiState.hasDirtyEditors || chapterNotesDirty,
+    hasDirtyEditors,
     handleClickAway,
     confirmDiscard,
     chapterScopedNotes,

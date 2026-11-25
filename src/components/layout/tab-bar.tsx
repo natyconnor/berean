@@ -19,8 +19,10 @@ import { shouldRevealSearch } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
+import { isBereanDesktop } from "@/lib/desktop-platform";
+import { UpdateIndicator, type WebUpdate } from "./update-indicator";
 
-export function TabBar() {
+export function TabBar({ webUpdate = null }: { webUpdate?: WebUpdate | null }) {
   const {
     tabs,
     activeTabId,
@@ -263,6 +265,7 @@ export function TabBar() {
             </TooltipButton>
           </FeatureCallout>
         ) : null}
+        {isBereanDesktop() ? <UpdateIndicator webUpdate={webUpdate} /> : null}
         <div className="relative">
           {isSettingsRoute ? (
             <TooltipButton

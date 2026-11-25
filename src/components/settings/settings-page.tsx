@@ -21,6 +21,7 @@ import { DevSeedSection } from "@/components/settings/dev-seed-section";
 import { TutorialActionsSection } from "@/components/settings/tutorial-actions-section";
 import { DeleteCustomTagDialog } from "@/components/settings/delete-custom-tag-dialog";
 import { DeleteAccountSection } from "@/components/settings/delete-account-section";
+import { DesktopUpdatesSection } from "@/components/settings/desktop-updates-section";
 import { logInteraction } from "@/lib/dev-log";
 
 interface SeedResultSummary {
@@ -385,6 +386,8 @@ export function SettingsPage() {
         />
 
         <DeleteAccountSection />
+
+        <DesktopUpdatesSection />
 
         <section className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground">
           <Link

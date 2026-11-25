@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppVersionMonitor } from "@/hooks/use-app-version-monitor";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
 import { logInteraction } from "@/lib/dev-log";
+import { isBereanDesktop } from "@/lib/desktop-platform";
 import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
@@ -191,9 +192,14 @@ function RootRouteShell() {
     window.location.reload();
   };
 
+  const webUpdate =
+    showRefreshPrompt && latestVersion
+      ? { buildId: latestVersion.buildId, refresh: refreshToLatestVersion }
+      : null;
+  // The desktop app shows a new build as the arrow in its top bar instead.
   const refreshPrompt =
-    showRefreshPrompt && latestVersion ? (
-      <AppRefreshPrompt onRefresh={refreshToLatestVersion} />
+    webUpdate && !isBereanDesktop() ? (
+      <AppRefreshPrompt onRefresh={webUpdate.refresh} />
     ) : null;
 
   let content: ReactNode;
@@ -237,7 +243,7 @@ function RootRouteShell() {
             >
               <MemorizeProvider>
                 <TutorialProvider tutorialStatus={tutorialStatus}>
-                  <AppShell>
+                  <AppShell webUpdate={webUpdate}>
                     <Outlet />
                   </AppShell>
                 </TutorialProvider>

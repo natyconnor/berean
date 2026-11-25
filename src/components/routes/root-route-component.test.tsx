@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RootRouteComponent } from "@/components/routes/root-route-component";
 
-const { authState, locationState } = vi.hoisted(() => ({
+const { authState, locationState, versionState } = vi.hoisted(() => ({
   authState: { isAuthenticated: false, isLoading: false },
   locationState: { pathname: "/privacy", searchStr: "" },
+  versionState: {
+    latestVersion: null as { buildId: string; appVersion: string } | null,
+  },
 }));
 
 vi.mock("@tanstack/react-router", async () => {
@@ -69,8 +72,8 @@ vi.mock("@/hooks/use-preview-auto-sign-in", () => ({
 
 vi.mock("@/hooks/use-app-version-monitor", () => ({
   useAppVersionMonitor: () => ({
-    latestVersion: null,
-    showRefreshPrompt: false,
+    latestVersion: versionState.latestVersion,
+    showRefreshPrompt: versionState.latestVersion !== null,
     refreshToLatestVersion: vi.fn(),
   }),
 }));
@@ -82,8 +85,16 @@ vi.mock("@/components/login-page", () => ({
 }));
 
 vi.mock("@/components/layout/app-shell", () => ({
-  AppShell: ({ children }: { children: ReactNode }) => (
-    <div data-testid="app-shell">{children}</div>
+  AppShell: ({
+    children,
+    webUpdate,
+  }: {
+    children: ReactNode;
+    webUpdate?: { buildId: string } | null;
+  }) => (
+    <div data-testid="app-shell" data-web-update={webUpdate?.buildId ?? ""}>
+      {children}
+    </div>
   ),
 }));
 
@@ -104,6 +115,8 @@ afterEach(() => {
   authState.isLoading = false;
   locationState.pathname = "/privacy";
   locationState.searchStr = "";
+  versionState.latestVersion = null;
+  delete window.bereanDesktop;
   vi.useRealTimers();
 });
 
@@ -174,5 +187,42 @@ describe("RootRouteComponent legal navigation", () => {
     expect(splashOverlay()).not.toBeInTheDocument();
     expect(screen.getByTestId("login-page")).toHaveTextContent("Sign in");
     vi.useRealTimers();
+  });
+});
+
+describe("RootRouteComponent web update", () => {
+  const NEW_BUILD = { buildId: "build-2", appVersion: "1.23.0" };
+
+  it("keeps the website's corner card, signed in or not", () => {
+    versionState.latestVersion = NEW_BUILD;
+    locationState.pathname = "/passage/John-1";
+    const { rerender } = render(<RootRouteComponent />);
+    expect(screen.getByText("An update is available.")).toBeInTheDocument();
+
+    authState.isAuthenticated = true;
+    rerender(<RootRouteComponent />);
+    expect(screen.getByText("An update is available.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Refresh now" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hands a new build to the top bar instead of the card in the Mac app", () => {
+    window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+    versionState.latestVersion = NEW_BUILD;
+    locationState.pathname = "/passage/John-1";
+    const { unmount } = render(<RootRouteComponent />);
+    // Sign-in screen: no card, and no app shell for an arrow.
+    expect(screen.queryByText("An update is available.")).toBeNull();
+    expect(screen.queryByTestId("app-shell")).toBeNull();
+    unmount();
+
+    authState.isAuthenticated = true;
+    render(<RootRouteComponent />);
+    expect(screen.queryByText("An update is available.")).toBeNull();
+    expect(screen.getByTestId("app-shell")).toHaveAttribute(
+      "data-web-update",
+      "build-2",
+    );
   });
 });
