@@ -120,7 +120,7 @@ export function UpdateIndicator({
             data-testid="update-dot"
             data-visible={showDot}
             className={cn(
-              "pointer-events-none absolute right-1.5 top-1.5 size-2 rounded-full bg-primary ring-2 ring-background transition-opacity duration-150 motion-reduce:transition-none",
+              "pointer-events-none absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary ring-2 ring-background transition-opacity duration-150 motion-reduce:transition-none",
               !showDot && "opacity-0",
             )}
           />
