@@ -124,8 +124,59 @@ honours a custom scheme for a packaged app, so anything involving `berean://`
 links has to be tested with `desktop:pack`, not `desktop:dev`.
 
 Signing, notarization, the `.dmg`, self-update and the release workflow are
-not here yet; they arrive with PR 6 of the plan. So do `berean://` links to app
-routes (PR 4): today the shell only acts on `berean://auth`.
+not here yet; they arrive with PR 6 of the plan.
+
+## Links to app routes
+
+`berean://` followed by an app path opens that route in the app:
+
+| Link                                   | Opens                          |
+| -------------------------------------- | ------------------------------ |
+| `berean://passage/John-1`              | `/passage/John-1`              |
+| `berean://passage/John-1?startVerse=3` | `/passage/John-1?startVerse=3` |
+| `berean://settings`                    | `/settings`                    |
+| `berean://`                            | `/`                            |
+
+`parseBereanOpenUrl` accepts exactly the paths the web server serves
+(`resolveAppPath` in `shared/http-routes.ts`), so a new web route works as a
+link with no change here. Anything else (`berean://nope`, a static file, a
+host such as `berean://evil.example/…`) is ignored.
+
+- **Running:** the route opens in a **new window**, which comes to the front.
+  Existing windows are never reloaded: notes do not autosave, and a reload
+  would skip the app's "Discard unsaved notes?" prompt and lose a note in
+  progress.
+- **Not running:** the link launches Berean, and its first window opens at
+  the route.
+- **Signed out:** the window shows the login page on that URL. Sign-in hands
+  back to the same URL, so the route appears once signed in.
+
+macOS delivers links through `open-url`. A link passed on the command line,
+or to a second launch (`second-instance`, which is how other platforms
+deliver them), is handled the same way. There are no Universal Links
+(`https://` links that open the app).
+
+### Testing route links
+
+With the packed app (see below):
+
+```bash
+# Berean not running: launches it with one window, on John 1.
+open "berean://passage/John-1"
+
+# Berean running: opens a second window on Settings; the first is untouched.
+open "berean://settings"
+
+# Ignored; no window opens or changes.
+open "berean://nope"
+```
+
+To check a note in progress survives, start typing a note in a passage, don't
+save it, then run `open "berean://passage/John-2"`. John 2 opens in a new
+window, and the note is still there in the first one.
+
+Sign out first to check the signed-out case: the login page shows, the address
+stays `/passage/John-1`, and after signing in the passage appears.
 
 ## Sign-in through the browser
 
