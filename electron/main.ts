@@ -19,6 +19,7 @@ import {
 } from "../shared/desktop-deep-link";
 import { CANONICAL_ORIGIN } from "../shared/http-routes";
 import { RETRY_LOAD_CHANNEL } from "./ipc-channels";
+import { checkForUpdatesFromMenu, startUpdater } from "./updater";
 import {
   findBereanUrl,
   isAllowedFrameUrl,
@@ -389,6 +390,12 @@ function buildMenu(): Menu {
       label: APP_NAME,
       submenu: [
         { role: "about" },
+        {
+          label: "Check for Updates…",
+          click: () => {
+            checkForUpdatesFromMenu();
+          },
+        },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -510,6 +517,9 @@ if (!app.requestSingleInstanceLock()) {
       }
       // Unless the launching link already opened one.
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
+
+      // Packaged builds only; checks in the background after a delay.
+      startUpdater();
     })
     .catch((error: unknown) => {
       console.error("[berean] Failed to start:", error);

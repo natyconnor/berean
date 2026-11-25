@@ -1,13 +1,19 @@
-# Local pack only. Signing, notarization, the dmg/zip targets and publishing
-# are added by PR 6 of the desktop plan.
+# Packaging for the Berean desktop shell. See README.md ("Releasing").
+#
+# `pnpm run pack` builds an unsigned .app for local testing (dir target, this
+# Mac's architecture, signing off). `pnpm run dist:unsigned` builds the
+# universal Berean.dmg and zip unsigned. `pnpm run dist` uses
+# electron-builder.release.yml (this file plus the update feed) to build the
+# release: signed and notarized, plus the latest-mac.yml the updater reads.
+# The desktop-release workflow publishes those files.
 appId: dev.nathanconnor.berean
 productName: Berean
 
 directories:
   output: release
 
-# main.ts and preload.ts are bundled into dist/ by esbuild, so the app ships
-# no node_modules at all.
+# main.ts and preload.ts are bundled into dist/ by esbuild (electron-updater
+# included), so the app ships no node_modules at all.
 files:
   - dist/**
   - offline.html
@@ -23,4 +29,23 @@ mac:
   category: public.app-category.reference
   icon: ../public/berean-logo.png
   target:
-    - dir
+    # First install. The updater needs the zip.
+    - target: dmg
+      arch: universal
+    - target: zip
+      arch: universal
+  hardenedRuntime: true
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+  # Uses APPLE_API_KEY (path to the .p8), APPLE_API_KEY_ID and
+  # APPLE_API_ISSUER; skipped with a warning when they are not set.
+  notarize: true
+
+dmg:
+  # No version in the name, so the download link never changes:
+  # https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg
+  artifactName: Berean.dmg
+
+# No `publish` here: the update feed lives in electron-builder.release.yml, so
+# unsigned builds (pack, dist:unsigned) carry none and never try to update.
+# macOS refuses to install an update into an unsigned app.
