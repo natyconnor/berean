@@ -107,6 +107,20 @@ export function findBereanUrl(argv: readonly string[]): string | null {
   return argv.find((arg) => /^berean:/i.test(arg)) ?? null;
 }
 
+/**
+ * Which window asks "Discard unsaved notes?" before the app quits: the
+ * focused window when it has unsaved notes, else the first window that does,
+ * else none (quit without asking). Asked once, not once per window.
+ */
+export function pickDiscardPromptTarget<T>(
+  focused: T | null,
+  windows: readonly T[],
+  hasUnsavedNotes: (window: T) => boolean,
+): T | null {
+  if (focused !== null && hasUnsavedNotes(focused)) return focused;
+  return windows.find(hasUnsavedNotes) ?? null;
+}
+
 /** Frames may show the app origin or an empty document, nothing else. */
 export function isAllowedFrameUrl(rawUrl: string, appOrigin: string): boolean {
   return (

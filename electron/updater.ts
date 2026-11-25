@@ -1,13 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  type MessageBoxOptions,
-  type MessageBoxReturnValue,
-} from "electron";
+import { app, BrowserWindow, dialog, type MessageBoxOptions } from "electron";
 import { autoUpdater } from "electron-updater";
+import { createUpdateFlow } from "./update-flow";
 
 /**
  * Shell self-update from the releases of natyconnor/berean-desktop (see
@@ -18,88 +13,17 @@ import { autoUpdater } from "electron-updater";
  *   builds (`pack`, `dist:unsigned`) are built without one: macOS only
  *   installs updates into a signed app, and electron-updater would otherwise
  *   announce a download as ready before macOS rejects it.
- * - Downloads in the background and installs on quit. When a download is
- *   ready it offers Restart Now / Later.
+ * - Downloads in the background and installs on quit. A finished download
+ *   never opens a window: the page shows an arrow in its top bar, and its
+ *   "Restart to update" calls `installDownloadedUpdate`.
  * - Never blocks startup and never shows an error on its own: no network or
  *   no feed just means no update this time. Results and errors are shown
- *   only for a check the user started from the menu.
+ *   only for a check the user started, from the menu (native windows) or
+ *   from Settings (in the page). See `update-flow.ts`.
  */
 
 const FIRST_CHECK_DELAY_MS = 10 * 1000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
-
-type UpdateState = "idle" | "checking" | "downloading" | "downloaded";
-
-let state: UpdateState = "idle";
-/** The check in progress was started from "Check for Updates…". */
-let userAskedForCheck = false;
-let readyVersion: string | null = null;
-let isRestartPromptOpen = false;
-
-function showMessage(
-  options: MessageBoxOptions,
-): Promise<MessageBoxReturnValue> {
-  const parent = BrowserWindow.getFocusedWindow();
-  return parent
-    ? dialog.showMessageBox(parent, options)
-    : dialog.showMessageBox(options);
-}
-
-function tellUser(message: string, detail?: string): void {
-  void showMessage({ type: "info", buttons: ["OK"], message, detail });
-}
-
-async function offerRestart(): Promise<void> {
-  if (isRestartPromptOpen) return;
-  isRestartPromptOpen = true;
-  try {
-    const { response } = await showMessage({
-      type: "info",
-      buttons: ["Restart Now", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      message: "A new version of Berean is ready.",
-      detail: `Restart to finish updating to Berean ${readyVersion ?? ""}. If you choose Later, it installs the next time you quit.`,
-    });
-    if (response === 0) autoUpdater.quitAndInstall();
-  } finally {
-    isRestartPromptOpen = false;
-  }
-}
-
-async function checkForUpdates(fromMenu: boolean): Promise<void> {
-  if (state === "downloaded") {
-    if (fromMenu) await offerRestart();
-    return;
-  }
-  if (state === "downloading") {
-    if (fromMenu) {
-      tellUser(
-        "An update is downloading.",
-        "Berean will ask you to restart when it is ready.",
-      );
-    }
-    return;
-  }
-  if (state === "checking") {
-    // Report this check's result to the user too.
-    userAskedForCheck ||= fromMenu;
-    return;
-  }
-
-  state = "checking";
-  userAskedForCheck = fromMenu;
-  try {
-    const result = await autoUpdater.checkForUpdates();
-    if (result === null) {
-      // electron-updater considers itself inactive; nothing was checked.
-      state = "idle";
-      userAskedForCheck = false;
-    }
-  } catch {
-    // Reported by the "error" listener.
-  }
-}
 
 /** Packaged, and built with an update feed (signed release builds only). */
 function canUpdate(): boolean {
@@ -109,16 +33,36 @@ function canUpdate(): boolean {
   );
 }
 
-export function checkForUpdatesFromMenu(): void {
-  if (!canUpdate()) {
-    tellUser(
-      "This copy of Berean doesn’t update itself.",
-      "Only the released app updates itself. Download it from github.com/natyconnor/berean-desktop/releases.",
-    );
-    return;
-  }
-  void checkForUpdates(true);
+function tellUser(message: string, detail: string): void {
+  const options: MessageBoxOptions = {
+    type: "info",
+    buttons: ["OK"],
+    message,
+    detail,
+  };
+  const parent = BrowserWindow.getFocusedWindow();
+  void (parent
+    ? dialog.showMessageBox(parent, options)
+    : dialog.showMessageBox(options));
 }
+
+const flow = createUpdateFlow({
+  canUpdate,
+  appVersion: () => app.getVersion(),
+  tellUser,
+  startCheck: () => autoUpdater.checkForUpdates(),
+  quitAndInstall: () => {
+    autoUpdater.quitAndInstall();
+  },
+});
+
+export const {
+  getUpdateState,
+  onUpdateStateChange,
+  checkForUpdates,
+  checkForUpdatesFromMenu,
+  installDownloadedUpdate,
+} = flow;
 
 export function startUpdater(): void {
   if (!canUpdate()) return;
@@ -133,47 +77,21 @@ export function startUpdater(): void {
   };
 
   autoUpdater.on("update-available", (info) => {
-    state = "downloading";
-    if (userAskedForCheck) {
-      tellUser(
-        `Downloading Berean ${info.version}.`,
-        "Berean will ask you to restart when it is ready.",
-      );
-    }
-    userAskedForCheck = false;
+    flow.handleUpdateAvailable(info.version);
   });
-
   autoUpdater.on("update-not-available", () => {
-    state = "idle";
-    if (userAskedForCheck) {
-      tellUser(
-        "Berean is up to date.",
-        `You have the latest version (${app.getVersion()}).`,
-      );
-    }
-    userAskedForCheck = false;
+    flow.handleUpdateNotAvailable();
   });
-
   autoUpdater.on("update-downloaded", (info) => {
-    state = "downloaded";
-    readyVersion = info.version;
-    void offerRestart();
+    flow.handleUpdateDownloaded(info.version);
   });
-
   autoUpdater.on("error", (error) => {
     console.error("[berean] Update failed:", error.message);
-    if (state !== "downloaded") state = "idle";
-    if (userAskedForCheck) {
-      tellUser(
-        "Berean couldn’t check for updates.",
-        "Check your internet connection and try again later.",
-      );
-    }
-    userAskedForCheck = false;
+    flow.handleError();
   });
 
   const backgroundCheck = (): void => {
-    void checkForUpdates(false);
+    void checkForUpdates();
   };
   setTimeout(backgroundCheck, FIRST_CHECK_DELAY_MS);
   setInterval(backgroundCheck, CHECK_INTERVAL_MS);

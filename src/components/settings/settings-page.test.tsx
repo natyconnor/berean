@@ -190,6 +190,45 @@ describe("SettingsPage", () => {
     expect(screen.getByText(/starter tags used:/i)).toBeInTheDocument();
   });
 
+  it("shows Berean for Mac just above the legal links, only in the Mac app", () => {
+    useQueryMock.mockImplementation((reference: unknown) => {
+      if (reference === "api.tags.listCatalog") return [];
+      if (reference === "api.userSettings.getTutorialStatus") {
+        return { categoryColors: {} };
+      }
+      return undefined;
+    });
+
+    const { unmount } = render(<SettingsPage />);
+    expect(
+      screen.queryByRole("heading", { name: "Berean for Mac" }),
+    ).toBeNull();
+    unmount();
+
+    // A shell from before the version bridge: still no card.
+    window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+    const oldShell = render(<SettingsPage />);
+    expect(
+      screen.queryByRole("heading", { name: "Berean for Mac" }),
+    ).toBeNull();
+    oldShell.unmount();
+
+    window.bereanDesktop = {
+      isDesktop: true,
+      platform: "darwin",
+      shellVersion: "1.0.2",
+    };
+    render(<SettingsPage />);
+    const card = screen
+      .getByRole("heading", { name: "Berean for Mac" })
+      .closest("section");
+    expect(card).toHaveTextContent("Version 1.0.2");
+    expect(card?.nextElementSibling).toContainElement(
+      screen.getByRole("link", { name: "Privacy Policy" }),
+    );
+    delete window.bereanDesktop;
+  });
+
   it("does not show Mode Dock preference options", () => {
     useQueryMock.mockImplementation((reference: unknown) => {
       if (reference === "api.tags.listCatalog") {

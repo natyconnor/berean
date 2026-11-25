@@ -95,11 +95,12 @@ Web CI is therefore unaffected by this folder (Prettier still formats it).
 | File                           | Role                                                         |
 | ------------------------------ | ------------------------------------------------------------ |
 | `main.ts`                      | Windows, menu, navigation guard, offline, sign-in hand-back  |
-| `preload.ts`                   | Exposes `window.bereanDesktop` (`{ isDesktop, platform }`)   |
+| `preload.ts`                   | Exposes `window.bereanDesktop` (platform, version, updates)  |
 | `offline.html`                 | Local "needs an internet connection" page with Retry         |
 | `ipc-channels.ts`              | IPC channel names shared by main and preload                 |
-| `shell-policy.ts`              | Pure URL checks used by main (sign-in, origins, frames)      |
+| `shell-policy.ts`              | Pure checks used by main (sign-in, origins, frames, quit)    |
 | `updater.ts`                   | Self-update from the GitHub releases, Check for Updates…     |
+| `update-flow.ts`               | Pure update state and Check for Updates… messages            |
 | `electron-builder.yml`         | Packaging: app id, `berean://` scheme, icon, dmg/zip targets |
 | `electron-builder.release.yml` | Release builds: the above plus the update feed               |
 | `entitlements.mac.plist`       | Hardened-runtime entitlements (JIT only)                     |
@@ -205,12 +206,21 @@ built into the app as `app-update.yml`).
   copy does not update itself.
 - It checks 10 seconds after launch and every 4 hours, downloads in the
   background, and installs on quit.
-- When a download is ready it asks: "A new version of Berean is ready." with
-  **Restart Now** and **Later** (Later installs on the next quit).
+- When a download is ready no window opens. The page shows an arrow with a
+  dot in its top bar, before Settings; its **Restart to update** quits and
+  installs (after **Discard unsaved notes?** if any window has a draft).
+  Ignored, the update installs on the next quit.
 - It never blocks startup and never shows an error on its own. No network or
   no feed is logged (`[berean] Update failed: …`) and tried again later.
-- **Berean → Check for Updates…** reports the result: up to date, downloading
-  version N, ready to restart, or that it could not check.
+- **Berean → Check for Updates…** reports the result in a window: up to
+  date, downloading version N, ready (use the arrow), or that it could not
+  check. Settings → Berean for Mac runs the same check and shows the result
+  in the page.
+- Quit (Cmd+Q, menu or Dock) asks **Discard unsaved notes?** when any window
+  has an unsaved note. Closing the last window never asks and never quits.
+- Bridge methods added after 1.0.1 (`shellVersion`, `subscribeToUpdates`,
+  …) are optional in `src/lib/desktop-platform.ts`: the web app checks for
+  each one, because older shells keep running the latest web app.
 
 ### Testing an update
 
@@ -221,11 +231,12 @@ Needs two signed releases, so do it once the workflow has published one.
    in.
 2. Bump `electron/package.json` to N+1, merge, and run the workflow.
 3. In the running app choose **Berean → Check for Updates…**: it says it is
-   downloading N+1, then offers **Restart Now**. (Or wait: the app checks 10
-   seconds after launch and every 4 hours.)
-4. Choose **Restart Now**. Berean quits, comes back, and **Berean → About
-   Berean** shows N+1. You are still signed in.
-5. Repeat with **Later**, then quit Berean (Cmd+Q) and reopen it: it is on
+   downloading N+1. When the download finishes, an arrow with a dot appears
+   before Settings. (Or wait: the app checks 10 seconds after launch and
+   every 4 hours.)
+4. Click the arrow, then **Restart to update**. Berean quits, comes back, and
+   **Berean → About Berean** shows N+1. You are still signed in.
+5. Repeat with **Not now**, then quit Berean (Cmd+Q) and reopen it: it is on
    the new version.
 
 Run `Berean.app/Contents/MacOS/Berean` from a terminal to see the updater's

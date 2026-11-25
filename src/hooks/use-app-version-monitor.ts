@@ -34,12 +34,10 @@ export function useAppVersionMonitor() {
   const requestInFlightRef = useRef(false);
   const lastDetectedBuildIdRef = useRef<string | null>(null);
 
+  // Keeps checking after a new build is found, so a later build replaces it
+  // (the desktop app's update dot comes back for it).
   const checkForUpdate = useCallback(async () => {
-    if (
-      typeof window === "undefined" ||
-      requestInFlightRef.current ||
-      hasDetectedNewBuild(__APP_BUILD_ID__, latestVersion?.buildId)
-    ) {
+    if (typeof window === "undefined" || requestInFlightRef.current) {
       return;
     }
 
@@ -73,7 +71,9 @@ export function useAppVersionMonitor() {
           latestBuildId: version.buildId,
         });
       }
-      setLatestVersion((currentVersion) => currentVersion ?? version);
+      setLatestVersion((currentVersion) =>
+        currentVersion?.buildId === version.buildId ? currentVersion : version,
+      );
     } catch (error) {
       devLog.warn("version", "check-failed", {
         error:
@@ -84,15 +84,13 @@ export function useAppVersionMonitor() {
     } finally {
       requestInFlightRef.current = false;
     }
-  }, [latestVersion?.buildId]);
+  }, []);
 
   useEffect(() => {
     // Initial check may setState after the network response; this effect is a
     // legitimate external sync (timers + visibility + online + fetch).
     // eslint-disable-next-line react-hooks/set-state-in-effect -- external version polling
     void checkForUpdate();
-
-    if (hasDetectedNewBuild(__APP_BUILD_ID__, latestVersion?.buildId)) return;
 
     const intervalId = window.setInterval(() => {
       void checkForUpdate();
@@ -115,7 +113,7 @@ export function useAppVersionMonitor() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
     };
-  }, [checkForUpdate, latestVersion?.buildId]);
+  }, [checkForUpdate]);
 
   const refreshToLatestVersion = useCallback(() => {
     logInteraction("version", "refresh-requested", {

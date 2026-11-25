@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
@@ -266,5 +266,47 @@ describe("TabBar", () => {
     fireEvent.keyDown(document, { key: ",", ctrlKey: true });
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
+  });
+
+  describe("update arrow", () => {
+    const webUpdate = { buildId: "build-2", refresh: vi.fn() };
+
+    afterEach(() => {
+      delete window.bereanDesktop;
+    });
+
+    it("sits between Search and Settings in the Mac app", () => {
+      window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+      render(
+        <StagedOnboardingTestProvider>
+          <TooltipProvider delayDuration={0}>
+            <TabBar webUpdate={webUpdate} />
+          </TooltipProvider>
+        </StagedOnboardingTestProvider>,
+      );
+
+      const actions = Array.from(
+        screen
+          .getByRole("toolbar", { name: "App actions" })
+          .querySelectorAll("a, button"),
+        (element) => element.getAttribute("aria-label"),
+      );
+      expect(actions.slice(0, 3)).toEqual([
+        "Open search workspace",
+        "Update ready",
+        "Open settings",
+      ]);
+    });
+
+    it("never shows on the website", () => {
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TabBar webUpdate={webUpdate} />
+        </TooltipProvider>,
+      );
+      expect(
+        screen.queryByRole("button", { name: /^Update ready/ }),
+      ).toBeNull();
+    });
   });
 });
