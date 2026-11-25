@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Vercel build: deploy Convex, then Vite, with VITE_CONVEX_URL set to the
-# deployment that was just claimed.
+# deployment that was just claimed, then start post-deploy backfills.
 set -euo pipefail
 
 args=(
@@ -23,4 +23,30 @@ if [[ "${VERCEL_ENV:-}" == "preview" ]]; then
   args+=(--preview-name "$preview_name")
 fi
 
-exec pnpm exec convex "${args[@]}"
+pnpm exec convex "${args[@]}"
+
+# Build every user's note totals row (#353) on the deployment just pushed, so
+# open tabs never wait on a missing row. The mutation runs one batch and
+# schedules the rest, so this returns quickly. Rerun by hand with the same
+# command. With a preview deploy key, --preview-name picks that preview; with
+# the production key, --prod (the key's own deployment).
+run_args=(
+  run migrations:backfillNoteMilestones '{}'
+  --codegen disable
+  --typecheck disable
+)
+if [[ "${VERCEL_ENV:-}" == "preview" ]]; then
+  run_args+=(--preview-name "$preview_name")
+else
+  run_args+=(--prod)
+fi
+
+for attempt in 1 2 3; do
+  if pnpm exec convex "${run_args[@]}"; then
+    exit 0
+  fi
+  echo "backfillNoteMilestones kickoff failed (attempt $attempt)" >&2
+  sleep 5
+done
+echo "backfillNoteMilestones kickoff failed after 3 attempts" >&2
+exit 1

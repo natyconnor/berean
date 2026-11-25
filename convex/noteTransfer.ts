@@ -10,6 +10,7 @@ import {
   createPlainTextNoteBody,
   noteBodyToPlainText,
 } from "./lib/noteContent";
+import { recordNoteChange } from "./lib/onboarding";
 import { normalizeTags, syncUserTagsFromNote } from "./lib/tags";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
 
@@ -125,6 +126,8 @@ export const importNotesBatch = mutation({
         createdAt: now,
         updatedAt: now,
       });
+      const created = await ctx.db.get(noteId);
+      if (created) await recordNoteChange(ctx, userId, created, null, tags);
 
       const verseRefId = await findOrCreateVerseRefId(ctx, userId, {
         book: importedNote.book,

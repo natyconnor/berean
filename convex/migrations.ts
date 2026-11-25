@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { v, type Infer } from "convex/values";
 import { ensurePassageDueBackfill } from "./lib/passageDue";
 import { freezeScopePacksForUser } from "./lib/freezeScopePacks";
+import { recountNoteMilestonesPage } from "./lib/onboarding";
 import {
   backfillInMemoryForUser,
   checkInMemoryInvariantForUser,
@@ -301,6 +302,72 @@ export const freezeScopePacks = internalMutation({
       isDone,
       continueCursor: isDone ? null : continueCursor,
     };
+  },
+});
+
+const noteMilestonesTotalsValidator = v.object({
+  usersBuilt: v.number(),
+  usersSkipped: v.number(),
+  pages: v.number(),
+});
+
+/**
+ * Build `userOnboardingMilestones` for every user, so the app shell can show
+ * the tutorial from one row. Runs one note page (`NOTE_RECOUNT_PAGE_SIZE`)
+ * per transaction: a user with more notes keeps the same users cursor until
+ * their row is complete, then the walk moves on. Users with a complete row
+ * are skipped, so reruns are cheap and safe alongside the app's own
+ * `onboarding.ensureNoteMilestones`.
+ *
+ * Kicked off by `scripts/vercel-build.sh` after each Convex deploy. To rerun:
+ * `pnpm exec convex run migrations:backfillNoteMilestones '{}' --prod`
+ * (or `--preview-name <name>` for a preview deployment).
+ */
+export const backfillNoteMilestones = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    totals: v.optional(noteMilestonesTotalsValidator),
+  },
+  returns: v.object({
+    totals: noteMilestonesTotalsValidator,
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const cursor = args.cursor ?? null;
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("users")
+      .paginate({ cursor, numItems: 1 });
+
+    const totals = {
+      ...(args.totals ?? { usersBuilt: 0, usersSkipped: 0, pages: 0 }),
+    };
+    let userDone = true;
+    for (const user of page) {
+      const row = await ctx.db
+        .query("userOnboardingMilestones")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .unique();
+      if (row?.builtAt !== undefined) {
+        totals.usersSkipped += 1;
+        continue;
+      }
+      userDone = await recountNoteMilestonesPage(ctx, user._id);
+      totals.pages += 1;
+      if (userDone) totals.usersBuilt += 1;
+    }
+    console.log("backfillNoteMilestones batch", totals);
+
+    const allDone = isDone && userDone;
+    if (allDone) {
+      console.log("backfillNoteMilestones done", totals);
+    } else {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.backfillNoteMilestones,
+        { cursor: userDone ? continueCursor : cursor, totals },
+      );
+    }
+    return { totals, isDone: allDone };
   },
 });
 

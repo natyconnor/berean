@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -6,6 +7,8 @@ import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
   EMPTY_MILESTONES,
   computeOnboardingMilestones,
+  ensureNoteMilestonesRow,
+  recountNoteMilestonesPage,
   summarizeHints,
 } from "./lib/onboarding";
 import { resolveTutorialStatus } from "./lib/tutorial";
@@ -37,9 +40,13 @@ const onboardingStatusValue = v.object({
   hints: v.array(hintRecordValue),
 });
 
+/**
+ * Signed-in app shell status. Returns null (treat as still loading) until
+ * `ensureNoteMilestones` has built the user's note totals row.
+ */
 export const getOnboardingStatus = query({
   args: {},
-  returns: onboardingStatusValue,
+  returns: v.union(onboardingStatusValue, v.null()),
   handler: async (ctx) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
@@ -51,12 +58,13 @@ export const getOnboardingStatus = query({
       };
     }
 
+    const milestones = await computeOnboardingMilestones(ctx, userId);
+    if (!milestones) return null;
+
     const settings = await ctx.db
       .query("userSettings")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
-
-    const milestones = await computeOnboardingMilestones(ctx, userId);
     const hints = await ctx.db
       .query("userFeatureHints")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -67,6 +75,35 @@ export const getOnboardingStatus = query({
       milestones,
       hints: summarizeHints(hints),
     };
+  },
+});
+
+/**
+ * Idempotent: builds the note totals row for users who do not have one yet
+ * (first page now, the rest via `recountNoteMilestones`).
+ */
+export const ensureNoteMilestones = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+    await ensureNoteMilestonesRow(ctx, userId);
+    return null;
+  },
+});
+
+/** Count the next page of one user's notes; reschedules until complete. */
+export const recountNoteMilestones = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // The account may have been deleted since this was scheduled.
+    if (!(await ctx.db.get(args.userId))) return null;
+    if (await recountNoteMilestonesPage(ctx, args.userId)) return null;
+    await ctx.scheduler.runAfter(0, internal.onboarding.recountNoteMilestones, {
+      userId: args.userId,
+    });
+    return null;
   },
 });
 
