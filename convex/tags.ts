@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
+import { recordNoteChange } from "./lib/onboarding";
 import { normalizeTag, normalizeTags, syncUserTagsFromNote } from "./lib/tags";
 
 const DEFAULT_SUGGEST_LIMIT = 8;
@@ -257,6 +258,7 @@ export const removeCustomTagAndDetach = mutation({
         tags: nextTags,
         updatedAt: now,
       });
+      await recordNoteChange(ctx, userId, note.tags, nextTags);
       notesUpdated += 1;
     }
 

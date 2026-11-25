@@ -3,10 +3,13 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RootRouteComponent } from "@/components/routes/root-route-component";
 
-const { authState, locationState } = vi.hoisted(() => ({
-  authState: { isAuthenticated: false, isLoading: false },
-  locationState: { pathname: "/privacy", searchStr: "" },
-}));
+const { authState, locationState, queryState, ensureNoteMilestones } =
+  vi.hoisted(() => ({
+    authState: { isAuthenticated: false, isLoading: false },
+    locationState: { pathname: "/privacy", searchStr: "" },
+    queryState: { notesRollupMissing: false },
+    ensureNoteMilestones: vi.fn(() => Promise.resolve(null)),
+  }));
 
 vi.mock("@tanstack/react-router", async () => {
   const React = await import("react");
@@ -36,27 +39,30 @@ vi.mock("@tanstack/react-router", async () => {
 
 vi.mock("convex/react", () => ({
   useConvexAuth: () => authState,
-  useMutation: () => vi.fn(),
+  useMutation: () => ensureNoteMilestones,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
-  useQuery: () => ({
-    mainTutorialCompletedAt: 1,
-    advancedSearchTutorialCompletedAt: 1,
-    focusModeTutorialCompletedAt: 1,
-    categoryColors: {},
-    milestones: {
-      notesCount: 0,
-      taggedNotesCount: 0,
-      distinctTagCount: 0,
-      heartsCount: 0,
-      hasInlineVerseLink: false,
-      hasExplicitVerseLink: false,
-      starterTagCount: 0,
-      customTagCount: 0,
-    },
-    hints: [],
-  }),
+  useQuery: () =>
+    queryState.notesRollupMissing
+      ? null
+      : {
+          mainTutorialCompletedAt: 1,
+          advancedSearchTutorialCompletedAt: 1,
+          focusModeTutorialCompletedAt: 1,
+          categoryColors: {},
+          milestones: {
+            notesCount: 0,
+            taggedNotesCount: 0,
+            distinctTagCount: 0,
+            heartsCount: 0,
+            hasInlineVerseLink: false,
+            hasExplicitVerseLink: false,
+            starterTagCount: 0,
+            customTagCount: 0,
+          },
+          hints: [],
+        },
 }));
 
 vi.mock("@/hooks/use-dismiss-splash", () => ({
@@ -104,6 +110,8 @@ afterEach(() => {
   authState.isLoading = false;
   locationState.pathname = "/privacy";
   locationState.searchStr = "";
+  queryState.notesRollupMissing = false;
+  ensureNoteMilestones.mockClear();
   vi.useRealTimers();
 });
 
@@ -174,5 +182,29 @@ describe("RootRouteComponent legal navigation", () => {
     expect(splashOverlay()).not.toBeInTheDocument();
     expect(screen.getByTestId("login-page")).toHaveTextContent("Sign in");
     vi.useRealTimers();
+  });
+
+  it("waits for the note totals row and asks the server to build it", () => {
+    authState.isAuthenticated = true;
+    locationState.pathname = "/passage/John-1";
+    queryState.notesRollupMissing = true;
+    const { rerender } = render(<RootRouteComponent />);
+
+    expect(screen.queryByTestId("app-shell")).not.toBeInTheDocument();
+    expect(ensureNoteMilestones).toHaveBeenCalledTimes(1);
+
+    queryState.notesRollupMissing = false;
+    rerender(<RootRouteComponent />);
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(ensureNoteMilestones).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call the note totals backfill once the row exists", () => {
+    authState.isAuthenticated = true;
+    locationState.pathname = "/passage/John-1";
+    render(<RootRouteComponent />);
+
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(ensureNoteMilestones).not.toHaveBeenCalled();
   });
 });

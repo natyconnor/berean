@@ -6,6 +6,7 @@ import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
   EMPTY_MILESTONES,
   computeOnboardingMilestones,
+  ensureNoteMilestonesRow,
   summarizeHints,
 } from "./lib/onboarding";
 import { resolveTutorialStatus } from "./lib/tutorial";
@@ -37,9 +38,13 @@ const onboardingStatusValue = v.object({
   hints: v.array(hintRecordValue),
 });
 
+/**
+ * Signed-in app shell status. Returns null (treat as still loading) until
+ * `ensureNoteMilestones` has built the user's note totals row.
+ */
 export const getOnboardingStatus = query({
   args: {},
-  returns: onboardingStatusValue,
+  returns: v.union(onboardingStatusValue, v.null()),
   handler: async (ctx) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
@@ -51,12 +56,13 @@ export const getOnboardingStatus = query({
       };
     }
 
+    const milestones = await computeOnboardingMilestones(ctx, userId);
+    if (!milestones) return null;
+
     const settings = await ctx.db
       .query("userSettings")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
-
-    const milestones = await computeOnboardingMilestones(ctx, userId);
     const hints = await ctx.db
       .query("userFeatureHints")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -67,6 +73,17 @@ export const getOnboardingStatus = query({
       milestones,
       hints: summarizeHints(hints),
     };
+  },
+});
+
+/** Idempotent: builds the note totals row for users who do not have one yet. */
+export const ensureNoteMilestones = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+    await ensureNoteMilestonesRow(ctx, userId);
+    return null;
   },
 });
 

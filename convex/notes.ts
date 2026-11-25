@@ -18,6 +18,7 @@ import {
   verseRefSummaryValue,
   type NoteSummary,
 } from "./lib/publicValues";
+import { recordNoteChange } from "./lib/onboarding";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 
@@ -377,6 +378,7 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await recordNoteChange(ctx, userId, null, tags);
     await syncInlineVerseLinksForNote(ctx, userId, noteId, args.body);
     await syncUserTagsFromNote(ctx, userId, tags, now);
     return noteId;
@@ -475,6 +477,7 @@ export const update = mutation({
     }
 
     if (patch.tags) {
+      await recordNoteChange(ctx, userId, note.tags, patch.tags);
       await syncUserTagsFromNote(ctx, userId, patch.tags, now);
     }
     return null;
@@ -505,6 +508,7 @@ export const remove = mutation({
       await ctx.db.delete(link._id);
     }
     await ctx.db.delete(args.id);
+    await recordNoteChange(ctx, userId, note.tags, null);
     return null;
   },
 });

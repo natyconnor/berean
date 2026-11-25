@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useMatches } from "@tanstack/react-router";
-import { useConvexAuth } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
@@ -14,7 +14,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppVersionMonitor } from "@/hooks/use-app-version-monitor";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
-import { logInteraction } from "@/lib/dev-log";
+import { devLog, logInteraction } from "@/lib/dev-log";
 import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
@@ -74,6 +74,16 @@ function RootRouteShell() {
     api.onboarding.getOnboardingStatus,
     isAuthenticated ? {} : "skip",
   );
+  // Null means the user's note totals row is not built yet: keep waiting (as
+  // while loading) and ask the server to build it once.
+  const ensureNoteMilestones = useMutation(api.onboarding.ensureNoteMilestones);
+  const needsNoteMilestones = isAuthenticated && onboardingStatus === null;
+  useEffect(() => {
+    if (!needsNoteMilestones) return;
+    ensureNoteMilestones().catch((error: unknown) => {
+      devLog.warn("onboarding", "ensureNoteMilestones failed", error);
+    });
+  }, [ensureNoteMilestones, needsNoteMilestones]);
   const tutorialStatus = useMemo(() => {
     if (!onboardingStatus) return undefined;
     return {
@@ -212,7 +222,7 @@ function RootRouteShell() {
         onRetryConnection={retryAuthBootstrap}
       />
     );
-  } else if (tutorialStatus === undefined || onboardingStatus === undefined) {
+  } else if (tutorialStatus === undefined || !onboardingStatus) {
     content = (
       <div className="fixed inset-0">
         <div
