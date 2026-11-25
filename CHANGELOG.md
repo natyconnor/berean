@@ -30,6 +30,20 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.23.0](https://github.com/natyconnor/berean/compare/v1.22.1...v1.23.0) (2026-11-25)
+
+
+### Features
+
+* **desktop:** open berean:// links to app routes ([#438](https://github.com/natyconnor/berean/issues/438)) ([22e1847](https://github.com/natyconnor/berean/commit/22e18479279818b9a8e517cbf641bc8f38397e2b))
+* **desktop:** signed release build, self-update and release workflow ([#439](https://github.com/natyconnor/berean/issues/439)) ([5817dd5](https://github.com/natyconnor/berean/commit/5817dd53ca929efbcefed9f5f04f781aa0f08101))
+
+
+### Bug Fixes
+
+* Count tutorial notes from a per-user rollup row ([3a0f3a9](https://github.com/natyconnor/berean/commit/3a0f3a9ef9653eb16ea0be8a8d56fb9919d00394))
+* Show an update arrow in the Mac app instead of a restart dialog ([3e6591e](https://github.com/natyconnor/berean/commit/3e6591e57913d6e8c7f05bcd76b534758c058a12))
+
 ## [1.22.1](https://github.com/natyconnor/berean/compare/v1.22.0...v1.22.1) (2026-11-24)
 
 
