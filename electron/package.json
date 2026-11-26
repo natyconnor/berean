@@ -1,7 +1,7 @@
 {
   "name": "berean-desktop",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Berean desktop shell",
   "author": "Nathan Connor",
   "homepage": "https://berean.nathanconnor.dev",
