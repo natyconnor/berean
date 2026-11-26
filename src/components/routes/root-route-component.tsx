@@ -23,6 +23,10 @@ import {
 import { TabProvider } from "@/lib/tab-context";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
+  clearWebSignInReturn,
+  isWebSignInReturn,
+} from "@/lib/web-sign-in-return";
+import {
   PUBLIC_LEGAL_PATHS,
   resolveAppPath,
 } from "../../../shared/http-routes";
@@ -71,6 +75,19 @@ function RootRouteShell() {
     matches[matches.length - 1]?.pathname ?? location.pathname;
   const isPublicLegalPath = PUBLIC_LEGAL_PATH_SET.has(location.pathname);
   const isPublicLegalMatch = PUBLIC_LEGAL_PATH_SET.has(presentedPathname);
+  const isHomeMatch = presentedPathname === "/";
+  // Read once per page load: a return from website sign-in goes into the app.
+  const [isSignInReturn, setIsSignInReturn] = useState(isWebSignInReturn);
+  if (isSignInReturn && !isHomeMatch) {
+    setIsSignInReturn(false);
+  }
+  useEffect(() => {
+    clearWebSignInReturn();
+  }, []);
+  // On the website, `/` stays a landing page when signed in (Enter Berean).
+  // The Mac app and a sign-in return go on to the home route instead.
+  const showsSignedInLanding =
+    isHomeMatch && isAuthenticated && !isBereanDesktop() && !isSignInReturn;
   const onboardingStatus = useQuery(
     api.onboarding.getOnboardingStatus,
     isAuthenticated ? {} : "skip",
@@ -186,7 +203,12 @@ function RootRouteShell() {
   }, [isPublicLegalPath, location.pathname]);
 
   useEffect(() => {
-    if (!isReady || !isAuthenticated || tutorialStatus === undefined) {
+    if (
+      !isReady ||
+      !isAuthenticated ||
+      showsSignedInLanding ||
+      tutorialStatus === undefined
+    ) {
       protectedShellReadyRef.current = false;
       return;
     }
@@ -195,7 +217,13 @@ function RootRouteShell() {
     logInteraction("app", "protected-shell-ready", {
       path: location.pathname,
     });
-  }, [isAuthenticated, isReady, location.pathname, tutorialStatus]);
+  }, [
+    isAuthenticated,
+    isReady,
+    location.pathname,
+    showsSignedInLanding,
+    tutorialStatus,
+  ]);
 
   const retryAuthBootstrap = () => {
     logInteraction("app", "auth-bootstrap-retry-navigation", {});
@@ -220,10 +248,11 @@ function RootRouteShell() {
         <Outlet />
       </ThemeProvider>
     );
-  } else if (!effectiveReady || !isAuthenticated) {
+  } else if (!effectiveReady || !isAuthenticated || showsSignedInLanding) {
     content = (
       <LoginPage
         isLoading={!effectiveReady}
+        isSignedIn={isAuthenticated}
         authBootstrapStalled={authBootstrapShowingRecovery}
         onRetryConnection={retryAuthBootstrap}
       />

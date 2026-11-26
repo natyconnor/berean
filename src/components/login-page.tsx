@@ -1,16 +1,37 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Link } from "@tanstack/react-router";
+import { ArrowRight, Download } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LoginPageAtmosphere } from "@/components/login-page-atmosphere";
-import { isBereanDesktop } from "@/lib/desktop-platform";
+import { isBereanDesktop, isMacBrowser } from "@/lib/desktop-platform";
 import { startDesktopSignInAttempt } from "@/lib/desktop-sign-in-attempt";
 import { devLog, logInteraction } from "@/lib/dev-log";
 import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
 } from "@/lib/hero-backdrop";
+import { cn } from "@/lib/utils";
+import { loadTabs } from "@/lib/tab-context-internal";
+import { markWebSignInStarted } from "@/lib/web-sign-in-return";
 
 const PARALLAX_DAMPING = 0.04;
+
+/** Frosted white button on the dark hero (Sign in with Google, Enter Berean). */
+const HERO_BUTTON_CLASS =
+  "flex w-full items-center justify-center gap-3 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-white/90 backdrop-blur-sm transition-all hover:border-white/30 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-50";
+
+/** The quieter partner beside the main hero button: no fill until hover. */
+const HERO_QUIET_BUTTON_CLASS = cn(
+  HERO_BUTTON_CLASS,
+  "border-white/15 bg-transparent text-white/75 hover:border-white/30 hover:bg-white/10 hover:text-white/90",
+);
+
+const HERO_BUTTON_STYLE: CSSProperties = {
+  fontFamily: "'Cormorant Garamond', serif",
+  fontWeight: 600,
+  fontSize: "1.05rem",
+  letterSpacing: "0.05em",
+};
 
 function useMouseParallax() {
   const ref = useRef<HTMLDivElement>(null);
@@ -64,6 +85,8 @@ function slideDelay(ms: number): CSSProperties {
 
 type LoginPageProps = {
   isLoading?: boolean;
+  /** Signed in on the website: show Enter Berean instead of Sign in. */
+  isSignedIn?: boolean;
   /** True after auth bootstrap watchdog fires; show recovery affordance with sign-in UI. */
   authBootstrapStalled?: boolean;
   onRetryConnection?: () => void;
@@ -71,6 +94,7 @@ type LoginPageProps = {
 
 export function LoginPage({
   isLoading = false,
+  isSignedIn = false,
   authBootstrapStalled = false,
   onRetryConnection,
 }: LoginPageProps) {
@@ -79,6 +103,9 @@ export function LoginPage({
   /** Desktop only: sign-in has moved to the system browser. */
   const [isAwaitingBrowser, setIsAwaitingBrowser] = useState(false);
   const parallaxRef = useMouseParallax();
+  const showsDownload = isMacBrowser();
+  // Two buttons sit side by side from 640px up; below that they stack.
+  const buttonClass = showsDownload ? "sm:flex-1" : undefined;
 
   const handleGoogleSignIn = async () => {
     logInteraction("auth", "sign-in-started", { provider: "google" });
@@ -97,6 +124,8 @@ export function LoginPage({
         setIsSigningIn(false);
         return;
       }
+      // Coming back from Google goes straight into the app, not this page.
+      markWebSignInStarted();
       await signIn("google");
       logInteraction("auth", "sign-in-completed", { provider: "google" });
     } catch (error) {
@@ -252,12 +281,18 @@ export function LoginPage({
                     smaller top margin keeps the footer inside the default
                     desktop window. */}
                 <div
-                  className={`animate-content-slide-in w-full max-w-xs space-y-4 ${
-                    isAwaitingBrowser ? "mt-6" : "mt-12"
-                  }`}
+                  className={cn(
+                    "animate-content-slide-in w-full max-w-xs",
+                    showsDownload
+                      ? "flex flex-col gap-3 sm:max-w-lg sm:flex-row"
+                      : "space-y-4",
+                    isAwaitingBrowser ? "mt-6" : "mt-12",
+                  )}
                   style={slideDelay(400)}
                 >
-                  {isAwaitingBrowser ? (
+                  {isSignedIn ? (
+                    <EnterBereanLink className={buttonClass} />
+                  ) : isAwaitingBrowser ? (
                     <div role="status" className="space-y-3">
                       <p
                         className="text-base leading-snug text-white/85"
@@ -288,10 +323,21 @@ export function LoginPage({
                     </div>
                   ) : (
                     <GoogleSignInButton
+                      className={buttonClass}
                       isSigningIn={isSigningIn}
                       onClick={handleGoogleSignIn}
                     />
                   )}
+                  {showsDownload ? (
+                    <Link
+                      to="/download"
+                      className={cn(HERO_QUIET_BUTTON_CLASS, buttonClass)}
+                      style={HERO_BUTTON_STYLE}
+                    >
+                      <Download className="h-4 w-4" aria-hidden />
+                      Download for Mac
+                    </Link>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -361,10 +407,26 @@ export function LoginPage({
   );
 }
 
+function EnterBereanLink({ className }: { className?: string }) {
+  return (
+    <Link
+      to="/passage/$passageId"
+      params={{ passageId: loadTabs()[0].passageId }}
+      className={cn(HERO_BUTTON_CLASS, className)}
+      style={HERO_BUTTON_STYLE}
+    >
+      Enter Berean
+      <ArrowRight className="h-4 w-4" aria-hidden />
+    </Link>
+  );
+}
+
 function GoogleSignInButton({
+  className,
   isSigningIn,
   onClick,
 }: {
+  className?: string;
   isSigningIn: boolean;
   onClick: () => void;
 }) {
@@ -372,13 +434,8 @@ function GoogleSignInButton({
     <button
       onClick={onClick}
       disabled={isSigningIn}
-      className="flex w-full items-center justify-center gap-3 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-white/90 backdrop-blur-sm transition-all hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-      style={{
-        fontFamily: "'Cormorant Garamond', serif",
-        fontWeight: 600,
-        fontSize: "1.05rem",
-        letterSpacing: "0.05em",
-      }}
+      className={cn(HERO_BUTTON_CLASS, className)}
+      style={HERO_BUTTON_STYLE}
     >
       <svg className="h-5 w-5" viewBox="0 0 24 24">
         <path

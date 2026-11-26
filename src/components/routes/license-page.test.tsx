@@ -20,6 +20,10 @@ vi.mock("@tanstack/react-router", async () => {
   };
 });
 
+vi.mock("convex/react", () => ({
+  useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
+}));
+
 describe("LicensePage", () => {
   it("renders the repository MIT license", () => {
     render(<LicensePage />);

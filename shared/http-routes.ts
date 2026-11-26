@@ -20,8 +20,16 @@ import {
 
 export const CANONICAL_ORIGIN = "https://berean.nathanconnor.dev";
 
-/** Public legal pages that skip the authenticated app shell. */
-export const PUBLIC_LEGAL_PATHS = ["/privacy", "/terms", "/license"] as const;
+/**
+ * Public pages in the legal page layout (the legal pages and Berean for Mac)
+ * that skip the authenticated app shell.
+ */
+export const PUBLIC_LEGAL_PATHS = [
+  "/privacy",
+  "/terms",
+  "/license",
+  "/download",
+] as const;
 
 /** Signed-out pages that belong in the public sitemap. */
 export const PUBLIC_SITEMAP_PATHS = ["/", ...PUBLIC_LEGAL_PATHS] as const;
@@ -31,6 +39,7 @@ export const APP_ROUTE_PATTERNS = [
   "/privacy",
   "/terms",
   "/license",
+  "/download",
   "/search",
   "/theme-test",
   "/memory",

@@ -65,6 +65,17 @@ export function isBereanDesktop(): boolean {
   return window.bereanDesktop?.isDesktop === true;
 }
 
+/**
+ * True on a Mac, in a browser rather than the Berean desktop app: the place
+ * to offer Berean for Mac. Read synchronously so the first paint is right.
+ * Every Mac browser's user agent says "Macintosh"; when it can't be read,
+ * this is not a Mac. An iPad that asks for desktop sites counts as a Mac.
+ */
+export function isMacBrowser(): boolean {
+  if (isBereanDesktop() || typeof navigator === "undefined") return false;
+  return /Macintosh/.test(navigator.userAgent);
+}
+
 /** True when running as an installed PWA (home-screen app), not in a tab. */
 export function isPwaStandalone(): boolean {
   if (typeof window === "undefined") return false;
