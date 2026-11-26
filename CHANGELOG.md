@@ -30,6 +30,18 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.24.0](https://github.com/natyconnor/berean/compare/v1.23.0...v1.24.0) (2026-11-26)
+
+
+### Features
+
+* Calm the Start something new rail and add a hearts page ([2cf6d6f](https://github.com/natyconnor/berean/commit/2cf6d6f1f599915a635415898244befa82d49584))
+
+
+### Bug Fixes
+
+* Calm the Start something new rail and add a hearts page ([6f0ece8](https://github.com/natyconnor/berean/commit/6f0ece836104d2c6b259249f068d620797765565))
+
 ## [1.23.0](https://github.com/natyconnor/berean/compare/v1.22.1...v1.23.0) (2026-11-25)
 
 
