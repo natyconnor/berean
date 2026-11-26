@@ -272,6 +272,11 @@ describe("route table parity", () => {
     expect(robots).toContain("Allow: /privacy$");
     expect(robots).toContain("Allow: /terms$");
     expect(robots).toContain("Allow: /license$");
+    expect(robots).toContain("Allow: /download$");
+    expect(PUBLIC_SITEMAP_PATHS).toContain("/download");
+    expect(sitemap).toContain(
+      "<loc>https://berean.nathanconnor.dev/download</loc>",
+    );
     expect(robots.startsWith("User-agent:")).toBe(true);
   });
 

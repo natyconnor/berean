@@ -229,6 +229,56 @@ describe("SettingsPage", () => {
     delete window.bereanDesktop;
   });
 
+  it("offers Download for Mac first, only on a Mac in the browser", () => {
+    useQueryMock.mockImplementation((reference: unknown) => {
+      if (reference === "api.tags.listCatalog") return [];
+      if (reference === "api.userSettings.getTutorialStatus") {
+        return { categoryColors: {} };
+      }
+      return undefined;
+    });
+    const userAgent = vi.spyOn(window.navigator, "userAgent", "get");
+    const downloadLink = () =>
+      screen.queryByRole("link", { name: "Download for Mac" });
+
+    userAgent.mockReturnValue(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+    );
+    const mac = render(<SettingsPage />);
+    const row = downloadLink()?.closest("section");
+    expect(downloadLink()).toHaveAttribute("href", "/download");
+    expect(row).toHaveClass("rounded-lg", "border", "bg-card", "p-4");
+    expect(row).toHaveTextContent(
+      "Berean for MacAll of Berean, in its own app on your Mac.",
+    );
+    expect(row?.nextElementSibling).toBe(
+      screen.getByTestId("import-export-section"),
+    );
+    mac.unmount();
+
+    // Inside the Mac app: no row, just the existing update card.
+    window.bereanDesktop = {
+      isDesktop: true,
+      platform: "darwin",
+      shellVersion: "1.0.2",
+    };
+    const app = render(<SettingsPage />);
+    expect(downloadLink()).toBeNull();
+    expect(screen.getByText("Version 1.0.2")).toBeInTheDocument();
+    app.unmount();
+    delete window.bereanDesktop;
+
+    userAgent.mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    );
+    render(<SettingsPage />);
+    expect(downloadLink()).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Berean for Mac" }),
+    ).toBeNull();
+    userAgent.mockRestore();
+  });
+
   it("does not show Mode Dock preference options", () => {
     useQueryMock.mockImplementation((reference: unknown) => {
       if (reference === "api.tags.listCatalog") {

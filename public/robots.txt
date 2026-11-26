@@ -3,6 +3,7 @@ Allow: /$
 Allow: /privacy$
 Allow: /terms$
 Allow: /license$
+Allow: /download$
 Disallow: /
 
 Sitemap: https://berean.nathanconnor.dev/sitemap.xml

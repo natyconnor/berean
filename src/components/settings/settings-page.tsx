@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2 } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import type { TutorialStatus } from "../../../convex/lib/tutorial";
 import { ImportExportSection } from "@/components/settings/import-export-section";
 import { useTutorial } from "@/components/tutorial/tutorial-context";
 import { useTabs } from "@/lib/use-tabs";
+import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip-button";
+import { isMacBrowser } from "@/lib/desktop-platform";
 import {
   ALL_STARTER_TAGS,
   DEFAULT_STARTER_TAG_CATEGORY_COLORS,
@@ -326,6 +328,25 @@ export function SettingsPage() {
             Manage import/export, tags, and category colors.
           </p>
         </div>
+
+        {isMacBrowser() ? (
+          <section className="rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold">Berean for Mac</h2>
+                <p className="text-xs text-muted-foreground">
+                  All of Berean, in its own app on your Mac.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/download">
+                  <Download aria-hidden />
+                  Download for Mac
+                </Link>
+              </Button>
+            </div>
+          </section>
+        ) : null}
 
         <ImportExportSection />
 
