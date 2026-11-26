@@ -14,8 +14,11 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Two packages: the web app (".", unprefixed outputs) and the desktop
+    # shell ("electron", outputs prefixed "electron--").
     outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
+      web_release_created: ${{ steps.release.outputs.release_created }}
+      desktop_release_created: ${{ steps.release.outputs['electron--release_created'] }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v4
@@ -24,9 +27,22 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  # A desktop release is built and published to natyconnor/berean-desktop.
+  # If it fails (say notarization times out), use "Re-run failed jobs" on
+  # this run, or Actions → Desktop release → Run workflow on main. "Re-run
+  # all jobs" does not work: release-please has already made the release, so
+  # the second run reports none created and skips this job.
+  desktop-release:
+    needs: release-please
+    if: needs.release-please.outputs.desktop_release_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-release.yml
+    secrets: inherit
+
   deploy:
     needs: release-please
-    if: needs.release-please.outputs.releases_created == 'true'
+    if: needs.release-please.outputs.web_release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

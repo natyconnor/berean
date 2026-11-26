@@ -60,11 +60,13 @@ its own `package.json`, version, `pnpm-lock.yaml` and `pnpm-workspace.yaml`.
 
 - The web app's install (local, CI, Vercel) never pulls in Electron or
   electron-builder, and the web lockfile stays free of their dependency tree.
-- The desktop version (`electron/package.json`, starting at `1.0.0`) is
-  independent of the web app's release-please version.
+- The desktop version (`electron/package.json`) is independent of the web
+  app's version. release-please manages both, as two packages (see
+  [Releasing](#releasing)).
 - Dependabot has a separate entry for `/electron`. Electron major updates are
   not ignored there, because only the newest few major lines get security
-  fixes.
+  fixes. Its commits are `fix(deps-dev): …`, so each merged update releases
+  the shell.
 
 The root `desktop:*` scripts are thin wrappers that delegate here.
 
@@ -140,8 +142,41 @@ The download link never changes:
 <https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg>
 
 The desktop version is `version` in `electron/package.json`, independent of
-the web app's version. Web releases never build the desktop app, and most web
-changes need no desktop release at all: the shell loads the live site.
+the web app's version. Most web changes need no desktop release at all: the
+shell loads the live site.
+
+### When a release happens
+
+release-please treats `electron/` as its own package (component `desktop`,
+tags `desktop-v<version>`), next to the web app at the repository root:
+
+- A `feat:` or `fix:` commit that changes a file under `electron/` opens (or
+  updates) a **desktop release PR**, "chore(main): release desktop N". It
+  bumps `electron/package.json` and writes `electron/CHANGELOG.md`. Breaking
+  changes bump the major, `feat` the minor, `fix` the patch. `chore:`,
+  `docs:`, `refactor:` and so on do not release.
+- Merging that PR makes the GitHub release `desktop-v<version>` in this repo
+  and then runs the `Desktop release` workflow, which builds and publishes the
+  app to `berean-desktop`. There is nothing to run by hand.
+- The web app ignores commits that only touch `electron/`, and the desktop app
+  ignores commits that never touch it. A commit that touches both counts for
+  both. The two release PRs are separate, so either can ship without the
+  other.
+
+**Files bundled from outside `electron/` are not tracked.** esbuild bundles
+`shared/desktop-deep-link.ts`, `shared/http-routes.ts`,
+`shared/passage-path.ts`, `src/lib/bible-books.ts` and
+`src/lib/bible-verse-counts.ts` into the shell, but release-please only
+assigns a commit to the desktop package when it changes something under
+`electron/`. The usual case is a new route in `http-routes.ts`: installed apps
+ignore a `berean://` link to it until the next desktop release, which picks
+the change up. When that cannot wait, add a `fix:` commit under `electron/`
+(for example a line in this README) to cut a release.
+
+`bootstrap-sha` in `release-please-config.json` is the commit desktop 1.0.2
+was built from, from before release-please managed the desktop version. It
+only matters while some package has no release of its own in this repo, and
+can be removed once `desktop-v1.0.3` exists.
 
 ### Secrets
 
@@ -162,16 +197,17 @@ with `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, where
 `APPLE_API_KEY` must be a **path** to the `.p8` file. The workflow therefore
 writes the secret to a temporary file and passes that path, then deletes it.
 
-Without all six secrets the workflow still runs, but builds an unsigned
+Without all six secrets, a run started by hand still builds an unsigned
 `Berean.dmg`, uploads it as a workflow artifact (kept 14 days) and publishes
-nothing.
+nothing. A run started by a desktop release PR fails instead, so a release
+never ends up unpublished behind a green check.
 
 ### Making a release
 
-1. Bump `version` in `electron/package.json` (for example `1.0.0` → `1.0.1`)
-   in a PR, and merge it to `main`.
-2. In GitHub: **Actions → Desktop release → Run workflow** on `main`.
-3. The workflow:
+1. Merge the desktop release PR that release-please keeps open. Do not edit
+   `version` in `electron/package.json` by hand; release-please owns it.
+2. `Release Please` makes release `desktop-v<version>` here, then its
+   `desktop-release` job calls the `Desktop release` workflow, which:
    - stops at once if `berean-desktop` already has release `v<version>`;
    - builds with `pnpm run dist` (`electron-builder.release.yml`), signing
      and notarizing the app;
@@ -183,9 +219,13 @@ nothing.
      `Berean.dmg`, `Berean-<version>-universal-mac.zip`, their `.blockmap`
      files and `latest-mac.yml`.
 
-The workflow only runs from `main` for signed releases, and `workflow_dispatch`
-workflows can only be started once the file is on the default branch, so the
-first real run happens after this lands on `main`.
+If the build fails (notarization timing out, say), retry it with **Re-run
+failed jobs** on that `Release Please` run, or **Actions → Desktop release →
+Run workflow** on `main`. Both build the version on `main`, which is not on
+`berean-desktop` yet. **Re-run all jobs** does nothing useful: release-please
+has already made the release, so it reports none and skips the build.
+
+Signed releases are built from `main` only.
 
 Locally, `pnpm run desktop:dist` builds the same thing; it signs with a
 Developer ID certificate from your keychain, and notarizes only if the three
@@ -229,7 +269,8 @@ Needs two signed releases, so do it once the workflow has published one.
 1. Install version N: download `Berean.dmg` from the latest release, drag
    Berean to Applications, open it (no Gatekeeper warning expected) and sign
    in.
-2. Bump `electron/package.json` to N+1, merge, and run the workflow.
+2. Merge a `fix:` commit under `electron/`, then the desktop release PR for
+   N+1 that it opens, and wait for the `desktop-release` job to finish.
 3. In the running app choose **Berean → Check for Updates…**: it says it is
    downloading N+1. When the download finishes, an arrow with a dot appears
    before Settings. (Or wait: the app checks 10 seconds after launch and
@@ -255,7 +296,8 @@ log lines.
 
 `parseBereanOpenUrl` accepts exactly the paths the web server serves
 (`resolveAppPath` in `shared/http-routes.ts`), so a new web route works as a
-link with no change here. Anything else (`berean://nope`, a static file, a
+link with no change here, once a desktop release has bundled the new route
+table (see [When a release happens](#when-a-release-happens)). Anything else (`berean://nope`, a static file, a
 host such as `berean://evil.example/…`) is ignored.
 
 - **Running:** the route opens in a **new window**, which comes to the front.
