@@ -45,6 +45,13 @@ updates:
       semver-major-days: 14
     open-pull-requests-limit: 3
     versioning-strategy: "increase-if-necessary"
+    # "fix(deps-dev): …" rather than the default "chore(deps-dev): …", so that
+    # release-please cuts a desktop release for each merged update. Everything
+    # here changes the shipped app (runtime, bundler or packager), and the
+    # group below keeps it to about one release a week.
+    commit-message:
+      prefix: "fix"
+      include: "scope"
     groups:
       desktop-dependencies:
         update-types:
