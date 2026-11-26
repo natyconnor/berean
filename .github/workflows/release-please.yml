@@ -14,18 +14,28 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Two packages: the web app (".", unprefixed outputs) and the desktop
-    # shell ("electron", outputs prefixed "electron--").
+    # Web (".") and desktop ("electron") each have their own config, manifest
+    # and PR labels, so merging one release PR never conflicts with or blocks
+    # the other.
     outputs:
-      web_release_created: ${{ steps.release.outputs.release_created }}
-      desktop_release_created: ${{ steps.release.outputs['electron--release_created'] }}
+      web_release_created: ${{ steps.web.outputs.release_created }}
+      desktop_release_created: ${{ steps.desktop.outputs['electron--release_created'] }}
     steps:
-      - id: release
+      - name: Release Please (web)
+        id: web
         uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Release Please (desktop)
+        id: desktop
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: electron/release-please-config.json
+          manifest-file: electron/.release-please-manifest.json
 
   # A desktop release is built and published to natyconnor/berean-desktop.
   # If it fails (say notarization times out), use "Re-run failed jobs" on

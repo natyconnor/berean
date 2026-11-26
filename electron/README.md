@@ -147,8 +147,12 @@ shell loads the live site.
 
 ### When a release happens
 
-release-please treats `electron/` as its own package (component `desktop`,
-tags `desktop-v<version>`), next to the web app at the repository root:
+release-please manages `electron/` with its own config and manifest
+(`electron/release-please-config.json` and
+`electron/.release-please-manifest.json`, component `desktop`, tags
+`desktop-v<version>`, labels `autorelease: desktop-pending` /
+`autorelease: desktop-tagged`), separate from the web app's config and manifest
+at the repository root:
 
 - A `feat:` or `fix:` commit that changes a file under `electron/` opens (or
   updates) a **desktop release PR**, "chore(main): release desktop N". It
@@ -160,8 +164,8 @@ tags `desktop-v<version>`), next to the web app at the repository root:
   app to `berean-desktop`. There is nothing to run by hand.
 - The web app ignores commits that only touch `electron/`, and the desktop app
   ignores commits that never touch it. A commit that touches both counts for
-  both. The two release PRs are separate, so either can ship without the
-  other.
+  both. Because the two release PRs touch disjoint manifest files and use
+  distinct labels, merging one never conflicts with or blocks the other.
 
 **Files bundled from outside `electron/` are not tracked.** esbuild bundles
 `shared/desktop-deep-link.ts`, `shared/http-routes.ts`,
@@ -172,11 +176,6 @@ assigns a commit to the desktop package when it changes something under
 ignore a `berean://` link to it until the next desktop release, which picks
 the change up. When that cannot wait, add a `fix:` commit under `electron/`
 (for example a line in this README) to cut a release.
-
-`bootstrap-sha` in `release-please-config.json` is the commit desktop 1.0.2
-was built from, from before release-please managed the desktop version. It
-only matters while some package has no release of its own in this repo, and
-can be removed once `desktop-v1.0.3` exists.
 
 ### Secrets
 
