@@ -6,6 +6,7 @@ import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/components/login-page";
 import { MemorizeProvider } from "@/components/memory/memorize/memorize-provider";
+import { AddToHomeScreenHint } from "@/components/pwa/add-to-home-screen-hint";
 import { NotFoundPage } from "@/components/routes/not-found-page";
 import { useDismissSplashBackdrop } from "@/hooks/use-dismiss-splash";
 import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
@@ -306,6 +307,9 @@ function RootRouteShell() {
       )}
 
       {refreshPrompt}
+
+      {/* Login and the signed-in app alike; it hides itself off iPad Safari. */}
+      {splashGone && !isPublicLegalMatch && <AddToHomeScreenHint />}
 
       {!splashGone && !isPublicLegalPath && (
         <div
