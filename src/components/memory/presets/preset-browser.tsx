@@ -8,6 +8,7 @@ import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context"
 import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchClearButton } from "@/components/ui/search-clear-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   MEMORIZE_LABEL,
@@ -74,14 +75,19 @@ export function PresetBrowser() {
           <p className="mt-0.5 text-sm text-muted-foreground">
             Popular passages and verse packs to memorize.
           </p>
-          <Input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search passages and packs"
-            className="mt-3 max-w-md"
-            aria-label="Search suggestions"
-          />
+          <div className="relative mt-3 max-w-md">
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search passages and packs"
+              className="pr-10"
+              aria-label="Search suggestions"
+            />
+            {query.length > 0 ? (
+              <SearchClearButton onClear={() => setQuery("")} />
+            ) : null}
+          </div>
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">

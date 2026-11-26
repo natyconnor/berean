@@ -22,16 +22,30 @@ const KIND_TONE: Record<GoalCard["kind"], string> = {
     "border-violet-700/25 bg-violet-500/15 text-violet-900 dark:border-violet-300/30 dark:bg-violet-400/15 dark:text-violet-200",
 };
 
-/** A passage is an open book, a pack a stack of layers, a verse a quote. */
+/** The same hues as {@link KIND_TONE}, as icon color alone. */
+const KIND_TEXT: Record<GoalCard["kind"], string> = {
+  pack: "text-orange-700 dark:text-orange-300",
+  passage: "text-teal-700 dark:text-teal-300",
+  verse: "text-violet-700 dark:text-violet-300",
+};
+
+/**
+ * A passage is an open book, a pack a stack of layers, a verse a quote.
+ * `tinted` colors it in the kind's hue, for a mark too small for its square.
+ */
 export function GoalKindIcon({
   kind,
   className,
+  tinted = false,
 }: {
   kind: GoalCard["kind"];
   className?: string;
+  tinted?: boolean;
 }) {
   const Icon = KIND_ICON[kind];
-  return <Icon aria-hidden className={className} />;
+  return (
+    <Icon aria-hidden className={cn(tinted && KIND_TEXT[kind], className)} />
+  );
 }
 
 /** Icon and name in one colored chip, so the kind reads before the title. */

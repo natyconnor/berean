@@ -43,6 +43,7 @@ export const APP_ROUTE_PATTERNS = [
   "/memory/today",
   "/memory/verses",
   "/memory/presets",
+  "/memory/hearts",
   "/settings",
   "/settings/tags",
   "/study",

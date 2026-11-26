@@ -6,6 +6,7 @@ import { useMemoryPanelFrame } from "@/components/memory/drawer/memory-panel-con
 import { MemoryLibrary } from "@/components/memory/memory-library";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { Input } from "@/components/ui/input";
+import { SearchClearButton } from "@/components/ui/search-clear-button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTodayModel } from "@/hooks/use-today-model";
 import { withReturn } from "@/lib/memory-return";
@@ -68,8 +69,11 @@ export function YourVersesBody({ controls }: { controls: boolean }) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder={`${SEARCH_LABEL}…`}
           aria-label={SEARCH_LABEL}
-          className="h-10 pl-9"
+          className="h-10 pr-10 pl-9"
         />
+        {query.length > 0 ? (
+          <SearchClearButton onClear={() => setQuery("")} />
+        ) : null}
       </div>
       <GoalCollection
         today={today}

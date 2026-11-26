@@ -1,13 +1,6 @@
 import { useId, useMemo, useState, type RefObject } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  Brain,
-  ChevronRight,
-  Layers,
-  Plus,
-  Search,
-} from "lucide-react";
+import { ArrowRight, Brain, ChevronRight, Plus, Search } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import type { FunctionReturnType } from "convex/server";
 
@@ -16,6 +9,7 @@ import { InternalLink } from "@/components/memory/internal-link";
 import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchClearButton } from "@/components/ui/search-clear-button";
 import { ReferenceSuggestionList } from "@/components/verse-ref/reference-suggestion-list";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useEsvReference } from "@/hooks/use-esv-reference";
@@ -31,6 +25,7 @@ import {
   resolveMemorizeTarget,
 } from "@/lib/memorize-target";
 import { memorizeTitleLabel } from "@/lib/memory-copy";
+import type { GoalCard } from "@/lib/memory-goals";
 import { memoryPanelDrawerHref } from "@/lib/memory-panel";
 import { withReturn } from "@/lib/memory-return";
 import { memoryVerseSessionHref } from "@/lib/memory-session-path";
@@ -38,7 +33,6 @@ import { TODAY_RETURN } from "@/lib/today-goal-card";
 import { cn } from "@/lib/utils";
 import {
   MEMORIZE_SUGGESTION_POOL,
-  MEMORIZE_SUGGESTIONS,
   suggestionCollectionHref,
   suggestionSpans,
   suggestionTarget,
@@ -48,12 +42,15 @@ import {
 } from "../../../../shared/memorize-suggestions";
 
 import { FromYourHearts } from "./from-your-hearts";
-import { GoalKindMark } from "./goal-kind-icon";
+import { GoalKindIcon, GoalKindMark } from "./goal-kind-icon";
 
 type MemorizeStatus = FunctionReturnType<typeof api.verseMemory.memorizeStatus>;
 
 const NO_MATCH_DELAY_MS = 500;
 const STATUS_DELAY_MS = 250;
+
+/** The rail's suggestions before the pack chip; "More" has the rest. */
+const RAIL_SUGGESTION_COUNT = 6;
 
 const POOL_TARGETS = MEMORIZE_SUGGESTION_POOL.map((suggestion) => ({
   spans: suggestionSpans(suggestion),
@@ -65,7 +62,7 @@ const chipClassName =
 /**
  * "Start something new": search a reference, pick a suggestion, make a pack,
  * or memorize one of your hearts. As the `rail` beside the goals it is one
- * tinted panel, scrolling on its own when it is taller than its pinned space.
+ * tinted panel that scrolls with the page, never on its own.
  */
 export function StartSomethingNew({
   scrollRootRef,
@@ -87,7 +84,7 @@ export function StartSomethingNew({
         onQueryChange={setQuery}
         showHint={!rail}
       />
-      <TodaySuggestionChips />
+      <TodaySuggestionChips count={rail ? RAIL_SUGGESTION_COUNT : undefined} />
       <MakeYourOwnPackTile
         className={rail ? "bg-card hover:bg-accent" : undefined}
       />
@@ -106,7 +103,7 @@ export function StartSomethingNew({
       className={cn(
         "space-y-3",
         rail &&
-          "min-h-0 overflow-y-auto overscroll-contain rounded-2xl border border-primary/25 bg-primary/[0.06] p-4 shadow-sm",
+          "rounded-2xl border border-primary/25 bg-primary/[0.06] p-4 shadow-sm",
       )}
     >
       <div className="flex items-center justify-between gap-3">
@@ -315,10 +312,16 @@ export function MemorizeSearch({
             }
           }}
           className={cn(
-            "h-12 bg-card pl-10 text-base md:text-[15px]",
+            "h-12 bg-card pr-11 pl-10 text-base md:text-[15px]",
             showHint && query.length === 0 && "sm:pr-64",
           )}
         />
+        {query.length > 0 ? (
+          <SearchClearButton
+            onClear={() => onQueryChange("")}
+            className="right-2.5"
+          />
+        ) : null}
         {showHint && query.length === 0 ? (
           <span
             aria-hidden
@@ -496,20 +499,38 @@ function isStarted(status: MemorizeStatus | undefined): boolean {
  * Today's chips: suggestions not already being memorized, filled from the
  * wider pool, then the collection. The curated list shows while loading.
  */
-function TodaySuggestionChips() {
+function TodaySuggestionChips({ count }: { count?: number }) {
   const statuses = useQuery(api.verseMemory.memorizeStatuses, {
     targets: POOL_TARGETS,
   });
   const suggestions = useMemo(() => {
-    if (!statuses) return MEMORIZE_SUGGESTIONS;
     const started = new Set(
-      MEMORIZE_SUGGESTION_POOL.filter((_, index) =>
-        isStarted(statuses[index]),
-      ).map((suggestion) => suggestion.id),
+      statuses
+        ? MEMORIZE_SUGGESTION_POOL.filter((_, index) =>
+            isStarted(statuses[index]),
+          ).map((suggestion) => suggestion.id)
+        : [],
     );
-    return todaySuggestions(started);
-  }, [statuses]);
+    return todaySuggestions(started, count);
+  }, [statuses, count]);
   return <SuggestionChips suggestions={suggestions} />;
+}
+
+/** What a suggestion becomes once memorized: a verse, a passage, or a pack. */
+function suggestionKind(suggestion: MemorizeSuggestion): GoalCard["kind"] {
+  if (suggestion.kind === "collection") return "pack";
+  const target = suggestionTarget(suggestion);
+  const mode = target ? resolveMemorizeTarget(target).mode : "verse";
+  return mode === "passage" || mode === "pack" ? mode : "verse";
+}
+
+function SuggestionKindIcon({
+  suggestion,
+}: {
+  suggestion: MemorizeSuggestion;
+}) {
+  const kind = suggestionKind(suggestion);
+  return <GoalKindIcon kind={kind} tinted className="size-3.5 shrink-0" />;
 }
 
 export function SuggestionChips({
@@ -524,11 +545,14 @@ export function SuggestionChips({
           {suggestion.kind === "collection" ? (
             <InternalLink
               href={suggestionCollectionHref(suggestion.presetId)}
+              title={suggestion.title}
+              aria-label={`${suggestion.title} pack`}
               className={chipClassName}
             >
-              <Layers aria-hidden className="size-3.5 shrink-0" />
-              {suggestion.title}{" "}
-              <span className="text-xs text-muted-foreground">pack</span>
+              <SuggestionKindIcon suggestion={suggestion} />
+              <span className="min-w-0 truncate font-medium">
+                {suggestion.title}
+              </span>
             </InternalLink>
           ) : (
             <SuggestionChip suggestion={suggestion} />
@@ -555,9 +579,8 @@ function SuggestionChip({ suggestion }: { suggestion: MemorizableSuggestion }) {
         if (target) sheet.open(target);
       }}
     >
-      <span className={cn(suggestion.kind === "chapter" && "font-semibold")}>
-        {suggestion.title}
-      </span>
+      <SuggestionKindIcon suggestion={suggestion} />
+      <span className="min-w-0 truncate font-medium">{suggestion.title}</span>
       {meta ? (
         <>
           {" "}

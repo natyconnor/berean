@@ -5,6 +5,7 @@ import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchClearButton } from "@/components/ui/search-clear-button";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useNearViewportVisible } from "@/hooks/use-near-viewport-visible";
 import { spanCoveredBy, type VerseSpan } from "@/lib/hearted-verse-coverage";
@@ -143,8 +144,11 @@ export function VerseSearchAdd({
           aria-label={
             mode === "search" ? "Search by reference" : "Filter your hearts"
           }
-          className="h-10 pl-9"
+          className="h-10 pr-10 pl-9"
         />
+        {query.length > 0 ? (
+          <SearchClearButton onClear={() => setQuery("")} />
+        ) : null}
       </div>
 
       {mode === "search" ? (

@@ -824,6 +824,12 @@
   a[href] {
     cursor: pointer;
   }
+  /* Search fields clear with `SearchClearButton`, styled like the app. */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
 }
 
 @keyframes heart-burst-puff {
