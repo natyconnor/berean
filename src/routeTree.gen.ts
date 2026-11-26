@@ -17,6 +17,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
+import { Route as MemoryHeartsRouteImport } from './routes/memory/hearts'
 import { Route as MemoryLearnRouteImport } from './routes/memory/learn'
 import { Route as MemoryLibraryRouteImport } from './routes/memory/library'
 import { Route as MemoryNewRouteImport } from './routes/memory/new'
@@ -76,6 +77,11 @@ const MemoryIndexRoute = MemoryIndexRouteImport.update({
 const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
   id: '/memory/$packId',
   path: '/memory/$packId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryHeartsRoute = MemoryHeartsRouteImport.update({
+  id: '/memory/hearts',
+  path: '/memory/hearts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryLearnRoute = MemoryLearnRouteImport.update({
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/hearts': typeof MemoryHeartsRoute
   '/memory/learn': typeof MemoryLearnRoute
   '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
@@ -217,6 +224,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/hearts': typeof MemoryHeartsRoute
   '/memory/learn': typeof MemoryLearnRoute
   '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
@@ -248,6 +256,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/hearts': typeof MemoryHeartsRoute
   '/memory/learn': typeof MemoryLearnRoute
   '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/hearts'
     | '/memory/learn'
     | '/memory/library'
     | '/memory/new'
@@ -310,6 +320,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/hearts'
     | '/memory/learn'
     | '/memory/library'
     | '/memory/new'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/hearts'
     | '/memory/learn'
     | '/memory/library'
     | '/memory/new'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   ThemeTestRoute: typeof ThemeTestRoute
   MemoryPackIdRoute: typeof MemoryPackIdRoute
+  MemoryHeartsRoute: typeof MemoryHeartsRoute
   MemoryLearnRoute: typeof MemoryLearnRoute
   MemoryLibraryRoute: typeof MemoryLibraryRoute
   MemoryNewRoute: typeof MemoryNewRoute
@@ -450,6 +463,13 @@ declare module '@tanstack/react-router' {
       path: '/memory/$packId'
       fullPath: '/memory/$packId'
       preLoaderRoute: typeof MemoryPackIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/hearts': {
+      id: '/memory/hearts'
+      path: '/memory/hearts'
+      fullPath: '/memory/hearts'
+      preLoaderRoute: typeof MemoryHeartsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory/learn': {
@@ -603,6 +623,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   ThemeTestRoute: ThemeTestRoute,
   MemoryPackIdRoute: MemoryPackIdRoute,
+  MemoryHeartsRoute: MemoryHeartsRoute,
   MemoryLearnRoute: MemoryLearnRoute,
   MemoryLibraryRoute: MemoryLibraryRoute,
   MemoryNewRoute: MemoryNewRoute,

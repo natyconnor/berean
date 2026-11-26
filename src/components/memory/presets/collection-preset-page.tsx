@@ -15,6 +15,7 @@ import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context"
 import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchClearButton } from "@/components/ui/search-clear-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -227,14 +228,19 @@ function CollectionStart({ presetId }: { presetId: string }) {
             {description}
           </p>
           <div className="mt-3 flex items-center gap-2">
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by book or reference"
-              aria-label="Search passages"
-              className="h-9 min-w-0 flex-1 sm:max-w-xs"
-            />
+            <div className="relative min-w-0 flex-1 sm:max-w-xs">
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by book or reference"
+                aria-label="Search passages"
+                className="h-9 pr-10"
+              />
+              {query.length > 0 ? (
+                <SearchClearButton onClear={() => setQuery("")} />
+              ) : null}
+            </div>
             <Button
               variant="outline"
               className="shrink-0"

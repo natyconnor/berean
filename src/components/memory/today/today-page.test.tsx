@@ -641,7 +641,7 @@ describe("TodayPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("lists hearts, expands to all of them, and filters by the search", async () => {
+  it("lists a few hearts, links to all of them, and filters by the search", async () => {
     mocks.queryResults.set("memoryHome.today", WORK_TODAY);
     mocks.queryResults.set("savedVerses.listNotMemorizing", HEARTS);
     renderPage();
@@ -652,16 +652,17 @@ describe("TodayPage", () => {
     expect(section).not.toBeNull();
     const hearts = within(section as HTMLElement);
     expect(hearts.getAllByRole("listitem")).toHaveLength(4);
-
-    await userEvent.click(hearts.getByRole("button", { name: "Show all (6)" }));
-    expect(hearts.getAllByRole("listitem")).toHaveLength(6);
+    expect(hearts.getByRole("link", { name: /See all \(6\)/ })).toHaveAttribute(
+      "href",
+      "/memory/hearts",
+    );
 
     await userEvent.click(
-      hearts.getByRole("button", { name: "Memorize Joshua 1:9" }),
+      hearts.getByRole("button", { name: "Memorize Micah 6:8" }),
     );
     expect(mocks.openSheet).toHaveBeenCalledWith({
       kind: "spans",
-      spans: [{ book: "Joshua", chapter: 1, startVerse: 9, endVerse: 9 }],
+      spans: [{ book: "Micah", chapter: 6, startVerse: 8, endVerse: 8 }],
     });
 
     await userEvent.type(

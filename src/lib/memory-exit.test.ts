@@ -105,6 +105,11 @@ describe("resolveMemoryExit", () => {
       label: "Back to Suggestions",
       name: "Suggestions",
     });
+    expect(resolveMemoryExit("/memory/hearts")).toEqual({
+      href: "/memory/hearts",
+      label: "Back to Your hearts",
+      name: "Your hearts",
+    });
     expect(resolveMemoryExit("/memory/new")).toEqual({
       href: "/memory/new",
       label: "Back to New pack",

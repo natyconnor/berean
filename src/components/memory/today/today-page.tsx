@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
@@ -18,7 +18,7 @@ import { MemoryWelcomeCallout } from "./memory-welcome-callout";
 import { StartSomethingNew } from "./start-something-new";
 import { TodayCard } from "./today-card";
 
-/** The pinned rail's gap from the top and bottom of the scroll area (`top-6`). */
+/** The pinned rail's gap from the top and bottom of the scroll area. */
 const RAIL_INSET_PX = 24;
 
 /**
@@ -65,17 +65,9 @@ export function TodayPage() {
         {layout.kind === "rail" && today.goals.length > 0 ? (
           <div className="grid grid-cols-[minmax(0,1fr)_22rem] items-start gap-6">
             {goals}
-            <div
-              className="sticky top-6 flex flex-col"
-              style={{
-                maxHeight:
-                  viewport.height > 0
-                    ? viewport.height - 2 * RAIL_INSET_PX
-                    : undefined,
-              }}
-            >
+            <PinnedRail viewportHeight={viewport.height}>
               <StartSomethingNew variant="rail" scrollRootRef={scrollRootRef} />
-            </div>
+            </PinnedRail>
           </div>
         ) : (
           <>
@@ -114,6 +106,31 @@ export function TodayPage() {
           />
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+/**
+ * Sticks beside the goals without scrolling on its own, so the wheel always
+ * scrolls the page. Taller than the scroll area, it scrolls with the page
+ * until its bottom shows, then sticks there, so all of it stays reachable.
+ */
+function PinnedRail({
+  viewportHeight,
+  children,
+}: {
+  viewportHeight: number;
+  children: ReactNode;
+}) {
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const rail = useElementSize(railRef);
+  const top =
+    viewportHeight > 0 && rail.height > 0
+      ? Math.min(RAIL_INSET_PX, viewportHeight - rail.height - RAIL_INSET_PX)
+      : RAIL_INSET_PX;
+  return (
+    <div ref={railRef} className="sticky" style={{ top }}>
+      {children}
     </div>
   );
 }

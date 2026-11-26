@@ -29,6 +29,9 @@ export const PRACTICE_ANYTIME_LABEL = "Practice anytime";
 export const YOUR_VERSES_LABEL = "Your verses";
 export const YOUR_PROGRESS_LABEL = "Your progress";
 export const SUGGESTIONS_LABEL = "Suggestions";
+/** Hearted verses not being memorized: Today's section and its own page. */
+export const FROM_YOUR_HEARTS_LABEL = "From your hearts";
+export const YOUR_HEARTS_LABEL = "Your hearts";
 
 /** Waiting state for a verse whose step for today is done. */
 export const UP_NEXT_TOMORROW_LABEL = "Up next tomorrow";

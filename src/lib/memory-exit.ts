@@ -1,6 +1,7 @@
 import {
   MEMORY_LABEL,
   SUGGESTIONS_LABEL,
+  YOUR_HEARTS_LABEL,
   YOUR_VERSES_LABEL,
 } from "@/lib/memory-copy";
 import { parseMemoryReturn } from "@/lib/memory-return";
@@ -41,6 +42,7 @@ type Classified =
   | { type: "verses" }
   | { type: "progress" }
   | { type: "presets" }
+  | { type: "hearts" }
   | { type: "new" }
   | { type: "pack"; packId: string }
   | { type: "verse"; verseRefId: string }
@@ -80,6 +82,7 @@ function classify(href: string): Classified {
     if (parts[0] === "verses") return { type: "verses" };
     if (parts[0] === "progress") return { type: "progress" };
     if (parts[0] === "presets") return { type: "presets" };
+    if (parts[0] === "hearts") return { type: "hearts" };
     if (parts[0] === "new") return { type: "new" };
     if (parts[0] === "verse") return { type: "other" };
     return { type: "pack", packId: decodeURIComponent(parts[0]) };
@@ -154,6 +157,7 @@ function resolveHref(href: string, lookups: MemoryExitLookups): MemoryExit {
   if (dest.type === "verses") return named(href, YOUR_VERSES_LABEL);
   if (dest.type === "progress") return named(href, PROGRESS_LABEL);
   if (dest.type === "presets") return named(href, SUGGESTIONS_LABEL);
+  if (dest.type === "hearts") return named(href, YOUR_HEARTS_LABEL);
   if (dest.type === "new") return named(href, NEW_PACK_LABEL);
 
   if (dest.type === "passage") {

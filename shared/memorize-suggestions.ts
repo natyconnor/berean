@@ -181,16 +181,17 @@ export const MEMORIZE_SUGGESTION_POOL: readonly MemorizableSuggestion[] = [
 ];
 
 /**
- * The first {@link SUGGESTION_CHIP_COUNT} pool suggestions not in `started`
+ * The first `count` (default {@link SUGGESTION_CHIP_COUNT}) pool suggestions not in `started`
  * (ids of ones already being memorized), then the collection. Nothing started
  * gives {@link MEMORIZE_SUGGESTIONS}.
  */
 export function todaySuggestions(
   started: ReadonlySet<string>,
+  count: number = SUGGESTION_CHIP_COUNT,
 ): MemorizeSuggestion[] {
   const fresh = MEMORIZE_SUGGESTION_POOL.filter(
     (suggestion) => !started.has(suggestion.id),
-  ).slice(0, SUGGESTION_CHIP_COUNT);
+  ).slice(0, count);
   return [...fresh, ...COLLECTIONS];
 }
 
