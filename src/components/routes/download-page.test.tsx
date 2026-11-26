@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEY as TABS_STORAGE_KEY } from "@/lib/tab-context-internal";
@@ -6,6 +6,7 @@ import { DownloadPage } from "./download-page";
 
 const mocks = vi.hoisted(() => ({
   auth: { isAuthenticated: false, isLoading: false },
+  navigate: vi.fn(),
 }));
 
 vi.mock("convex/react", () => ({
@@ -14,7 +15,7 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useCanGoBack: () => false,
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
   Link: ({
     to,
     params,
@@ -55,6 +56,24 @@ function downloadLink() {
 
 beforeEach(() => {
   mocks.auth = { isAuthenticated: false, isLoading: false };
+  mocks.navigate.mockReset();
+});
+
+describe("DownloadPage ← Back with no history", () => {
+  it("goes into the app when signed in, home when signed out", () => {
+    const signedOut = render(<DownloadPage />);
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith({ to: "/" });
+    signedOut.unmount();
+
+    mocks.auth = { isAuthenticated: true, isLoading: false };
+    render(<DownloadPage />);
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith({
+      to: "/passage/$passageId",
+      params: { passageId: "John-1" },
+    });
+  });
 });
 
 afterEach(() => {
