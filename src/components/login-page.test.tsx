@@ -148,6 +148,122 @@ describe("LoginPage sign-in on the web", () => {
   });
 });
 
+const MAC_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+const WINDOWS_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+function stubUserAgent(userAgent: string) {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+}
+
+function downloadLink(): HTMLElement | null {
+  return screen.queryByRole("link", { name: "Download for Mac" });
+}
+
+describe("LoginPage Download for Mac", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sits after Sign in with Google on a Mac, quieter, linking to /download", () => {
+    stubUserAgent(MAC_UA);
+    render(<LoginPage />);
+
+    const signIn = screen.getByRole("button", { name: "Sign in with Google" });
+    const download = downloadLink();
+    expect(download).toHaveAttribute("href", "/download");
+    expect(download).toHaveClass(
+      "rounded-md",
+      "border-white/15",
+      "bg-transparent",
+      "text-white/75",
+      "hover:border-white/30",
+      "hover:bg-white/10",
+      "hover:text-white/90",
+      "focus-visible:ring-white/50",
+      "sm:flex-1",
+    );
+    expect(download).not.toHaveClass("border-white/20", "bg-white/10");
+    expect(download?.querySelector("svg.lucide-download")).toHaveClass(
+      "h-4",
+      "w-4",
+    );
+    expect(signIn).toHaveClass("sm:flex-1");
+    expect(
+      signIn.compareDocumentPosition(download as HTMLElement) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // Stacked full width below 640px, side by side from there up.
+    expect(signIn.parentElement).toHaveClass(
+      "w-full",
+      "max-w-xs",
+      "sm:max-w-lg",
+      "flex",
+      "flex-col",
+      "gap-3",
+      "sm:flex-row",
+      "mt-12",
+    );
+  });
+
+  it("sits after Enter Berean when signed in on a Mac", () => {
+    stubUserAgent(MAC_UA);
+    render(<LoginPage isSignedIn />);
+
+    const enter = screen.getByRole("link", { name: "Enter Berean" });
+    expect(enter).toHaveClass("sm:flex-1");
+    expect(enter.nextElementSibling).toBe(downloadLink());
+  });
+
+  it("stays clickable while Signing in… shows", async () => {
+    stubUserAgent(MAC_UA);
+    mocks.signIn.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Sign in with Google" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
+    expect(downloadLink()).toHaveAttribute("href", "/download");
+    expect(downloadLink()).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("shows with the connection trouble box too", () => {
+    stubUserAgent(MAC_UA);
+    render(<LoginPage authBootstrapStalled onRetryConnection={() => {}} />);
+
+    expect(screen.getByText(/Having trouble connecting/)).toBeInTheDocument();
+    expect(downloadLink()).toBeInTheDocument();
+  });
+
+  it("is absent off a Mac, and the single button keeps today's width", () => {
+    stubUserAgent(WINDOWS_UA);
+    render(<LoginPage />);
+
+    expect(downloadLink()).toBeNull();
+    const signIn = screen.getByRole("button", { name: "Sign in with Google" });
+    expect(signIn).not.toHaveClass("sm:flex-1");
+    expect(signIn.parentElement).toHaveClass("w-full", "max-w-xs", "mt-12");
+    expect(signIn.parentElement).not.toHaveClass("sm:max-w-lg", "sm:flex-row");
+  });
+
+  it("is absent inside the Mac app", () => {
+    stubUserAgent(MAC_UA);
+    window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+    render(<LoginPage />);
+
+    expect(downloadLink()).toBeNull();
+    expect(screen.queryByText("Download for Mac")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Sign in with Google" }).parentElement,
+    ).not.toHaveClass("sm:flex-row");
+  });
+});
+
 describe("LoginPage sign-in in the desktop app", () => {
   beforeEach(() => {
     window.bereanDesktop = { isDesktop: true, platform: "darwin" };

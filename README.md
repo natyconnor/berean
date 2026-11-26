@@ -12,6 +12,14 @@ Berean is a scripture notes app focused on verse by verse note taking, emphasizi
 - Import notes from `.xlsx` or `.zip` workbooks (export UI is present but currently disabled)
 - Guided tutorial tours for the main workflow and advanced search
 
+**Berean for Mac**
+
+All of Berean, in its own app on your Mac. Download the latest version from [berean.nathanconnor.dev/download](https://berean.nathanconnor.dev/download), or directly at:
+
+https://github.com/natyconnor/berean-desktop/releases/latest/download/Berean.dmg
+
+Open `Berean.dmg`, drag Berean into Applications, then open it and sign in with Google.
+
 **Integrations And Keys**
 
 - Convex (database, serverless functions, auth): requires a Convex deployment and the frontend `VITE_CONVEX_URL`

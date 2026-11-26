@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DESKTOP_AUTH_REDIRECT_PATH,
   isBereanDesktop,
+  isMacBrowser,
   isPwaStandalone,
 } from "./desktop-platform";
 import { resolveAppPath } from "../../shared/http-routes";
@@ -45,6 +46,40 @@ describe("isBereanDesktop", () => {
       value: { platform: "darwin" },
     });
     expect(isBereanDesktop()).toBe(false);
+  });
+});
+
+const MAC_SAFARI_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+const WINDOWS_CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const IPHONE_SAFARI_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+
+describe("isMacBrowser", () => {
+  it("is true for a Mac browser", () => {
+    vi.stubGlobal("navigator", { userAgent: MAC_SAFARI_UA });
+    expect(isMacBrowser()).toBe(true);
+  });
+
+  it("is false on Windows and on an iPhone", () => {
+    vi.stubGlobal("navigator", { userAgent: WINDOWS_CHROME_UA });
+    expect(isMacBrowser()).toBe(false);
+    vi.stubGlobal("navigator", { userAgent: IPHONE_SAFARI_UA });
+    expect(isMacBrowser()).toBe(false);
+  });
+
+  it("is false when the platform can't be read", () => {
+    vi.stubGlobal("navigator", undefined);
+    expect(isMacBrowser()).toBe(false);
+    vi.stubGlobal("navigator", {});
+    expect(isMacBrowser()).toBe(false);
+  });
+
+  it("is false inside the Mac app", () => {
+    vi.stubGlobal("navigator", { userAgent: MAC_SAFARI_UA });
+    window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+    expect(isMacBrowser()).toBe(false);
   });
 });
 
