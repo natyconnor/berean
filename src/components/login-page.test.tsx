@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DESKTOP_AUTH_REDIRECT_PATH } from "@/lib/desktop-platform";
+import { STORAGE_KEY as TABS_STORAGE_KEY } from "@/lib/tab-context-internal";
+import { isWebSignInReturn } from "@/lib/web-sign-in-return";
 
 import { LoginPage } from "./login-page";
 
@@ -24,8 +26,23 @@ vi.mock("@convex-dev/auth/react", () => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    to,
+    params,
+    children,
+    className,
+  }: {
+    to: string;
+    params?: { passageId: string };
+    children: ReactNode;
+    className?: string;
+  }) => (
+    <a
+      href={params ? to.replace("$passageId", params.passageId) : to}
+      className={className}
+    >
+      {children}
+    </a>
   ),
 }));
 
@@ -56,6 +73,53 @@ beforeEach(() => {
 
 afterEach(() => {
   delete window.bereanDesktop;
+  localStorage.clear();
+  sessionStorage.clear();
+});
+
+describe("LoginPage signed in on the web", () => {
+  it("shows Enter Berean, linked to the first open tab, instead of Sign in", () => {
+    localStorage.setItem(
+      TABS_STORAGE_KEY,
+      JSON.stringify([{ id: "t1", passageId: "Romans-8", label: "Romans 8" }]),
+    );
+    render(<LoginPage isSignedIn />);
+
+    const enter = screen.getByRole("link", { name: "Enter Berean" });
+    expect(enter).toHaveAttribute("href", "/passage/Romans-8");
+    // Same frosted style as Sign in with Google, with keyboard focus ring.
+    expect(enter).toHaveClass(
+      "rounded-md",
+      "border-white/20",
+      "bg-white/10",
+      "backdrop-blur-sm",
+      "focus-visible:ring-white/50",
+    );
+    expect(enter.querySelector("svg.lucide-arrow-right")).toHaveClass(
+      "h-4",
+      "w-4",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Sign in with Google/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("falls back to John 1 when no tabs are saved", () => {
+    render(<LoginPage isSignedIn />);
+
+    expect(screen.getByRole("link", { name: "Enter Berean" })).toHaveAttribute(
+      "href",
+      "/passage/John-1",
+    );
+  });
+
+  it("shows only Loading… until auth is known", () => {
+    render(<LoginPage isLoading isSignedIn />);
+
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Enter Berean" })).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
 });
 
 describe("LoginPage sign-in on the web", () => {
@@ -69,6 +133,8 @@ describe("LoginPage sign-in on the web", () => {
 
     expect(mocks.signIn).toHaveBeenCalledTimes(1);
     expect(mocks.signIn).toHaveBeenCalledWith("google");
+    // Coming back from Google goes into the app, not the landing page.
+    expect(isWebSignInReturn()).toBe(true);
     await waitFor(() => {
       expect(loggedActions()).toContain("sign-in-completed");
     });
@@ -103,6 +169,7 @@ describe("LoginPage sign-in in the desktop app", () => {
     expect(
       screen.queryByRole("button", { name: /Sign in with Google|Signing in/ }),
     ).not.toBeInTheDocument();
+    expect(isWebSignInReturn()).toBe(false);
     expect(loggedActions()).toContain("sign-in-handed-off-to-browser");
     expect(loggedActions()).not.toContain("sign-in-completed");
   });

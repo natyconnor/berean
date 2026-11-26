@@ -1,5 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LoginPageAtmosphere } from "@/components/login-page-atmosphere";
 import { isBereanDesktop } from "@/lib/desktop-platform";
@@ -9,8 +10,21 @@ import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
 } from "@/lib/hero-backdrop";
+import { loadTabs } from "@/lib/tab-context-internal";
+import { markWebSignInStarted } from "@/lib/web-sign-in-return";
 
 const PARALLAX_DAMPING = 0.04;
+
+/** Frosted white button on the dark hero (Sign in with Google, Enter Berean). */
+const HERO_BUTTON_CLASS =
+  "flex w-full items-center justify-center gap-3 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-white/90 backdrop-blur-sm transition-all hover:border-white/30 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-50";
+
+const HERO_BUTTON_STYLE: CSSProperties = {
+  fontFamily: "'Cormorant Garamond', serif",
+  fontWeight: 600,
+  fontSize: "1.05rem",
+  letterSpacing: "0.05em",
+};
 
 function useMouseParallax() {
   const ref = useRef<HTMLDivElement>(null);
@@ -64,6 +78,8 @@ function slideDelay(ms: number): CSSProperties {
 
 type LoginPageProps = {
   isLoading?: boolean;
+  /** Signed in on the website: show Enter Berean instead of Sign in. */
+  isSignedIn?: boolean;
   /** True after auth bootstrap watchdog fires; show recovery affordance with sign-in UI. */
   authBootstrapStalled?: boolean;
   onRetryConnection?: () => void;
@@ -71,6 +87,7 @@ type LoginPageProps = {
 
 export function LoginPage({
   isLoading = false,
+  isSignedIn = false,
   authBootstrapStalled = false,
   onRetryConnection,
 }: LoginPageProps) {
@@ -97,6 +114,8 @@ export function LoginPage({
         setIsSigningIn(false);
         return;
       }
+      // Coming back from Google goes straight into the app, not this page.
+      markWebSignInStarted();
       await signIn("google");
       logInteraction("auth", "sign-in-completed", { provider: "google" });
     } catch (error) {
@@ -257,7 +276,9 @@ export function LoginPage({
                   }`}
                   style={slideDelay(400)}
                 >
-                  {isAwaitingBrowser ? (
+                  {isSignedIn ? (
+                    <EnterBereanLink />
+                  ) : isAwaitingBrowser ? (
                     <div role="status" className="space-y-3">
                       <p
                         className="text-base leading-snug text-white/85"
@@ -361,6 +382,20 @@ export function LoginPage({
   );
 }
 
+function EnterBereanLink() {
+  return (
+    <Link
+      to="/passage/$passageId"
+      params={{ passageId: loadTabs()[0].passageId }}
+      className={HERO_BUTTON_CLASS}
+      style={HERO_BUTTON_STYLE}
+    >
+      Enter Berean
+      <ArrowRight className="h-4 w-4" aria-hidden />
+    </Link>
+  );
+}
+
 function GoogleSignInButton({
   isSigningIn,
   onClick,
@@ -372,13 +407,8 @@ function GoogleSignInButton({
     <button
       onClick={onClick}
       disabled={isSigningIn}
-      className="flex w-full items-center justify-center gap-3 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-white/90 backdrop-blur-sm transition-all hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-      style={{
-        fontFamily: "'Cormorant Garamond', serif",
-        fontWeight: 600,
-        fontSize: "1.05rem",
-        letterSpacing: "0.05em",
-      }}
+      className={HERO_BUTTON_CLASS}
+      style={HERO_BUTTON_STYLE}
     >
       <svg className="h-5 w-5" viewBox="0 0 24 24">
         <path

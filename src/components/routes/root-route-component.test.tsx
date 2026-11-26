@@ -9,7 +9,9 @@ const {
   queryState,
   ensureNoteMilestones,
   versionState,
+  loginPaints,
 } = vi.hoisted(() => ({
+  loginPaints: [] as string[],
   authState: { isAuthenticated: false, isLoading: false },
   locationState: { pathname: "/privacy", searchStr: "" },
   queryState: { notesRollupMissing: false },
@@ -90,9 +92,21 @@ vi.mock("@/hooks/use-app-version-monitor", () => ({
 }));
 
 vi.mock("@/components/login-page", () => ({
-  LoginPage: ({ isLoading }: { isLoading?: boolean }) => (
-    <div data-testid="login-page">{isLoading ? "Loading…" : "Sign in"}</div>
-  ),
+  LoginPage: ({
+    isLoading,
+    isSignedIn,
+  }: {
+    isLoading?: boolean;
+    isSignedIn?: boolean;
+  }) => {
+    const text = isLoading
+      ? "Loading…"
+      : isSignedIn
+        ? "Enter Berean"
+        : "Sign in";
+    loginPaints.push(text);
+    return <div data-testid="login-page">{text}</div>;
+  },
 }));
 
 vi.mock("@/components/layout/app-shell", () => ({
@@ -129,6 +143,9 @@ afterEach(() => {
   queryState.notesRollupMissing = false;
   ensureNoteMilestones.mockClear();
   versionState.latestVersion = null;
+  loginPaints.length = 0;
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
   delete window.bereanDesktop;
   vi.useRealTimers();
 });
@@ -224,6 +241,104 @@ describe("RootRouteComponent legal navigation", () => {
 
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();
     expect(ensureNoteMilestones).not.toHaveBeenCalled();
+  });
+});
+
+describe("RootRouteComponent home page", () => {
+  /** Auth resolves to signed in after the splash minimum, as on a real load. */
+  function finishSignedInLoad(rerender: () => void) {
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    authState.isLoading = false;
+    authState.isAuthenticated = true;
+    rerender();
+  }
+
+  it("keeps a signed-in website visitor on the landing page without waiting on onboarding", () => {
+    authState.isAuthenticated = true;
+    locationState.pathname = "/";
+    queryState.notesRollupMissing = true;
+    render(<RootRouteComponent />);
+
+    expect(screen.getByTestId("login-page")).toHaveTextContent("Enter Berean");
+    expect(screen.queryByTestId("app-shell")).not.toBeInTheDocument();
+    expect(loginPaints).not.toContain("Sign in");
+  });
+
+  it("shows Loading… then Enter Berean, never Sign in, while auth loads", () => {
+    vi.useFakeTimers();
+    authState.isLoading = true;
+    locationState.pathname = "/";
+    const { rerender } = render(<RootRouteComponent />);
+    expect(screen.getByTestId("login-page")).toHaveTextContent("Loading…");
+
+    finishSignedInLoad(() => rerender(<RootRouteComponent />));
+
+    expect(screen.getByTestId("login-page")).toHaveTextContent("Enter Berean");
+    expect(loginPaints).not.toContain("Sign in");
+  });
+
+  it("sends the Mac app straight into the app from /", () => {
+    window.bereanDesktop = { isDesktop: true, platform: "darwin" };
+    authState.isAuthenticated = true;
+    locationState.pathname = "/";
+    render(<RootRouteComponent />);
+
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("route-outlet")).toHaveTextContent("/");
+    expect(loginPaints).not.toContain("Enter Berean");
+  });
+
+  it.each([
+    [
+      "the sign-in marker",
+      () =>
+        sessionStorage.setItem("berean.webSignInStartedAt", `${Date.now()}`),
+    ],
+    [
+      "the ?code= callback",
+      () => window.history.replaceState(null, "", "/?code=abc"),
+    ],
+  ])(
+    "goes straight into the app after website sign-in (%s)",
+    (_label, arrange) => {
+      vi.useFakeTimers();
+      arrange();
+      authState.isLoading = true;
+      locationState.pathname = "/";
+      const { rerender } = render(<RootRouteComponent />);
+      expect(screen.getByTestId("login-page")).toHaveTextContent("Loading…");
+
+      finishSignedInLoad(() => rerender(<RootRouteComponent />));
+
+      expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+      expect(loginPaints).not.toContain("Enter Berean");
+    },
+  );
+
+  it("shows the landing page again on a refresh after sign-in", () => {
+    sessionStorage.setItem("berean.webSignInStartedAt", `${Date.now()}`);
+    authState.isAuthenticated = true;
+    locationState.pathname = "/";
+    const { unmount } = render(<RootRouteComponent />);
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    unmount();
+
+    render(<RootRouteComponent />);
+    expect(screen.getByTestId("login-page")).toHaveTextContent("Enter Berean");
+  });
+
+  it("opens an app route directly for a signed-in website visitor", () => {
+    authState.isAuthenticated = true;
+    locationState.pathname = "/passage/Romans-8";
+    render(<RootRouteComponent />);
+
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("route-outlet")).toHaveTextContent(
+      "/passage/Romans-8",
+    );
+    expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
   });
 });
 
