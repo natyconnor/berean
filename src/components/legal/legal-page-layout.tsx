@@ -1,13 +1,24 @@
 import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { useConvexAuth } from "convex/react";
 import type { ReactNode } from "react";
+import { loadTabs } from "@/lib/tab-context-internal";
 
 export function LegalPageLayout({ children }: { children: ReactNode }) {
   const canGoBack = useCanGoBack();
   const navigate = useNavigate();
+  const { isAuthenticated } = useConvexAuth();
 
   const handleBack = () => {
     if (canGoBack) {
       window.history.back();
+      return;
+    }
+    // No history: signed in goes into the app, signed out to the home page.
+    if (isAuthenticated) {
+      void navigate({
+        to: "/passage/$passageId",
+        params: { passageId: loadTabs()[0].passageId },
+      });
       return;
     }
     void navigate({ to: "/" });
