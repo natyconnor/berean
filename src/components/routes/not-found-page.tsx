@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { useDismissSplashBackdrop } from "@/hooks/use-dismiss-splash";
 import { GRAIN_CONFIG } from "@/lib/candlelight-grain";
+import { loadTabs } from "@/lib/tab-context-internal";
 import { DARK_MODE_STORAGE_KEY } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { warmManuscriptTheme } from "@/themes/theme-warm-manuscript";
@@ -111,7 +112,16 @@ export function NotFoundPage() {
             </p>
             <div className="mt-6 flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
               <Button asChild className="w-full sm:w-auto">
-                <Link to="/">{homeLabel}</Link>
+                {isAuthenticated ? (
+                  <Link
+                    to="/passage/$passageId"
+                    params={{ passageId: loadTabs()[0].passageId }}
+                  >
+                    {homeLabel}
+                  </Link>
+                ) : (
+                  <Link to="/">{homeLabel}</Link>
+                )}
               </Button>
               {canGoBack ? (
                 <Button

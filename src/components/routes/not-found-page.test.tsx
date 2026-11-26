@@ -24,10 +24,14 @@ vi.mock("@tanstack/react-router", async () => {
     useCanGoBack: () => routerState.canGoBack,
     Link: React.forwardRef<
       HTMLAnchorElement,
-      React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }
-    >(function Link({ to, children, ...props }, ref) {
+      React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+        to: string;
+        params?: { passageId: string };
+      }
+    >(function Link({ to, params, children, ...props }, ref) {
+      const href = params ? to.replace("$passageId", params.passageId) : to;
       return (
-        <a ref={ref} href={to} {...props}>
+        <a ref={ref} href={href} {...props}>
           {children}
         </a>
       );
@@ -92,9 +96,10 @@ describe("NotFoundPage", () => {
 
     render(<NotFoundPage />);
 
+    // Straight into the app (first open tab), not the landing page.
     expect(
       screen.getByRole("link", { name: "Back to your notes" }),
-    ).toHaveAttribute("href", "/");
+    ).toHaveAttribute("href", "/passage/John-1");
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     expect(back).toHaveBeenCalledOnce();
     back.mockRestore();
