@@ -30,6 +30,20 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.25.0](https://github.com/natyconnor/berean/compare/v1.24.0...v1.25.0) (2026-11-26)
+
+
+### Features
+
+* Add Download for Mac, /download, and a Settings row ([f58b307](https://github.com/natyconnor/berean/commit/f58b3076feb59114ea04752b43ff88ac58487f2f))
+
+
+### Bug Fixes
+
+* **desktop:** Release the Mac app with release-please ([6141a16](https://github.com/natyconnor/berean/commit/6141a1689a6e3e7ad4025afea085ce178054dbdf))
+* **desktop:** Release the Mac app with release-please ([b30b840](https://github.com/natyconnor/berean/commit/b30b840794bb59e38f142c6d99e8c7df23df10bd))
+* Keep the website home page as a landing page with Enter Berean ([9d793e4](https://github.com/natyconnor/berean/commit/9d793e44d6eef60a4cbaf0cd287168b103a2ba4b))
+
 ## [1.24.0](https://github.com/natyconnor/berean/compare/v1.23.0...v1.24.0) (2026-11-26)
 
 
