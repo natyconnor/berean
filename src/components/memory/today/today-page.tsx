@@ -1,7 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { useQuery } from "convex-helpers/react/cache";
 
-import { api } from "../../../../convex/_generated/api";
 import { PreviewMemorySeedCard } from "@/components/memory/preview-memory-seed-card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useElementSize } from "@/hooks/use-element-size";
@@ -47,10 +45,6 @@ export function TodayPage({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const viewport = useElementSize(scrollRootRef);
   const previewTools = isPreviewTestToolsEnabled();
-  const status = useQuery(
-    api.verseMemory.memoryStatus,
-    previewTools ? {} : "skip",
-  );
 
   let body;
   if (today === undefined) {
@@ -111,7 +105,8 @@ export function TodayPage({
           {body}
           <PreviewMemorySeedCard
             now={now}
-            heartedTotal={status?.total}
+            // Verses or passages (D18): the same rule as first run.
+            hasMemory={today && today.state !== "firstRun"}
             enabled={previewTools}
             autoSeed={Boolean(__IS_PREVIEW__)}
             seedTokens={previewSeedTokens}

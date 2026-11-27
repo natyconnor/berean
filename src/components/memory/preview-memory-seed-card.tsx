@@ -37,7 +37,7 @@ type SeedSummary = {
 
 export function PreviewMemorySeedCard({
   now,
-  heartedTotal,
+  hasMemory,
   enabled,
   autoSeed = false,
   seedTokens,
@@ -45,8 +45,11 @@ export function PreviewMemorySeedCard({
   onReseeded,
 }: {
   now: number;
-  /** Hearted verse count from `memoryStatus.total`. Undefined while loading. */
-  heartedTotal: number | undefined;
+  /**
+   * Anything in Memory: verses or passages, as Today's first run decides it.
+   * Undefined while loading.
+   */
+  hasMemory: boolean | undefined;
   /** Preview deploys and local `pnpm dev`. Hidden in production. */
   enabled: boolean;
   /** Vercel preview: load the sample set when the account is empty. */
@@ -95,21 +98,13 @@ export function PreviewMemorySeedCard({
 
   useEffect(() => {
     if (!enabled || !autoSeed) return;
-    if (heartedTotal === undefined) return;
+    if (hasMemory === undefined) return;
     // F28: a seeded account keeps its data unless previewReseed asks.
-    if (heartedTotal !== 0 && !(reseed && seedTokens)) return;
+    if (hasMemory && !(reseed && seedTokens)) return;
     if (autoAttempted.current) return;
     autoAttempted.current = true;
     void runSeed(seedTokens, reseed ? onReseeded : undefined);
-  }, [
-    autoSeed,
-    enabled,
-    heartedTotal,
-    onReseeded,
-    reseed,
-    runSeed,
-    seedTokens,
-  ]);
+  }, [autoSeed, enabled, hasMemory, onReseeded, reseed, runSeed, seedTokens]);
 
   if (!enabled) return null;
 

@@ -80,7 +80,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={1}
-        heartedTotal={0}
+        hasMemory={false}
         enabled={false}
         autoSeed
       />,
@@ -94,12 +94,7 @@ describe("PreviewMemorySeedCard", () => {
   it("loads the sample set from the button", async () => {
     const user = userEvent.setup();
     render(
-      <PreviewMemorySeedCard
-        now={42}
-        heartedTotal={3}
-        enabled
-        autoSeed={false}
-      />,
+      <PreviewMemorySeedCard now={42} hasMemory enabled autoSeed={false} />,
     );
 
     await user.click(screen.getByRole("button", { name: /load sample data/i }));
@@ -121,7 +116,9 @@ describe("PreviewMemorySeedCard", () => {
   });
 
   it("auto-seeds an empty preview account once", async () => {
-    render(<PreviewMemorySeedCard now={7} heartedTotal={0} enabled autoSeed />);
+    render(
+      <PreviewMemorySeedCard now={7} hasMemory={false} enabled autoSeed />,
+    );
 
     expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(1);
     const autoArgs = seedPreviewMemoryMock.mock.calls[0]?.[0] as {
@@ -135,8 +132,8 @@ describe("PreviewMemorySeedCard", () => {
     expect(await screen.findByText(/john 11:35/i)).toBeInTheDocument();
   });
 
-  it("does not auto-seed when the account already has verses", () => {
-    render(<PreviewMemorySeedCard now={7} heartedTotal={4} enabled autoSeed />);
+  it("does not auto-seed when the account already has memory", () => {
+    render(<PreviewMemorySeedCard now={7} hasMemory enabled autoSeed />);
     expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
   });
 
@@ -144,7 +141,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={0}
+        hasMemory={false}
         enabled
         autoSeed
         seedTokens={["john-3-16", "sample-mix"]}
@@ -162,7 +159,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={0}
+        hasMemory={false}
         enabled
         autoSeed={false}
         seedTokens={["john-3-16"]}
@@ -176,7 +173,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={4}
+        hasMemory
         enabled
         autoSeed
         seedTokens={["john-3-16"]}
@@ -185,11 +182,25 @@ describe("PreviewMemorySeedCard", () => {
     expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
   });
 
-  it("waits for the hearted count before deciding", () => {
+  it("does not reseed a passage-only account on a re-round (D18)", () => {
+    // Today counts a seeded passage as memory, so hasMemory is true.
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={undefined}
+        hasMemory
+        enabled
+        autoSeed
+        seedTokens={["passage-review-psalm-13"]}
+      />,
+    );
+    expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it("waits until it knows whether Memory is empty", () => {
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        hasMemory={undefined}
         enabled
         autoSeed
         seedTokens={["john-3-16"]}
@@ -204,7 +215,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={4}
+        hasMemory
         enabled
         autoSeed
         seedTokens={["sample-mix"]}
@@ -228,7 +239,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={7}
-        heartedTotal={4}
+        hasMemory
         enabled
         autoSeed
         seedTokens={["nope"]}
@@ -247,7 +258,7 @@ describe("PreviewMemorySeedCard", () => {
     render(
       <PreviewMemorySeedCard
         now={42}
-        heartedTotal={0}
+        hasMemory={false}
         enabled
         autoSeed
         seedTokens={["john-3-16"]}
