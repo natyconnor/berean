@@ -61,18 +61,34 @@ function fromFor(
 export interface MemoryHomeSearch {
   panel?: string;
   from?: MemoryPanelFrom;
+  /** Preview-only sample small set, e.g. `john-3-16,sample-mix` (#353). */
+  previewSeed?: string;
+  /** Preview-only: replace the account with `previewSeed` even if it has data. */
+  previewReseed?: 1;
 }
 
-/** `/memory` search: an unknown `panel` is dropped, and `from` with it. */
+/**
+ * `/memory` search: an unknown `panel` is dropped, and `from` with it. The
+ * preview seed params pass through untouched; only previews act on them.
+ */
 export function validateMemoryHomeSearch(
   search: Record<string, unknown>,
 ): MemoryHomeSearch {
+  const result: MemoryHomeSearch = {};
   const panel = parseMemoryPanel(search.panel);
-  if (!panel) return {};
-  const from = fromFor(panel, parseMemoryPanelFrom(search.from));
-  return from
-    ? { panel: formatMemoryPanel(panel), from }
-    : { panel: formatMemoryPanel(panel) };
+  if (panel) {
+    result.panel = formatMemoryPanel(panel);
+    const from = fromFor(panel, parseMemoryPanelFrom(search.from));
+    if (from) result.from = from;
+  }
+  if (typeof search.previewSeed === "string" && search.previewSeed !== "") {
+    result.previewSeed = search.previewSeed;
+  }
+  // The router parses `previewReseed=1` as the number 1.
+  if (search.previewReseed === 1 || search.previewReseed === "1") {
+    result.previewReseed = 1;
+  }
+  return result;
 }
 
 export interface MemoryPanelPageSearch {

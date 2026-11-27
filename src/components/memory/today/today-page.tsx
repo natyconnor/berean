@@ -27,8 +27,19 @@ const RAIL_INSET_PX = 24;
  * and ways to start something new. On a wide page, Start something new is a
  * rail pinned beside the goals; narrower, it follows them. Someone with
  * nothing in Memory gets the first-run invitation instead.
+ *
+ * The preview seed props come from `/memory?previewSeed=…&previewReseed=1`
+ * and only take effect on a Vercel preview.
  */
-export function TodayPage() {
+export function TodayPage({
+  previewSeedTokens,
+  previewReseed = false,
+  onPreviewReseeded,
+}: {
+  previewSeedTokens?: string[];
+  previewReseed?: boolean;
+  onPreviewReseeded?: () => void;
+}) {
   // Shared session clock with the dock badge; passed to Convex as an arg.
   const now = useLiveNow();
   const timeZone = getViewerTimeZone();
@@ -103,6 +114,9 @@ export function TodayPage() {
             heartedTotal={status?.total}
             enabled={previewTools}
             autoSeed={Boolean(__IS_PREVIEW__)}
+            seedTokens={previewSeedTokens}
+            reseed={previewReseed}
+            onReseeded={onPreviewReseeded}
           />
         </div>
       </ScrollArea>

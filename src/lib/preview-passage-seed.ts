@@ -1053,3 +1053,33 @@ export function buildPreviewPassageSeed(
 
   return { packs };
 }
+
+/**
+ * Every passage pack the seed writes on this deployment: the base sample plus
+ * the #346 tester packs (none on production). `onlyIds` keeps just those packs
+ * and throws if one isn't seeded here, rather than silently dropping it.
+ */
+export function buildPreviewPassagePacks(
+  now: number,
+  tzOffsetMinutes: number,
+  convexDeployment: string | undefined,
+  onlyIds?: ReadonlySet<string>,
+): PreviewPassageSeedPack[] {
+  const packs = [
+    ...buildPreviewPassageSeed(now, tzOffsetMinutes).packs,
+    ...testerMaintenancePacks(now, convexDeployment),
+    ...testerStalePacks(now, convexDeployment),
+    ...testerRefreshPacks(now, convexDeployment),
+    ...testerSectionRecitalPacks(now, convexDeployment),
+    ...testerLearningRefreshPacks(now, convexDeployment),
+  ];
+  if (!onlyIds) return packs;
+  const seededIds = new Set(packs.map((pack) => pack.id));
+  const missing = [...onlyIds].filter((id) => !seededIds.has(id));
+  if (missing.length > 0) {
+    throw new Error(
+      `Sample passage pack not available on this deployment: ${missing.join(", ")}`,
+    );
+  }
+  return packs.filter((pack) => onlyIds.has(pack.id));
+}

@@ -76,6 +76,37 @@ describe("validateMemoryHomeSearch", () => {
     expect(validateMemoryHomeSearch({})).toEqual({});
   });
 
+  it("keeps the preview seed params beside panel and from", () => {
+    expect(
+      validateMemoryHomeSearch({
+        panel: "pack:abc",
+        from: "verses",
+        previewSeed: "john-3-16,sample-mix",
+        previewReseed: 1,
+      }),
+    ).toEqual({
+      panel: "pack:abc",
+      from: "verses",
+      previewSeed: "john-3-16,sample-mix",
+      previewReseed: 1,
+    });
+    expect(
+      validateMemoryHomeSearch({ panel: "nope", previewSeed: "sample-mix" }),
+    ).toEqual({ previewSeed: "sample-mix" });
+    expect(validateMemoryHomeSearch({ previewReseed: "1" })).toEqual({
+      previewReseed: 1,
+    });
+  });
+
+  it("drops empty or malformed preview seed params", () => {
+    expect(
+      validateMemoryHomeSearch({ previewSeed: "", previewReseed: 2 }),
+    ).toEqual({});
+    expect(
+      validateMemoryHomeSearch({ previewSeed: 5, previewReseed: true }),
+    ).toEqual({});
+  });
+
   it("validates full-page search", () => {
     expect(validateMemoryPanelPageSearch({ from: "verses" })).toEqual({
       from: "verses",

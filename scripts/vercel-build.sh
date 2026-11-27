@@ -25,6 +25,15 @@ fi
 
 pnpm exec convex "${args[@]}"
 
+# Let testers load a small sample set (#353 F29, `/memory?previewSeed=…`). The
+# server allows it only where this flag is set, so production never gets it.
+# Non-fatal: without the flag, small sets fail with a clear error.
+if [[ "${VERCEL_ENV:-}" == "preview" ]]; then
+  pnpm exec convex env set BEREAN_ALLOW_PREVIEW_SEED 1 \
+    --preview-name "$preview_name" ||
+    echo "Couldn't set BEREAN_ALLOW_PREVIEW_SEED; previewSeed will be rejected" >&2
+fi
+
 # Build every user's note totals row (#353) on the deployment just pushed, so
 # open tabs never wait on a missing row. The mutation runs one batch and
 # schedules the rest, so this returns quickly. Rerun by hand with the same

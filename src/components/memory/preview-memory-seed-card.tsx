@@ -40,6 +40,9 @@ export function PreviewMemorySeedCard({
   heartedTotal,
   enabled,
   autoSeed = false,
+  seedTokens,
+  reseed = false,
+  onReseeded,
 }: {
   now: number;
   /** Hearted verse count from `memoryStatus.total`. Undefined while loading. */
@@ -48,6 +51,12 @@ export function PreviewMemorySeedCard({
   enabled: boolean;
   /** Vercel preview: load the sample set when the account is empty. */
   autoSeed?: boolean;
+  /** Preview `previewSeed` tokens: auto-seed only this small set. */
+  seedTokens?: string[];
+  /** Preview `previewReseed=1`: replace the account with `seedTokens` even if it has data. */
+  reseed?: boolean;
+  /** Called once a `reseed` succeeds, to drop `previewReseed` from the URL. */
+  onReseeded?: () => void;
 }) {
   const seedPreviewMemory = useMutation(
     api.seedPreviewMemory.seedPreviewMemory,
@@ -57,33 +66,50 @@ export function PreviewMemorySeedCard({
   const [summary, setSummary] = useState<SeedSummary | null>(null);
   const autoAttempted = useRef(false);
 
-  const runSeed = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await seedPreviewMemory({
-        now,
-        tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-      });
-      setSummary(result);
-    } catch (caught) {
-      const message =
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't load sample memory data.";
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  }, [now, seedPreviewMemory]);
+  // No `tokens`: the full sample, which the button always asks for (F30).
+  // `onSeeded` runs only when the seed succeeded.
+  const runSeed = useCallback(
+    async (tokens?: string[], onSeeded?: () => void) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await seedPreviewMemory({
+          now,
+          tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+          ...(tokens ? { tokens } : {}),
+        });
+        setSummary(result);
+        onSeeded?.();
+      } catch (caught) {
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Couldn't load sample memory data.";
+        setError(message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [now, seedPreviewMemory],
+  );
 
   useEffect(() => {
     if (!enabled || !autoSeed) return;
-    if (heartedTotal !== 0) return;
+    if (heartedTotal === undefined) return;
+    // F28: a seeded account keeps its data unless previewReseed asks.
+    if (heartedTotal !== 0 && !(reseed && seedTokens)) return;
     if (autoAttempted.current) return;
     autoAttempted.current = true;
-    void runSeed();
-  }, [autoSeed, enabled, heartedTotal, runSeed]);
+    void runSeed(seedTokens, reseed ? onReseeded : undefined);
+  }, [
+    autoSeed,
+    enabled,
+    heartedTotal,
+    onReseeded,
+    reseed,
+    runSeed,
+    seedTokens,
+  ]);
 
   if (!enabled) return null;
 

@@ -139,4 +139,129 @@ describe("PreviewMemorySeedCard", () => {
     render(<PreviewMemorySeedCard now={7} heartedTotal={4} enabled autoSeed />);
     expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
   });
+
+  it("auto-seeds only the small set when the account is empty", () => {
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={0}
+        enabled
+        autoSeed
+        seedTokens={["john-3-16", "sample-mix"]}
+      />,
+    );
+    expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(1);
+    expect(seedPreviewMemoryMock.mock.calls[0]?.[0]).toEqual({
+      now: 7,
+      tzOffsetMinutes: new Date(7).getTimezoneOffset(),
+      tokens: ["john-3-16", "sample-mix"],
+    });
+  });
+
+  it("ignores the small set off preview (no auto-seed)", () => {
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={0}
+        enabled
+        autoSeed={false}
+        seedTokens={["john-3-16"]}
+        reseed
+      />,
+    );
+    expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses an already-seeded account even when previewSeed is present (F28)", () => {
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={4}
+        enabled
+        autoSeed
+        seedTokens={["john-3-16"]}
+      />,
+    );
+    expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it("waits for the hearted count before deciding", () => {
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={undefined}
+        enabled
+        autoSeed
+        seedTokens={["john-3-16"]}
+        reseed
+      />,
+    );
+    expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it("previewReseed replaces a seeded account with the set, then strips itself", async () => {
+    const onReseeded = vi.fn();
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={4}
+        enabled
+        autoSeed
+        seedTokens={["sample-mix"]}
+        reseed
+        onReseeded={onReseeded}
+      />,
+    );
+    expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(1);
+    expect(seedPreviewMemoryMock.mock.calls[0]?.[0]).toMatchObject({
+      tokens: ["sample-mix"],
+    });
+    await screen.findByText(/john 11:35/i);
+    expect(onReseeded).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps previewReseed in the URL when the reseed fails", async () => {
+    seedPreviewMemoryMock.mockRejectedValue(
+      new Error("Unknown sample items: nope"),
+    );
+    const onReseeded = vi.fn();
+    render(
+      <PreviewMemorySeedCard
+        now={7}
+        heartedTotal={4}
+        enabled
+        autoSeed
+        seedTokens={["nope"]}
+        reseed
+        onReseeded={onReseeded}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /unknown sample items: nope/i,
+    );
+    expect(onReseeded).not.toHaveBeenCalled();
+  });
+
+  it("the button always loads the full sample, even with a small set in the URL (F30)", async () => {
+    const user = userEvent.setup();
+    render(
+      <PreviewMemorySeedCard
+        now={42}
+        heartedTotal={0}
+        enabled
+        autoSeed
+        seedTokens={["john-3-16"]}
+      />,
+    );
+    await screen.findByText(/john 11:35/i);
+    await user.click(
+      screen.getByRole("button", { name: /reload sample data/i }),
+    );
+
+    expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(2);
+    expect(seedPreviewMemoryMock.mock.calls[1]?.[0]).toEqual({
+      now: 42,
+      tzOffsetMinutes: new Date(42).getTimezoneOffset(),
+    });
+  });
 });

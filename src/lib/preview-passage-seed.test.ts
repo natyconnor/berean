@@ -16,6 +16,7 @@ import {
   type PassageSessionState,
 } from "./passage-session";
 import {
+  buildPreviewPassagePacks,
   buildPreviewPassageSeed,
   previewPassageMemoryFields,
   testerLearningRefreshPacks,
@@ -538,5 +539,51 @@ describe("testerStalePacks", () => {
         expect(scopesEqual(all[i].scope, all[j].scope)).toBe(false);
       }
     }
+  });
+});
+
+describe("buildPreviewPassagePacks", () => {
+  it("is the base sample plus every tester pack off production", () => {
+    const ids = buildPreviewPassagePacks(NOW, TZ, undefined).map((p) => p.id);
+    expect(ids).toEqual([
+      ...buildPreviewPassageSeed(NOW, TZ).packs.map((p) => p.id),
+      ...testerMaintenancePacks(NOW, undefined).map((p) => p.id),
+      ...testerStalePacks(NOW, undefined).map((p) => p.id),
+      ...testerRefreshPacks(NOW, undefined).map((p) => p.id),
+      ...testerSectionRecitalPacks(NOW, undefined).map((p) => p.id),
+      ...testerLearningRefreshPacks(NOW, undefined).map((p) => p.id),
+    ]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("is only the base sample on production", () => {
+    expect(
+      buildPreviewPassagePacks(NOW, TZ, "prod:berean-123").map((p) => p.id),
+    ).toEqual(buildPreviewPassageSeed(NOW, TZ).packs.map((p) => p.id));
+  });
+
+  it("keeps just the requested packs, with their passages", () => {
+    const packs = buildPreviewPassagePacks(
+      NOW,
+      TZ,
+      undefined,
+      new Set(["passage-review-psalm-13", "passage-ready-psalm-1"]),
+    );
+    expect(packs.map((p) => p.id)).toEqual([
+      "passage-ready-psalm-1",
+      "passage-review-psalm-13",
+    ]);
+    expect(packs[1]?.passage?.status).toBe("reviewing");
+  });
+
+  it("fails, rather than dropping it, when a tester pack isn't seeded here", () => {
+    expect(() =>
+      buildPreviewPassagePacks(
+        NOW,
+        TZ,
+        "prod:berean-123",
+        new Set(["passage-review-psalm-13"]),
+      ),
+    ).toThrow(/not available on this deployment: passage-review-psalm-13/);
   });
 });

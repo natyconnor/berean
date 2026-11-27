@@ -13,14 +13,14 @@ import {
 import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import {
-  buildPreviewPassageSeed,
+  buildPreviewPassagePacks,
   previewPassageMemoryFields,
-  testerLearningRefreshPacks,
-  testerMaintenancePacks,
-  testerRefreshPacks,
-  testerSectionRecitalPacks,
-  testerStalePacks,
 } from "../src/lib/preview-passage-seed";
+import {
+  PREVIEW_SEED_FLAG,
+  assertPreviewSeedSetAllowed,
+  resolvePreviewSeedSet,
+} from "../src/lib/preview-seed-set";
 
 async function isAnonymousUser(
   ctx: MutationCtx,
@@ -213,27 +213,33 @@ export const seedPreviewMemory = mutation({
   args: {
     now: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
+    /** Preview small set (`previewSeed` tokens). Omitted: the full sample. */
+    tokens: v.optional(v.array(v.string())),
   },
   returns: seedSummaryValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     await assertPreviewMemorySeedAllowed(ctx, userId);
+    let only;
+    if (args.tokens !== undefined) {
+      assertPreviewSeedSetAllowed(process.env[PREVIEW_SEED_FLAG]);
+      only = resolvePreviewSeedSet(args.tokens);
+    }
 
     const tzOffsetMinutes =
       args.tzOffsetMinutes ?? new Date(args.now).getTimezoneOffset();
     // The stale test fixture never reaches a production deployment.
     const plan = buildPreviewMemorySeed(args.now, {
       staleFixture: !isProdDeployment(),
+      only,
     });
-    const passagePlan = buildPreviewPassageSeed(args.now, tzOffsetMinutes);
-    await clearUserMemory(ctx, userId);
-    passagePlan.packs.push(
-      ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
-      ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
-      ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
-      ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
-      ...testerLearningRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
+    const passagePacks = buildPreviewPassagePacks(
+      args.now,
+      tzOffsetMinutes,
+      process.env.CONVEX_DEPLOYMENT,
+      only?.passagePackIds,
     );
+    await clearUserMemory(ctx, userId);
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();
     const verseRefIdByVerseId = new Map<string, Id<"verseRefs">>();
@@ -322,7 +328,7 @@ export const seedPreviewMemory = mutation({
       }
     }
 
-    for (const pack of passagePlan.packs) {
+    for (const pack of passagePacks) {
       const packId = await ctx.db.insert("packs", {
         userId,
         name: pack.name,
@@ -370,7 +376,7 @@ export const seedPreviewMemory = mutation({
 
     return {
       verseCount: plan.verses.length,
-      packCount: plan.packs.length + passagePlan.packs.length,
+      packCount: plan.packs.length + passagePacks.length,
       reviewLogCount: plan.reviews.length,
       dueReviewCount,
       learningDueCount,
@@ -388,7 +394,7 @@ export const seedPreviewMemory = mutation({
         description: pack.description,
         verseCount: pack.verseIds.length,
       })),
-      passagePacks: passagePlan.packs.map((pack) => ({
+      passagePacks: passagePacks.map((pack) => ({
         name: pack.name,
         description: pack.description,
         howToTry: pack.howToTry,
