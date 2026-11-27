@@ -181,3 +181,52 @@ describe("preview memory seed", () => {
     }
   });
 });
+
+describe("preview memory small set", () => {
+  it("writes only the requested verses and their review history", () => {
+    const plan = buildPreviewMemorySeed(NOW, {
+      staleFixture: true,
+      only: {
+        verseIds: new Set(["john-11-35", "matthew-6-33"]),
+        packSlugs: new Set(),
+      },
+    });
+    expect(plan.verses.map((verse) => verse.id)).toEqual([
+      "john-11-35",
+      "matthew-6-33",
+    ]);
+    expect(plan.packs).toEqual([]);
+    expect(plan.reviews.length).toBeGreaterThan(0);
+    expect(
+      plan.reviews.every((review) =>
+        ["john-11-35", "matthew-6-33"].includes(review.verseId),
+      ),
+    ).toBe(true);
+    // Matthew 6:33 keeps its stale fixture; John 11:35 has no misses.
+    const misses = plan.reviews.filter((review) => review.quality === "off");
+    expect(misses.map((review) => review.verseId)).toEqual([
+      "matthew-6-33",
+      "matthew-6-33",
+    ]);
+  });
+
+  it("writes a requested pack whose verses all seed", () => {
+    const full = buildPreviewMemorySeed(NOW);
+    const mix = full.packs.find((pack) => pack.slug === "sample-mix")!;
+    const plan = buildPreviewMemorySeed(NOW, {
+      only: {
+        verseIds: new Set(mix.verseIds),
+        packSlugs: new Set(["sample-mix"]),
+      },
+    });
+    expect(plan.packs.map((pack) => pack.name)).toEqual(["Sample · Mix"]);
+    expect(plan.verses.map((verse) => verse.id).sort()).toEqual(
+      [...mix.verseIds].sort(),
+    );
+  });
+
+  it("is the full sample without a set", () => {
+    expect(buildPreviewMemorySeed(NOW).verses).toHaveLength(15);
+    expect(buildPreviewMemorySeed(NOW).packs).toHaveLength(3);
+  });
+});

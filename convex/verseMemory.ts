@@ -1268,8 +1268,8 @@ async function loadMemoryStatus(
 }
 
 /**
- * Per-status in-Memory verse totals for Mastery, Practice All, and seed
- * `heartedTotal`. O(1) from `userMemoryStats` — does not load due scans,
+ * Per-status in-Memory verse totals for Mastery and Practice All. O(1) from
+ * `userMemoryStats` — does not load due scans,
  * unified packs, or passage rows.
  */
 export const memoryStatus = query({

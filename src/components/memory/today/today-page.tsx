@@ -1,7 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { useQuery } from "convex-helpers/react/cache";
 
-import { api } from "../../../../convex/_generated/api";
 import { PreviewMemorySeedCard } from "@/components/memory/preview-memory-seed-card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useElementSize } from "@/hooks/use-element-size";
@@ -27,8 +25,19 @@ const RAIL_INSET_PX = 24;
  * and ways to start something new. On a wide page, Start something new is a
  * rail pinned beside the goals; narrower, it follows them. Someone with
  * nothing in Memory gets the first-run invitation instead.
+ *
+ * The preview seed props come from `/memory?previewSeed=…&previewReseed=1`
+ * and only take effect on a Vercel preview.
  */
-export function TodayPage() {
+export function TodayPage({
+  previewSeedTokens,
+  previewReseed = false,
+  onPreviewReseeded,
+}: {
+  previewSeedTokens?: string[];
+  previewReseed?: boolean;
+  onPreviewReseeded?: () => void;
+}) {
   // Shared session clock with the dock badge; passed to Convex as an arg.
   const now = useLiveNow();
   const timeZone = getViewerTimeZone();
@@ -36,10 +45,6 @@ export function TodayPage() {
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const viewport = useElementSize(scrollRootRef);
   const previewTools = isPreviewTestToolsEnabled();
-  const status = useQuery(
-    api.verseMemory.memoryStatus,
-    previewTools ? {} : "skip",
-  );
 
   let body;
   if (today === undefined) {
@@ -100,9 +105,13 @@ export function TodayPage() {
           {body}
           <PreviewMemorySeedCard
             now={now}
-            heartedTotal={status?.total}
+            // Verses or passages (D18): the same rule as first run.
+            hasMemory={today && today.state !== "firstRun"}
             enabled={previewTools}
             autoSeed={Boolean(__IS_PREVIEW__)}
+            seedTokens={previewSeedTokens}
+            reseed={previewReseed}
+            onReseeded={onPreviewReseeded}
           />
         </div>
       </ScrollArea>

@@ -44,6 +44,8 @@ export interface PreviewMemorySeedVerse {
 }
 
 export interface PreviewMemorySeedPack {
+  /** `previewSeed` token, e.g. `sample-review-queue`. */
+  slug: string;
   name: string;
   description: string;
   verseIds: string[];
@@ -203,6 +205,7 @@ const VERSE_SPECS: readonly VerseSpec[] = [
 
 const PACKS: readonly PreviewMemorySeedPack[] = [
   {
+    slug: "sample-review-queue",
     name: "Sample · Review queue",
     description:
       "Due and overdue review-phase verses — the Continue/summary path.",
@@ -215,6 +218,7 @@ const PACKS: readonly PreviewMemorySeedPack[] = [
     ],
   },
   {
+    slug: "sample-learning",
     name: "Sample · Learning",
     description:
       "New through From Memory, plus one verse locked until tomorrow.",
@@ -228,6 +232,7 @@ const PACKS: readonly PreviewMemorySeedPack[] = [
     ],
   },
   {
+    slug: "sample-mix",
     name: "Sample · Mix",
     description:
       "One due review, one in-progress learn, one mastered, one new.",
@@ -394,12 +399,24 @@ function historyForVerse(
  * so due/locked verses line up with the frozen client clock.
  * `staleFixture` (non-production deployments only) makes Matthew 6:33 and
  * Joshua 1:9 stale; without it the set is unchanged.
+ * `only` keeps just those verses and packs (a preview small set); a pack's
+ * verses must be listed in `verseIds` too ({@link resolvePreviewSeedSet}).
  */
 export function buildPreviewMemorySeed(
   now: number,
-  options: { staleFixture?: boolean } = {},
+  options: {
+    staleFixture?: boolean;
+    only?: { verseIds: ReadonlySet<string>; packSlugs: ReadonlySet<string> };
+  } = {},
 ): PreviewMemorySeedPlan {
-  const verses = VERSE_SPECS.map((spec) => {
+  const only = options.only;
+  const specs = only
+    ? VERSE_SPECS.filter((spec) => only.verseIds.has(spec.id))
+    : VERSE_SPECS;
+  const packs = only
+    ? PACKS.filter((pack) => only.packSlugs.has(pack.slug))
+    : PACKS;
+  const verses = specs.map((spec) => {
     const { schedule, lastReviewedAt } = scheduleForRole(spec, now);
     return {
       id: spec.id,
@@ -415,17 +432,25 @@ export function buildPreviewMemorySeed(
 
   return {
     verses,
-    packs: PACKS.map((pack) => ({ ...pack, verseIds: [...pack.verseIds] })),
+    packs: packs.map((pack) => ({ ...pack, verseIds: [...pack.verseIds] })),
     reviews: verses.flatMap((verse, index) =>
       historyForVerse(
         verse,
         now,
-        options.staleFixture === true &&
-          VERSE_SPECS[index]?.recentMisses === true,
+        options.staleFixture === true && specs[index]?.recentMisses === true,
       ),
     ),
   };
 }
+
+/** Every verse id and verse pack a preview small set can name. */
+export const PREVIEW_MEMORY_VERSE_IDS: readonly string[] = VERSE_SPECS.map(
+  (spec) => spec.id,
+);
+export const PREVIEW_MEMORY_PACKS: readonly Pick<
+  PreviewMemorySeedPack,
+  "slug" | "verseIds"
+>[] = PACKS;
 
 export function countPreviewMemoryRoles(
   verses: ReadonlyArray<Pick<PreviewMemorySeedVerse, "role">>,
