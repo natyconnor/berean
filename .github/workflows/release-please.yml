@@ -81,7 +81,11 @@ jobs:
       - name: Pull Vercel production env
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      # A prebuilt build gets no Vercel system env (VERCEL_DEPLOYMENT_ID is
+      # empty), so pass the commit SHA for the /version.json build ID (#456).
       - name: Build
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to production
