@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import type { PluginOption, ViteDevServer } from "vite";
 import { defineConfig } from "vitest/config";
+import { chooseBuildId } from "./shared/build-id";
 import { resolveAppPath } from "./shared/http-routes";
 
 type AppVersionInfo = {
@@ -24,15 +25,9 @@ function readPackageVersion(): string {
 
 function createAppVersionInfo(): AppVersionInfo {
   const appVersion = readPackageVersion();
-  const buildId =
-    process.env.VERCEL_DEPLOYMENT_ID ??
-    process.env.VERCEL_GIT_COMMIT_SHA ??
-    process.env.GITHUB_SHA ??
-    `dev-${appVersion}`;
-
   return {
     appVersion,
-    buildId,
+    buildId: chooseBuildId(process.env, appVersion),
   };
 }
 
